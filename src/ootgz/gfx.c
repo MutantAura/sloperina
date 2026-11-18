@@ -21,6 +21,7 @@
 /* drawn this frame */
 static gfx_panel_t menu_panel, hud_panel, input_panel;
 static bool menu_open;
+static char status_line[GFX_COLS + 1]; /* gfx_status, this frame */
 
 typedef struct {
   char msg[LOG_COLS + 1];
@@ -115,6 +116,11 @@ void gfx_notice(const char *s)
   log_lines[0].age = 0;
   gfx_log_count++;
   log_printf("notice: %s", s);
+}
+
+void gfx_status(const char *s)
+{
+  snprintf(status_line, sizeof(status_line), "%s", s);
 }
 
 void gfx_notice_later(const char *s)
@@ -465,6 +471,9 @@ void gfx_frame(void)
     *menu = menu_panel;
   else
     memset(menu, 0, sizeof(*menu));
+  if (!menu_open && status_line[0]) /* the macro's REC / PLAY, in the menu's place */
+    put_text(menu, 0, 0, GFX_NOTICE, status_line);
+  status_line[0] = 0;
   menu->corner = GFX_TOP_LEFT;
   measure_panel(menu);
 

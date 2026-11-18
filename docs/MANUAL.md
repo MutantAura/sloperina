@@ -17,10 +17,11 @@ Everything sloperinaGZ can do, menu by menu. New to it? Start with the [usage gu
   - [2.6 Equips](#26-equips)
   - [2.7 Story](#27-story)
   - [2.8 Watches](#28-watches)
-  - [2.9 Debug](#29-debug)
-  - [2.10 Settings](#210-settings)
-  - [2.11 Log](#211-log)
-  - [2.12 About](#212-about)
+  - [2.9 Macro](#29-macro)
+  - [2.10 Debug](#210-debug)
+  - [2.11 Settings](#211-settings)
+  - [2.12 Log](#212-log)
+  - [2.13 About](#213-about)
 - [3 On the screen](#3-on-the-screen)
 - [4 About frame advance](#4-about-frame-advance)
 - [5 Settings file](#5-settings-file)
@@ -71,10 +72,10 @@ With the menu closed:
 | **R + A + D-pad right** | Reset **jump height** to FLT_MAX (as after a load: the jumpslash then works at any height) |
 | **R + D-pad up** | Save position: where Link is and which way he faces |
 | **R + D-pad down** | Load position: put Link back there (same map only) |
-| **L3** | Levitate on / off (if enabled, [2.10.2](#2102-levitate)) |
+| **L3** | Levitate on / off (if enabled, [2.11.2](#2112-levitate)) |
 | **X / B** held | Levitate up / down; release to hover |
 | **R3** held | Levitate: hold height even if X/B is held |
-| **L** or **R** (your choice) | Frame advance (if enabled, [2.10.3](#2103-frame-advance)) |
+| **L** or **R** (your choice) | Frame advance (if enabled, [2.11.3](#2113-frame-advance)) |
 
 ## 2 Menus
 
@@ -252,7 +253,36 @@ freeze, not a patch of the game's setter: writes and checks within a single game
 before the mod runs. Build and host tests do not establish whether this prevents every launch restriction
 in-game; test normal jumps, sidehops, jumpslashes, scene changes, and restarts on the supported game version.
 
-### 2.9 Debug
+### 2.9 Macro
+
+Record your controller input frame by frame and play it back: a first TAS tool. One macro, kept in memory (up
+to 10 minutes; it's gone when the game closes). The game gets the macro through its own controller reads, so
+your controller only drives the menu meanwhile.
+
+| Item | What it does |
+|---|---|
+| **game: running / paused** | Pause or run the game, with the menu still open and working. This is frame advance's pause ([4](#4-about-frame-advance)): if frame advance is off, it turns it on, so tapping its button steps a frame as usual. |
+| **create > start recording** | Pauses the game first; recording starts on the next frame let through (step with the frame advance button, or run with **game: running**). Over an existing macro, choose it twice within 3 seconds. Where Link stands is saved as the macro's start. |
+| **create > stop recording** | Ends the macro. |
+| **create > return to start** | While recording: throws away what's recorded, puts Link back at the start and records again from frame 0. |
+| **create > length** | The macro's length in frames and seconds. |
+| **playback > play / pause** | Plays from where playback is (frame 0 after a restart). Pause keeps the place. At the end it stops ("macro: done") and goes back to frame 0. |
+| **playback > restart** | Back to frame 0, with Link put back at the start. |
+| **playback > frame** | Where playback is, of how many. |
+| **log position each frame** | Writes Link's position for each recorded and played frame to the log ("tas: frame N x y z"), to compare a recording with its playback. |
+
+- **REC 123** or **PLAY 45/1234** shows top left (where the menu goes) while the menu is closed.
+- Paused, nothing is recorded or played; each frame advance step records or plays exactly one frame, with
+  what you pressed while paused (frame advance's buffered input). Stepping needs the menu closed.
+- What's recorded is what the game saw: the frame advance button and levitate's **L** are never in it, and
+  frames recorded with the menu open are idle.
+- Playback works with the menu open.
+- Return to start and restart move only Link (as **load position**, in a slot of their own): enemies, objects,
+  the camera, timers and so on aren't put back, so a replay may not play out the same. Both need Link in the
+  map the recording began in. While he's being moved (a few frames) the game gets no input ("REC wait" /
+  "PLAY wait").
+
+### 2.10 Debug
 
 **tests > dive tests**: **from heights** and **while moving** measure how deep Link goes into water by how he falls in. Start
 one with Link swimming at the surface (facing open water for **while moving**) and leave the controls alone: it
@@ -260,11 +290,11 @@ measures the surface, drops him again and again from set heights (from heights: 
 16 and 96 above it, 0 to 13.6 units/s the way he faces), twice each, and writes each drop's fall time, speed
 going in, and deepest point to `log.txt` ("dive test: ..."). Choose it again to stop.
 
-#### 2.9.1 Heap
+#### 2.10.1 Heap
 
 How much memory the game has and uses (refreshed every second), and **view the heap in memory**.
 
-#### 2.9.2 Memory
+#### 2.10.2 Memory
 
 gz's memory viewer.
 
@@ -278,11 +308,11 @@ gz's memory viewer.
 
 Unreadable memory shows as `??`; read-only memory can't be changed. **Editing memory can crash the game.**
 
-#### 2.9.3 Pause research
+#### 2.10.3 Pause research
 
 The game's own pause state, for development: values you can watch, change and log.
 
-### 2.10 Settings
+### 2.11 Settings
 
 **menu settings**: **language** ([6](#6-languages)), **size** (auto, small 2x, medium 2.5x, large 3x: the menu, watches
 and log), **background opacity** (0 to 100%, 100% at first; below 100% the game shows through, slightly behind) and
@@ -293,7 +323,7 @@ and log), **background opacity** (0 to 100%, 100% at first; below 100% the game 
 
 **other settings**: the **input display**, **levitate** and **frame advance** menus below.
 
-#### 2.10.1 Input display
+#### 2.11.1 Input display
 
 gz's input display, at the bottom left unless you move it (hidden while the menu is open).
 
@@ -307,7 +337,7 @@ gz's input display, at the bottom left unless you move it (hidden while the menu
 | **position** | The corner it's in, or **custom** (where **move input display position** left it), as the watches box. |
 | **move input display position** | Move it anywhere: the D-pad glides it (hold to speed up), **L** leaves it there. It's shown while you move it, and so are the watches if they're on. |
 
-#### 2.10.2 Levitate
+#### 2.11.2 Levitate
 
 | Item | What it does |
 |---|---|
@@ -335,7 +365,7 @@ and no landing damage. This does not establish behavior at every surface or duri
 Void protection and a void-trigger viewer are not included. Camera-follow and stationary-position
 pause behavior have not been separately fixed.
 
-#### 2.10.3 Frame advance
+#### 2.11.3 Frame advance
 
 | Item | What it does |
 |---|---|
@@ -344,7 +374,7 @@ pause behavior have not been separately fixed.
 | **pause icon** | gz's pause icon at the top left while paused. |
 | **button** | **L** or **R**. The game doesn't see that button while frame advance is on. |
 
-### 2.11 Log
+### 2.12 Log
 
 Under **log history**: the last 128 messages sloperinaGZ wrote, newest first, five at a time. **↑** above them and
 **↓** below them scroll (hold **L** to keep going), and in the game's style a scroll bar beside them shows where you are.
@@ -357,7 +387,7 @@ Everything is also written to **`sloperinaGZ/log.txt`** on the SD card (on an em
 Lichii build 150+: `%APPDATA%\lichii\sdmc\sloperinaGZ\log.txt`; Fritchii v5.8+: `%APPDATA%\fritchii\sdmc\sloperinaGZ\log.txt`; Eden and older Lichii / Fritchii: `%APPDATA%\eden\sdmc\sloperinaGZ\log.txt`), with the time since the game started, about once a
 second. It starts fresh each time the game starts. Send it along when you report a problem.
 
-### 2.12 About
+### 2.13 About
 
 The name and version, the build date ("Build Date: ..."), and the website.
 
@@ -368,8 +398,9 @@ The name and version, the build date ("Build Date: ..."), and the website.
 | Menu | Top left, under the D-pad icon | Always on top. |
 | Watches | The corner you choose, or anywhere | [2.8](#28-watches) |
 | Log | Bottom right | What you just did; stays a second, then fades. gz's grey text with a shadow. |
-| Input display | Bottom left, or the corner you choose, or anywhere | [2.10.1](#2101-input-display); in the bottom left, it moves above the watches if they're there too. |
+| Input display | Bottom left, or the corner you choose, or anywhere | [2.11.1](#2111-input-display); in the bottom left, it moves above the watches if they're there too. |
 | Pause icon | Top left | Two bars: paused by frame advance. |
+| Macro | Top left, where the menu goes, while it's closed | **REC 123** recording, **PLAY 45/1234** playing ([2.9](#29-macro)). |
 | Air walls | Over the game | [2.3.1](#231-environment) |
 | Save slots | Over the game | [2.3.2](#232-save-position) |
 

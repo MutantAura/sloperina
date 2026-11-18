@@ -2,20 +2,10 @@
 
 #include "got.h"
 #include "sys.h"
+#include "tas.h"
 
-/* nn::hid state structs (Switch 1 layout: sampling number, buttons, two sticks, attributes;
- * 0x28 bytes). We only touch the leading fields and read one state into a larger buffer, so
- * a longer Switch 2 struct is harmless. VERIFY the field order on hardware (BUILDING.md). */
-typedef struct {
-  int64_t  sampling_number;
-  uint64_t buttons;
-  int32_t  lx, ly, rx, ry;
-  uint32_t attributes;
-} npad_state_t;
-
-#define NPAD_STATE_SIZE      0x28  /* the Switch 1 state's size: the stride between states */
 #define NPAD_STATE_BUF       0x100 /* room for one state, however long the Switch 2 one is */
-#define NPAD_ATTR_CONNECTED  1u    /* NpadAttribute::IsConnected */
+_Static_assert(sizeof(npad_state_t) == NPAD_STATE_SIZE, "npad_state_t is the stride between states");
 
 /* nn::hid::detail::GetNpadStates(int *out_count, NpadXState *out, int count, const NpadIdType &id),
  * exported by sdk. The detail versions are what the public ones call, so they keep working
@@ -170,12 +160,15 @@ uint32_t input_force_buttons;
 bool input_force_sticks[2];
 int32_t input_force_stick[4];
 
-/* Edit the states the game just read: blank them while the menu is open, otherwise add frame
- * advance's buffered input and take out the buttons the game mustn't see. */
-static void filter_game_states(void *states, int count)
+/* Edit the states the game just read (`style`: which overload, in hid_public_names' order): blank them
+ * while the menu is open, otherwise add frame advance's buffered input and take out the buttons the game
+ * mustn't see. Last, the macro (tas.c) records what's left, or replaces it with the frame it's playing. */
+static void filter_game_states(int style, void *states, int count)
 {
-  if (!input_block_game && !input_hide_from_game && !input_force_active)
+  if (!input_block_game && !input_hide_from_game && !input_force_active) {
+    tas_filter(style, (npad_state_t *)states, count);
     return;
+  }
   for (int i = 0; i < count; i++) {
     npad_state_t *state = (npad_state_t *)((char *)states + i * NPAD_STATE_SIZE);
     if (input_block_game) {
@@ -196,6 +189,7 @@ static void filter_game_states(void *states, int count)
     }
     state->buttons &= ~(uint64_t)input_hide_from_game;
   }
+  tas_filter(style, (npad_state_t *)states, count);
 }
 
 /* hid_wrap_N: whatever slot N held before (hid_next), then filter_game_states */
@@ -203,7 +197,7 @@ static void filter_game_states(void *states, int count)
   static int hid_wrap_##n(void *out, int count, const uint32_t *id) \
   {                                                                 \
     int result = ((hid_public_t)hid_next[n])(out, count, id);       \
-    filter_game_states(out, result < count ? result : count);       \
+    filter_game_states(n, out, result < count ? result : count);    \
     return result;                                                  \
   }
 WRAP(0) WRAP(1) WRAP(2) WRAP(3) WRAP(4)

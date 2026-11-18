@@ -29,6 +29,21 @@ void     input_sticks(int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
 enum { INPUT_PRO, INPUT_JOYCONS, INPUT_HANDHELD };
 int      input_controller(void);
 
+/* nn::hid state structs (Switch 1 layout: sampling number, buttons, two sticks, attributes;
+ * 0x28 bytes). We only touch the leading fields and read one state into a larger buffer, so
+ * a longer Switch 2 struct is harmless. VERIFY the field order on hardware (BUILDING.md). */
+typedef struct {
+  int64_t  sampling_number;
+  uint64_t buttons;
+  int32_t  lx, ly, rx, ry;
+  uint32_t attributes;
+} npad_state_t;
+#define NPAD_STATE_SIZE      0x28  /* the Switch 1 state's size: the stride between states */
+#define NPAD_ATTR_CONNECTED  1u    /* NpadAttribute::IsConnected */
+/* the game's GetNpadStates overloads, as input.c wraps them (tas_filter's `style`) */
+enum { NPAD_STYLE_FULLKEY, NPAD_STYLE_HANDHELD, NPAD_STYLE_JOYDUAL, NPAD_STYLE_JOYLEFT, NPAD_STYLE_JOYRIGHT,
+       NPAD_STYLES };
+
 /* While true, the game sees no buttons or sticks. */
 extern bool input_block_game;
 /* Buttons the game never sees (e.g. L while levitate is on). */

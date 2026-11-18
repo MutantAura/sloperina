@@ -38,6 +38,7 @@
 #include "position.h"
 #include "lock.h"
 #include "sys.h"
+#include "tas.h"
 #include "z64hd.h"
 #include "z64hd_builds.h"
 
@@ -105,6 +106,47 @@ static uint64_t fa_last_repeat_at;
 static bool fa_menu_was_open;   /* the menu was open at the start of this frame */
 static bool fa_blocked_after_menu;
 static uint64_t fa_menu_closed_at;
+static bool fa_pause_wanted;    /* fa_pause_request: pause as a tap would, at this frame's end */
+static bool fa_run_wanted;      /* fa_run_request: leave the hold */
+
+/* The macro menu's pause / play (tas.c too). Pausing goes the way a tap does (fa_frame: the notice,
+ * nvn_freeze, this frame let through, held from the next), so the picture stays live while held. */
+void fa_pause_request(void)
+{
+  fa_run_wanted = false;
+  if (fa_paused)
+    return;
+  if (!frame_advance) { /* one pause, frame advance's: stepping and running again work as usual */
+    frame_advance = true;
+    gfx_notice("frame advance on");
+  }
+  fa_pause_wanted = true;
+}
+
+void fa_run_request(void)
+{
+  fa_pause_wanted = false;
+  if (fa_paused)
+    fa_run_wanted = true;
+}
+
+bool fa_is_paused(void)
+{
+  return fa_paused;
+}
+
+/* running again (the button + L3, or fa_run_request): letting go of the button isn't a tap */
+static void fa_resume(void)
+{
+  fa_button_down = false;
+  fa_repeating = false;
+  fa_blocked_after_menu = true;
+  fa_menu_closed_at = sys_tick();
+  fa_paused = false;
+  fa_run_wanted = false;
+  gfx_pause_icon = 0;
+  gfx_notice("frame advance: running");
+}
 
 /* What the frame advance button did this frame. */
 typedef enum {
@@ -269,16 +311,14 @@ static void fa_hold_game(void)
     if ((held & button) && (held & BTN_LSTICK) && (pressed & (button | BTN_LSTICK))) {
       if (menu_current && !shown)
         menu_close();
-      fa_button_down = false;
-      fa_repeating = false;
-      fa_blocked_after_menu = true; /* letting go of the button isn't a tap */
-      fa_menu_closed_at = sys_tick();
-      fa_paused = false;
-      gfx_pause_icon = 0;
-      gfx_notice("frame advance: running");
+      fa_resume();
       break;
     }
     menu_controls();
+    if (fa_run_wanted) { /* a menu item (the macro's play) let it run */
+      fa_resume();
+      break;
+    }
     fa_event_t event = fa_read_button();
     if (event == FA_RUN) {
       fa_paused = false;
@@ -296,6 +336,7 @@ static void fa_hold_game(void)
       menu_draw();
     }
     watches_frame(menu_current != 0);
+    tas_draw();
     gfx_hud_hidden = hud_hidden();
     gfx_frame();
     if (nvn_present_held())
@@ -315,13 +356,14 @@ static void fa_frame(void)
 {
   if (!frame_advance) {
     fa_paused = false;
+    fa_pause_wanted = fa_run_wanted = false;
     fa_button_down = false;
     gfx_pause_icon = 0;
     input_force_active = false;
     nvn_freeze(false);
     return;
   }
-  if (!fa_paused && !frame_advance_in_pause && gd_game_paused(0, 0)) {
+  if (!fa_paused && !fa_pause_wanted && !frame_advance_in_pause && gd_game_paused(0, 0)) {
     /* The game's pause screen has the button (as when the menu is open): it isn't frame advance's
      * until the pause screen has closed and the button has been let go. */
     fa_button_down = false;
@@ -332,7 +374,8 @@ static void fa_frame(void)
   input_hide_from_game |= fa_button_bit();
   if (!fa_paused)
     input_force_active = false;
-  if (!fa_paused && fa_read_button() == FA_TAP) {
+  if (!fa_paused && (fa_pause_wanted || fa_read_button() == FA_TAP)) {
+    fa_pause_wanted = false;
     fa_paused = true;
     gfx_notice(frame_advance_button ? "frame advance: R a frame, R + L3 to run"
                                     : "frame advance: L a frame, L + L3 to run");
@@ -340,6 +383,11 @@ static void fa_frame(void)
      * icon on it: the screen shows the game is paused (and hasn't crashed). Held from the next one. */
     gfx_pause_icon = pause_display ? 1 : 0;
     nvn_freeze(true); /* this frame's picture is kept as it's presented: drawn on while held */
+    return;
+  }
+  if (fa_paused && fa_run_wanted) { /* asked to run before the hold began */
+    fa_resume();
+    nvn_freeze(false);
     return;
   }
   if (fa_paused) {
@@ -370,6 +418,7 @@ static void frame(void)
   }
   frames_run++;
   sys_frame();
+  tas_frame(); /* the macro's frame boundary: before anything reads this frame's input */
   input_update();
 
   fa_menu_was_open = menu_current != 0; /* an L that closes the menu isn't frame advance's */
@@ -389,6 +438,7 @@ static void frame(void)
   lock_frame();
   warp_frame();
   age_frame();
+  tas_draw();
   gfx_hud_hidden = hud_hidden();
   gfx_frame();
 

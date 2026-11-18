@@ -179,6 +179,9 @@ void gfx_notice(const char *s);
 void gfx_splash(const char *const *lines, const uint8_t *styles, const uint8_t *indents, int n, int frames);
 void gfx_logf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 extern volatile uint32_t gfx_log_count; /* lines logged so far */
+/* game thread, this frame only: a short status line (the macro's REC / PLAY) shown in the menu's place, top
+ * left, while the menu is closed */
+void gfx_status(const char *s);
 /* game thread: watches (panel 1), drawn this frame only */
 void gfx_hud(gfx_corner_t corner, int row, gfx_style_t style, const char *s);
 void gfx_hud_at(int x_permille, int y_permille); /* for GFX_CUSTOM */

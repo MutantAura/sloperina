@@ -31,14 +31,14 @@
 #define NEAR 1.0        /* units per axis: Link counts as there */
 #define FACE_SPEED 0.06 /* the velocity that turns him to face the saved way (above levitate's "none") */
 
-static bool saved;
-static double sx, sy, sz, sfx, sfz; /* drawn position; facing as a unit (x, z) */
-static char smap[64];
+static position_slot_t shortcut_slot; /* R + d-up / d-down, link > save / load position */
+static position_slot_t target;        /* the load in progress (a copy of the slot it came from) */
 
 static bool finding;  /* a press asked levitate.c for the record: say when it's found or not */
 static bool pending;  /* load pressed: waiting for the buttons to be let go */
 static int settle;    /* frames left to see Link arrive */
 static int writes;
+static bool last_load_ok;
 
 static double absd(double v) { return v < 0 ? -v : v; }
 
@@ -49,10 +49,15 @@ static bool same_str(const char *a, const char *b)
   return *a == *b;
 }
 
-static bool in_saved_map(void)
+bool position_in_map(const position_slot_t *slot)
 {
   const char *m = gd_get_str(GD_STR_MAP);
-  return !m || !smap[0] || same_str(m, smap);
+  return !m || !slot->map[0] || same_str(m, slot->map);
+}
+
+static bool in_saved_map(void)
+{
+  return position_in_map(&target);
 }
 
 /* the record isn't known yet: ask for it and say so; the next press, once it's found, works */
@@ -66,64 +71,93 @@ static bool need_record(void)
   return true;
 }
 
-void position_save(void)
-{
-  if (need_record())
-    return;
-  vec3f_t p;
-  if (!link_drawn_pos(&p)) {
-    gfx_notice("save position: Link not found");
-    return;
-  }
-  sx = p.x;
-  sy = p.y;
-  sz = p.z;
-  sfx = sfz = 0;
-  double fx, fz;
-  if (link_facing(&fx, &fz)) {
-    sfx = fx;
-    sfz = fz;
-  }
-  const char *m = gd_get_str(GD_STR_MAP);
-  snprintf(smap, sizeof(smap), "%s", m ? m : "");
-  saved = true;
-  log_printf("position saved: %.3f %.3f %.3f facing %.3f,%.3f in %s", sx, sy, sz, sfx, sfz, smap);
-  gfx_notice("position saved");
-}
-
-void position_load(void)
-{
-  if (!saved) {
-    gfx_notice("No position saved yet");
-    return;
-  }
-  if (!in_saved_map()) {
-    gfx_notice("the saved position is in another map");
-    return;
-  }
-  if (need_record())
-    return;
-  pending = true;
-  gfx_notice("loading position"); /* now, while the wheel's up; "position loaded" once he's there */
-}
-
-static bool write_saved(void)
-{
-  writes++;
-  return link_record_move(sx, sy, sz, (float)(sfx * FACE_SPEED), (float)(sfz * FACE_SPEED), SETTLE + 2);
-}
-
-static bool link_there(void)
-{
-  vec3f_t d;
-  return link_drawn_pos(&d) && absd(d.x - sx) < NEAR && absd(d.y - sy) < NEAR && absd(d.z - sz) < NEAR;
-}
-
 /* the load is over one way or another: the game's stores can move Link again */
 static void settle_done(void)
 {
   settle = 0;
   lock_hold_set(false);
+}
+
+bool position_save_to(position_slot_t *slot)
+{
+  if (need_record())
+    return false;
+  vec3f_t p;
+  if (!link_drawn_pos(&p)) {
+    gfx_notice("save position: Link not found");
+    return false;
+  }
+  slot->x = p.x;
+  slot->y = p.y;
+  slot->z = p.z;
+  slot->fx = slot->fz = 0;
+  double fx, fz;
+  if (link_facing(&fx, &fz)) {
+    slot->fx = fx;
+    slot->fz = fz;
+  }
+  const char *m = gd_get_str(GD_STR_MAP);
+  snprintf(slot->map, sizeof(slot->map), "%s", m ? m : "");
+  slot->saved = true;
+  log_printf("position saved: %.3f %.3f %.3f facing %.3f,%.3f in %s", slot->x, slot->y, slot->z, slot->fx,
+             slot->fz, slot->map);
+  return true;
+}
+
+void position_save(void)
+{
+  if (position_save_to(&shortcut_slot))
+    gfx_notice("position saved");
+}
+
+bool position_load_from(const position_slot_t *slot)
+{
+  if (!slot->saved) {
+    gfx_notice("No position saved yet");
+    return false;
+  }
+  if (!position_in_map(slot)) {
+    gfx_notice("the saved position is in another map");
+    return false;
+  }
+  if (need_record())
+    return false;
+  if (settle) /* a load already settling: this one replaces it */
+    settle_done();
+  target = *slot;
+  pending = true;
+  last_load_ok = false;
+  gfx_notice("loading position"); /* now, while the wheel's up; "position loaded" once he's there */
+  return true;
+}
+
+void position_load(void)
+{
+  position_load_from(&shortcut_slot);
+}
+
+bool position_busy(void)
+{
+  return finding || pending || settle;
+}
+
+bool position_load_ok(void)
+{
+  return last_load_ok;
+}
+
+static bool write_saved(void)
+{
+  writes++;
+  return link_record_move(target.x, target.y, target.z, (float)(target.fx * FACE_SPEED),
+                          (float)(target.fz * FACE_SPEED), SETTLE + 2);
+}
+
+static bool link_there(void)
+{
+  vec3f_t d;
+  return link_drawn_pos(&d) && absd(d.x - target.x) < NEAR && absd(d.y - target.y) < NEAR &&
+         absd(d.z - target.z) < NEAR;
 }
 
 /* each frame after a load's first write */
@@ -137,6 +171,7 @@ static void settle_step(void)
   if (link_there()) {
     log_printf("position loaded (%d write%s)", writes, writes == 1 ? "" : "s");
     gfx_notice("position loaded");
+    last_load_ok = true;
     settle_done();
     return;
   }
@@ -173,7 +208,7 @@ void position_frame(bool menu_open)
     lock_hold_set(true); /* the write holds: the game's stores can't pull him off it while it settles */
     if (write_saved()) {
       settle = SETTLE;
-      log_printf("position load: writing %.3f %.3f %.3f", sx, sy, sz);
+      log_printf("position load: writing %.3f %.3f %.3f", target.x, target.y, target.z);
     } else {
       lock_hold_set(false);
     }

@@ -25,6 +25,7 @@
 #include "pouch.h"
 #include "lang.h"
 #include "sys.h"
+#include "tas.h"
 #include "divetest.h"
 #include "warp.h"
 #include "watches.h"
@@ -3169,9 +3170,125 @@ static void build_about(void)
   menu_add_return(&m_about);
 }
 
+/* --- macro: record controller input and play it back (tas.c) ------------------------------------ */
+
+static menu_t m_macro, m_macro_create, m_macro_playback;
+
+static void text_game_running(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, TF("game: %s"), T(fa_is_paused() ? "paused (L: play)" : "running (L: pause)"));
+}
+
+static void act_game_pause_play(menu_item_t *it)
+{
+  if (fa_is_paused())
+    fa_run_request();
+  else
+    fa_pause_request();
+}
+
+static void text_record(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, "%s", T(tas_state() == TAS_RECORDING ? "stop recording" : "start recording"));
+}
+
+static void act_record(menu_item_t *it)
+{
+  if (tas_state() == TAS_RECORDING)
+    tas_record_stop();
+  else
+    tas_record_start();
+}
+
+static void act_return_to_start(menu_item_t *it)
+{
+  if (tas_state() != TAS_RECORDING)
+    gfx_notice("macro: only while recording");
+  else
+    tas_record_restart();
+}
+
+/* frames, and the time they take at 60 a second */
+static void text_macro_length(menu_item_t *it, char *buf, int len)
+{
+  uint32_t frames = tas_length();
+  snprintf(buf, len, TF("length  %u frames (%.1f s)"), (unsigned)frames, frames / (double)TAS_FPS);
+}
+
+static void text_play(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, "%s", T(tas_state() == TAS_PLAYING ? "pause" : "play"));
+}
+
+static void act_play(menu_item_t *it)
+{
+  if (tas_state() == TAS_PLAYING)
+    tas_pause();
+  else
+    tas_play();
+}
+
+static void act_restart(menu_item_t *it)
+{
+  tas_rewind();
+}
+
+static void text_macro_frame(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, TF("frame  %u / %u"), (unsigned)tas_position(), (unsigned)tas_length());
+}
+
+static bool get_log_positions(menu_item_t *it) { return tas_log_positions; }
+static void set_log_positions(menu_item_t *it, bool on) { tas_log_positions = on; }
+
+static void build_macro(void)
+{
+  menu_init(&m_macro_create, "create", 4);
+  menu_item_t *record = menu_add_action(&m_macro_create, "", act_record, 0);
+  if (record) {
+    record->text = text_record;
+    record->hint = "the game pauses first; recording starts on the next frame";
+  }
+  menu_item_t *back = menu_add_action(&m_macro_create, "return to start", act_return_to_start, 0);
+  if (back) {
+    back->hint = "puts Link back where recording began and starts again at frame 0";
+    back->log_label = "";
+  }
+  menu_add_text(&m_macro_create, text_macro_length, 0);
+  menu_add_return(&m_macro_create);
+
+  menu_init(&m_macro_playback, "playback", 4);
+  menu_item_t *play = menu_add_action(&m_macro_playback, "", act_play, 0);
+  if (play) {
+    play->text = text_play;
+    play->hint = "the game gets the macro; your controller only drives the menu";
+  }
+  menu_item_t *restart = menu_add_action(&m_macro_playback, "restart", act_restart, 0);
+  if (restart) {
+    restart->hint = "puts Link back where recording began, at frame 0";
+    restart->log_label = "";
+  }
+  menu_add_text(&m_macro_playback, text_macro_frame, 0);
+  menu_add_return(&m_macro_playback);
+
+  menu_init(&m_macro, "macro", 5);
+  menu_item_t *game = menu_add_action(&m_macro, "", act_game_pause_play, 0);
+  if (game) {
+    game->text = text_game_running;
+    game->hint = "frame advance's pause; turns frame advance on if it's off";
+  }
+  menu_add_submenu(&m_macro, "create", &m_macro_create);
+  menu_add_submenu(&m_macro, "playback", &m_macro_playback);
+  menu_item_t *log_each = menu_add_check(&m_macro, "log position each frame", get_log_positions,
+                                         set_log_positions, 0);
+  if (log_each)
+    log_each->hint = "the replay test: Link's position in the log for each recorded and played frame";
+  menu_add_return(&m_macro);
+}
+
 static void build_root(void)
 {
-  menu_init(&menu_root, "sloperinaGZ", 14);
+  menu_init(&menu_root, "sloperinaGZ", 15);
   menu_add_submenu(&menu_root, "link", &m_link);
   menu_add_submenu(&menu_root, "warps", &m_warps);
   menu_add_submenu(&menu_root, "scene", &m_scene);
@@ -3180,6 +3297,7 @@ static void build_root(void)
   menu_add_submenu(&menu_root, "equips", &m_equips);
   menu_add_submenu(&menu_root, "story", &m_story);
   menu_add_submenu(&menu_root, "watches", &m_watches);
+  menu_add_submenu(&menu_root, "macro", &m_macro);
   menu_add_submenu(&menu_root, "debug", &m_debug);
   menu_add_submenu(&menu_root, "settings", &m_settings);
   menu_add_submenu(&menu_root, "log", &m_log);
@@ -3203,5 +3321,6 @@ void menus_build(void)
   osk_build();
   build_log();
   build_about();
+  build_macro();
   build_root();
 }

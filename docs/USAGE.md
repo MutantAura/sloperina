@@ -118,6 +118,11 @@ Turn on frame advance with **settings > frame advance > enabled** (it's off to b
 to play slowly, and press **L + L3** to carry on. Buttons and stick directions you press while paused are given to
 the next frame.
 
+**...record my inputs and play them back?**
+**macro > create > start recording** (the game pauses; step or run it to record), then **stop recording**.
+**macro > playback > restart** puts Link back where you began, and **play** replays it. More in the
+[manual](MANUAL.md#29-macro).
+
 **...see my inputs on screen?**
 **settings > input display > show**. Choose **style: controller** for a picture of a Pro Controller, or **style: minimal** for a short line of button outlines that takes less of the screen.
 
@@ -133,6 +138,7 @@ the next frame.
 | Bottom right | The log: what you just did, fading out after a second |
 | Bottom left, or anywhere (you choose) | The input display (if it's on) |
 | Top left corner | The pause icon, while frame advance has the game paused |
+| Top left, under the D-pad icon | **REC** / **PLAY** while a macro records or plays (menu closed) |
 | Over the game | Air walls (if they're on) |
 
 ## Your settings

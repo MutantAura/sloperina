@@ -82,6 +82,15 @@ static const struct z64hd_build z64hd_builds[] = {
      * the holder chain, the hit component and level, the controller's reaction / state and the player's
      * fields that ragdoll.c reads are at the same offsets as v131072's */
     .ragdoll_controller = 0x587460,
+    /* CaptionMgr / Load UI mapped from v131072; see FINDINGS 9.11.
+     * Refresh stays in the running game. No extra CaptionMgr updates needed. */
+    .caption_mgr_ptr = 0x4E08A40,
+    .caption_empty = 0x963FA0,
+    .caption_request = 0xF41000,
+    .caption_empty_entry = 0x963EA0,
+    .vt_load_list = 0x4B89340,
+    .load_list_hide_rows = 0x3710A70,
+    .vt_save_load_confirm = 0x4B89FE0,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 },

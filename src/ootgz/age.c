@@ -10,6 +10,7 @@
  * off for a child. Nothing is applied to Link until the map loads. */
 #include "age.h"
 
+#include "binds.h"
 #include "data.h"
 #include "gamedata.h"
 #include "gfx.h"
@@ -212,6 +213,10 @@ void age_reload_map(void)
 
 void age_frame(void)
 {
+  if (cmd_pressed(CMD_RELOAD_MAP)) { /* unbound unless given buttons (settings > rebind commands) */
+    gfx_logf("reload map (%s)", age_wanted() == AGE_ADULT ? "adult" : "child");
+    age_reload_map();
+  }
   if (undo_age < 0 || warp_pending())
     return;
   if (warp_abandoned() && age_current() >= 0 && age_current() != undo_age) {

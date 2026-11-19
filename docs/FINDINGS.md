@@ -1599,3 +1599,88 @@ and **safety flags** watches read it (`safety.c`).
 - **Levitating with through walls off** also gives storage, without a hit: levitate holds Link still with
   collision on, the physics reports him standing on something (`[[actor+0x270]+0x358]+0x13D0` bit 0) but not
   grounded (bit 2), so items work in the air and a hookshot shot is cancelled on its first frame.
+
+### 9.17 GameData serialization, UInt/Vector3 layouts, WorldMgr, NaviMgr, CCT rotation and Sequence flags (1.0.0; 1.1.1 in brackets)
+- **`GameDataMgr` binary save/load:** `gd_request_save` is at `main+0x36FED60` [`main+0x37617B0`] and `gd_request_load`
+  is at `main+0x36FEDD0` [`main+0x3761820`] (`bool (mgr, buf, int file_idx)`). Both operate on descriptor `0` in the
+  array at `[mgr+0xCC8]` (file count `u32` at `mgr+0xCC0`, descriptor stride `0x80`, active saves `s32` at
+  `mgr+0xD0C`, copy-sync busy `u8` at `mgr+0xD10`). Inside `desc0`: `+0x50` buffer size (`u32`), `+0x58` written bytes
+  (`u32`), `+0x60` save buffer pointer, `+0x68` load buffer pointer, `+0x78` flags (`0x01` save requested, `0x02` load
+  requested, `0x04` save worker active), `+0x7A` `load_ok` (`u8`). Serialized save buffers start with magic
+  `0x01020304`. `GameDataMgr::update` drains requested save/load work and deserializes all 33 typed containers,
+  change queues, and dirty/reset bits.
+- **`UInt` and `Vector3` GameData containers:** Derived from `SetUInt` (`1.0.0: main+0xE5AC30`), `SetVector3` (`1.0.0:
+  main+0xE6D9B0`), and the queue flush (`1.0.0: main+0xB9A9CC`; same offsets in `1.1.1`). Both are 0x60-byte type
+  entries in `GameDataMgr`:
+  - `UInt`: `mgr+0x788`, object stride `0x28`, value `+0x1C`, copy `+0x20` (holds e.g. `0x3F8D9D86`).
+  - `Vector3`: `mgr+0x3C8`, object stride `0x40`, value `+0x24`, copy `+0x30` (holds e.g. `0x8773F02D`).
+- **`WorldMgr` (time of day is not pulled automatically from GameData on map load):** `wm = [[main+0x4C18BF0]]`
+  [`[[main+0x4C7E898]]`]. `[wm+0x578]` is the clock object, whose vtable slot `+0x30` returns the seconds into the day.
+  `setTime(wm, seconds)` is at `main+0x33F1580` [`main+0x34522D0`] (called by `ExecuteWmSetTime`); `onSave(wm)` is at
+  `main+0x33F1410` [`main+0x3452160`] (flushes live clock/weather into GameData before save serialization); `onLoad(wm)`
+  is at `main+0x33F1300` [`main+0x3452050`].
+- **`NaviMgr` reload hook:** `scene = [[main+0x4C184D0]]` [`[[main+0x4C7E178]]`]; `navi = navi_get(scene)` at
+  `main+0x945E50` [`main+0xCAF800`]; `navi_on_load(navi)` at `main+0x3230F70` [`main+0x3290060`].
+- **Character controller rotation setter:** In `vt_cct_property`, slot `+0x110` (`OneShotCctChangeRotation`, `1.0.0:
+  main+0x65EE00`, `1.1.1: main+0x6B8910`) takes `(property, const float mat33[9])` in the same row-major 3x3 layout as
+  actor `+0x328` (so yaw `(fx, fz)` is `{ fz, 0, fx, 0, 1, 0, -fx, 0, fz }`), paired with the position setter at slot
+  `+0xE8`.
+- **Sequence AINB control and debug flags (`Sequence/*.ainb`):**
+  - `DebugParam.IsRequestedResetGimmick` (`0x3FC35576`, `Bool`, `save_file == -1`) and `Sequence_ResetGimmickOption`
+    (`0x37B1DAC9`, `Int`): `Main.module` N15 checks `0x3FC35576` and runs `ResetGimmickImpl.module` in place without a
+    loading screen, deleting resettable actors (`option == 0` unconditionally; `option == 2` applies a 30 m distance
+    filter), resetting `PreActor` flags, re-traversing around `SeqGetPlayerPos`, and clearing `0x3FC35576` back to
+    `false` (`Main.module` N14). Note: `Main.module` N15's `BancChange` branch (`[x19+0x29]`) is dead code in retail
+    `1.0.0: main+0x32A4980`.
+  - `Sequence_IsAlreadyResetForLoadSave` (`0x8CD71F3A`, `Bool`): skips ResetType 0 and ResetType 8 wipes in
+    `ChangeBanc.module` N7–N9 and auto-clears to `false`.
+  - `DebugParam.IsSetChildhoodManually` (`0x86724737`, `Bool`): makes `LoadBancImpl.module` N29–N35 honor the existing
+    `Sequence_IsChildhood` value and auto-clears to `false`.
+  - `DebugParam.IsOverrideTraversePos` (`0x7325CE62`, `Bool`) + `DebugParam.OverrideTraversePos` (`0x527FA715`,
+    `Vector3`): overrides chunk/actor traverse coordinates in `OnLoadBancParam.module` N12–N16 (not auto-cleared by the
+    engine).
+  - Clearing `Sequence_ReservedBootEventName` and `Sequence_ReservedEventStarterName` to `""` causes
+    `AfterChangeBanc.module` N16–N23 to skip the arrival event and ~190-frame arrival camera.
+
+### 9.18 The player camera and actor AI node layout (1.0.0; 1.1.1 in brackets)
+- **Where the player camera lives:**
+  - The game's camera save (`1.0.0: main+0x288D980` → `0x2B39920`) reads an actor handle at `[[main+0x4C18B70]]+0x38`
+    [`[[main+0x4C7E818]]+0x38`] (a GOT slot: read twice). Handle resolution (`1.0.0: main+0xCF90C0`): entry =
+    `[handle+8]`, valid while `[entry+0x48] == [handle+0x10]`, actor = `[entry+0x40]`.
+  - The player camera component is `[[actor+0x270]+0x360]` (`1.0.0` vtable `main+0x4AE94F8`, named `プレイヤーカメラ`),
+    with its state at component `+0x5B8`. Link's own `[[link_actor+0x270]+0x360]` is not the active player camera.
+- **State (`component+0x5B8`) and component layout (checked in game on 1.0.0):**
+  - The camera view is `0x28` bytes (eye `+0x0`, look-at `+0xC`, FOV/angle `+0x24`), stored five times at `+0x450`,
+    `+0x478`, `+0x4A0`, `+0x4C8`, and `+0x4F0` (`+0x450` is drawn; `+0x478..+0x4C8` ease toward target `+0x4F0`).
+  - The camera's own save point (`1.0.0: main+0x2E2D4D0` → `0x2B1ADF0`) copies `+0x450` (`0x28` bytes) and orbit
+    ranges (`0x868` `0x30`, `0x898` `8`, `0x8A0` `4`, `0x8A4` `8`, `0x8AC` `4`, `0x8BC` `8`, `0x8C4` `4`, `0x90C` `4`,
+    `0x910` `4`) to `+0x914`; `0x2B1AE90` restores the orbit ranges and `0x2B1AEE0` hands the saved view to return-to
+    actions (`ExecutePlayerCameraEventReturnSavePoint`).
+  - Snap: `main+0x2E2D5D0(component)` [`main+0x2E821D0`] (→ `0x2B1AFC0` [`0x2B6E280`]) copies `+0x4F0` across the other
+    four view slots when state `+0x7E4` is set, resets component params, zeroes `+0x810..+0x830`, and sets `+0x804` to
+    `(1, 1)`. During arrival, state `+0x7F0..+0x850` holds the turn target (`+0x7F8 = 180`, `+0x81C` direction vector;
+    zero otherwise).
+  - The component itself holds duplicate float views/directions at `+0x130..+0x1B4` (`+0x148`, `+0x170`, `+0x194`,
+    distances `+0x1A0..+0x1A8`) and `+0x208..+0x2EC` (`+0x208..+0x2F0`).
+  - Hand-off timing: after a full area load with an arrival event, the arrival camera renders first and the player
+    camera takes over ~190 frames later, observable when the drawn eye (`[[main+0x4E27C08]+0x68]+0x38`) matches state
+    `+0x450`.
+  - (`[[actor+0x270]+0x368]`, per-frame `1.0.0: main+0x2E2D9B0` from `0x2BCC9E0`, is a separate target tracker with
+    look-at `+0x128` and rotation `+0x20..`.)
+- **Camera AI action nodes (`ExecutePlayerCameraChase`, etc.):**
+  - Camera logic runs as AI action node objects: `ExecutePlayerCameraChase` has vtable `main+0x4959790` [`main+0x49BE0B8`]
+    (factory `1.0.0: 0xE0EE60`, enter slot 29 `0x2750A70` [`0x27A2510`] sets `[node+0x20] = camera_c + 0x5B8`), and
+    `ExecutePlayerCameraKeep` has vtable `main+0x495C0C0` (`1.0.0`).
+  - Polar maths (`1.0.0: 0x642690` [`1.1.1: 0x718800`], inverse `0x2B35E90`) computes `{distance, elevation, azimuth}` in
+    degrees, eased via `0x27738F0`. In `ExecutePlayerCameraChase`, float fields at `+0x14C..+0x170` (smoothed offset and
+    target), `+0x188..+0x1A8` (including elevation `+0x18C` and azimuth `+0x1A4`), and `+0x1C4` (distance) drive the view
+    each frame.
+- **Direct actor AI node traversal (verified in `1.0.0` & `1.1.1`):**
+  - `actor+0x270 -> +0x48` (`AIComponent`; verified in `1.0.0: 0x9AC64`, `0x7530A0` and `1.1.1: 0xC76D4`; note `+0x50` is
+    `PhysicsComponent`) `-> +0x28` (`AIControllerSet`, count `u32` at `+0x00`, entries `void**` at `+0x08`).
+  - Each `entry+0x18` is an `AIControllerBase` (`+0x1F0 == actor`; `unit_cnt` `u32` at `+0x18`, `unit_slots` at `+0x20`,
+    stride `0x18`, `unit = [slot+0x00]`).
+  - Each `AIControllerUnit` (`1.0.0: 0x9CDCC`, `1.1.1: 0xC586C`, back-pointer `[unit+0x08] == ctrl_base`) holds `node_cnt`
+    `u32` at `+0x28` and `node_slots` pointer at `+0x30` (stride `0x18`, `node = [slot+0x00]`, last-visited generation
+    `u32` at `+0x0C` compared against `[unit+0xD0]`). Every attached camera action node has `[node+0x20] == state` and
+    its node index (`u16`) at `node+0x1C`.

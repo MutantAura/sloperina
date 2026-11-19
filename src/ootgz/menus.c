@@ -23,6 +23,7 @@
 #include "position.h"
 #include "quests.h"
 #include "savepos.h"
+#include "memfile.h"
 #include "voidmap.h"
 #include "ragdoll.h"
 #include "tpose.h"
@@ -2420,6 +2421,71 @@ static void build_savepos(void)
   m_savepos.footer = 4;
 }
 
+/* --- memfiles ----------------------------------------------------------------------------- */
+
+static menu_t m_memfiles;
+static const char *const memfile_slot_names[MEMFILE_SLOTS] = { "1", "2", "3", "4" };
+
+static int  get_memfile_slot(menu_item_t *it) { return memfile_slot(); }
+static void set_memfile_slot(menu_item_t *it, int choice) { memfile_set_slot(choice); }
+static bool get_memfile_fast(menu_item_t *it) { return memfile_fast_reload; }
+static void set_memfile_fast(menu_item_t *it, bool on) { memfile_fast_reload = on; }
+static bool get_memfile_session(menu_item_t *it) { return memfile_session; }
+static void set_memfile_session(menu_item_t *it, bool on) { memfile_session = on; }
+
+static void act_save_memfile(menu_item_t *it)
+{
+  memfile_save(memfile_slot());
+}
+
+static void act_load_memfile(menu_item_t *it)
+{
+  if (memfile_load(memfile_slot()))
+    menu_close(); /* so the load can be watched */
+}
+
+static void text_memfile_slot(menu_item_t *it, char *buf, int len)
+{
+  memfile_slot_text((int)it->data, buf, len);
+}
+
+static void text_memfile_status(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, "%s", memfile_status());
+}
+
+static void build_memfiles(void)
+{
+  menu_init(&m_memfiles, "memfiles", 7 + MEMFILE_SLOTS);
+  menu_item_t *slot = menu_add_option(&m_memfiles, "slot", MEMFILE_SLOTS, memfile_slot_names, get_memfile_slot,
+                                      set_memfile_slot, 0);
+  if (slot) {
+    slot->hint = "the memfile save and load use";
+    slot->log_label = "memfile slot:";
+  }
+  menu_item_t *save = menu_add_action(&m_memfiles, "save memfile", act_save_memfile, 0);
+  if (save)
+    save->hint = "L: keep the game data, map, time, Link and the camera (until the game is closed)";
+  menu_item_t *load = menu_add_action(&m_memfiles, "load memfile", act_load_memfile, 0);
+  if (load)
+    load->hint = "L: restore the memfile's game data, map, Link and camera";
+  menu_item_t *fast = menu_add_check(&m_memfiles, "fast same-map", get_memfile_fast, set_memfile_fast, 0);
+  if (fast) {
+    fast->hint = "same map and age: reset actors in place without a loading screen";
+    fast->log_label = "memfile fast same-map:";
+  }
+  menu_item_t *session = menu_add_check(&m_memfiles, "session flags", get_memfile_session, set_memfile_session, 0);
+  if (session) {
+    session->hint = "loads also restore what the game doesn't save: npc talks, minigames, things broken in a map";
+    session->log_label = "memfile session flags:";
+  }
+  menu_add_return(&m_memfiles);
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    menu_add_text(&m_memfiles, text_memfile_slot, i);
+  menu_add_text(&m_memfiles, text_memfile_status, 0);
+  m_memfiles.footer = MEMFILE_SLOTS + 1;
+}
+
 static void build_scene(void)
 {
   build_savepos();
@@ -4173,6 +4239,7 @@ static void build_root(void)
   menu_add_submenu(&menu_root, "link", &m_link);
   menu_add_submenu(&menu_root, "warps", &m_warps);
   menu_add_submenu(&menu_root, "scene", &m_scene);
+  menu_add_submenu(&menu_root, "memfiles", &m_memfiles);
   menu_add_submenu(&menu_root, "cheats", &m_cheats);
   menu_add_submenu(&menu_root, "inventory", &m_inventory);
   menu_add_submenu(&menu_root, "equips", &m_equips);
@@ -4196,6 +4263,7 @@ void menus_build(void)
   build_story();
   build_watches();
   build_scene();
+  build_memfiles();
   build_settings();
   build_save_backups();
   build_debug();

@@ -41,6 +41,7 @@
 #include "ootgz_version.h"
 #include "pouch.h"
 #include "savepos.h"
+#include "memfile.h"
 #include "ragdoll.h"
 #include "tpose.h"
 #include "hsstore.h"
@@ -415,6 +416,7 @@ static void frame(void)
   warp_frame();
   eventskip_frame();
   age_frame();
+  memfile_frame(); /* a memfile save/load: after the warp, Link moved the following frames */
   gfx_hud_hidden = hud_hidden();
   gfx_frame();
 

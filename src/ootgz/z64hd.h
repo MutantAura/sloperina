@@ -133,6 +133,27 @@ struct z64hd_build {
    * set-step. A build without them writes GameData only (stages reach the game after a save load) */
   uint32_t challenge_mgr_ptr;
   uint32_t challenge_set_step;
+  /* GameDataMgr in-memory binary save/load (memfile.c): bool (gd_mgr, buf, int file_idx); 0: unknown */
+  uint32_t gd_request_save;
+  uint32_t gd_request_load;
+  /* WorldMgr [[main+wm_ptr]]: [wm+0x578] clock (vfunc +0x30 -> seconds); on_save flushes live clock/weather
+   * into GameData before serialize, on_load reloads from GameData after deserialize; set_time(wm, seconds) */
+  uint32_t wm_ptr;
+  uint32_t wm_set_time;
+  uint32_t wm_on_save;
+  uint32_t wm_on_load;
+  /* NaviMgr reload hook: navi = navi_get([[main+navi_scene_ptr]]); if (navi) navi_on_load(navi); */
+  uint32_t navi_scene_ptr;
+  uint32_t navi_get;
+  uint32_t navi_on_load;
+  /* Player camera: actor handle at [[main+player_camera_holder]]+0x38, component [[actor+0x270]+component],
+   * view state at component+state, snap(component); arrive(component): what a map's arrival calls, rebuilding the
+   * camera's target from the actor it follows ([component+0x38]) and asking for a snap (state +0x7E4) */
+  uint32_t player_camera_holder;
+  uint32_t player_camera_component;
+  uint32_t player_camera_state;
+  uint32_t player_camera_snap;
+  uint32_t player_camera_arrive;
   struct z64hd_link_path link_paths[5];
 };
 

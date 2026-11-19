@@ -58,6 +58,10 @@ int levitate_move_speed = 6;  /* stick, units/s */
 #define RECORD_SPAN (RECORD_HANDLE + 8)
 #define RECORD_REQUESTED_VEL 0x24 /* requested velocity (z, x, y floats) */
 #define RECORD_COLLIDED_VEL 0x3C  /* the same after collision */
+/* A turn: a float the game takes as a yaw rate. Written once, Link turns by value / 60 radians (the way his facing
+ * counts up) and stays turned; measured on 1.1.1 (94.25 turned him 90.0 degrees, 188.5 turned him 179.9, -9.34
+ * turned him -8.9). The captured motion below has 9.34 here, which turned him 8.9 degrees on every write of it. */
+#define RECORD_TURN 0x34
 
 #define PHYS_Y 0.585            /* the record's height above Link's drawn position */
 #define MATCH 0.3               /* per axis: how close a record must be to Link's position */
@@ -336,8 +340,9 @@ static void write_record(uintptr_t addr, double x, double y, double z, float vx,
   }
   uint8_t motion[sizeof(captured_motion)];
   memcpy(motion, captured_motion, sizeof(motion));
-  const float velocity[3] = { vz, vx, vy };
+  const float velocity[3] = { vz, vx, vy }, no_turn = 0;
   memcpy(motion + (RECORD_REQUESTED_VEL - RECORD_POS_SIZE), velocity, sizeof(velocity));
+  memcpy(motion + (RECORD_TURN - RECORD_POS_SIZE), &no_turn, sizeof(no_turn)); /* a move doesn't turn him */
   memcpy(motion + (RECORD_COLLIDED_VEL - RECORD_POS_SIZE), velocity, sizeof(velocity));
   memcpy((void *)(addr + RECORD_POS_SIZE), motion, sizeof(motion));
 }
@@ -1107,6 +1112,16 @@ void link_record_request(void)
   if (search_state == SEARCH_FAILED) /* asked again: search again now */
     search_state = SEARCH_IDLE;
   requested = true;
+}
+
+/* One write of the record's turn (RECORD_TURN): Link turns by that much and stays turned. */
+bool link_record_turn(double radians)
+{
+  if (search_state != SEARCH_READY || !record_has_motion ||
+      !sys_mapped(record, RECORD_SPAN, SYS_PERM_R | SYS_PERM_W) || record_moved_away())
+    return false;
+  *(volatile float *)(record + RECORD_TURN) = (float)(radians * 60.0);
+  return true;
 }
 
 /* Position, plus the motion state (record_has_motion: the test that found it wrote there safely): the

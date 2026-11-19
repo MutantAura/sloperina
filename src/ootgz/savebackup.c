@@ -919,6 +919,7 @@ bool savebackup_delete_folder(void)
 #define CAP_REQUEST 0x8D                  /* u8: bit 0, a load is asked for */
 #define CAP_EXISTS 0x8E                   /* u8: a save is in the normal list (set as its entries are read) */
 #define CAP_LOADED 4
+#define CAP_MQ_MODE 0x91              /* which six slots the menus show */
 #define RELOAD_GIVE_UP (30 * GAME_FPS) /* from when the reading starts */
 #define LOAD_LIST_LIST 0x2B0          /* the Load list screen's list (0: not built) */
 #define HIDE_FRAMES 3                 /* rows hidden this long before their pictures are freed: the GPU's done */
@@ -1085,7 +1086,11 @@ static void start_reading(uint8_t *m)
   if (start_partial(m))
     return;
   typedef void (*mgr_fn)(void *);
+  /* The 1.0.0 empty routine also clears the list's Master Quest selector.
+   * A caption refresh must preserve the current mode, as 1.1.1 already does. */
+  uint8_t mq_mode = m[CAP_MQ_MODE];
   MAIN_FN(mgr_fn, z64hd_game->caption_empty)(m); /* every entry emptied: state 0, which the request needs */
+  m[CAP_MQ_MODE] = mq_mode;
   *(volatile int32_t *)(m + CAP_LATEST) = -1;     /* the newest restored save is the latest */
   reload_step = RELOAD_ASKING;
   reload_frames = 0;

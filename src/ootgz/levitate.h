@@ -21,9 +21,13 @@ bool levitate_floating(void);     /* L3 has him floating (R3 then holds height) 
 typedef enum { REC_NONE, REC_SEARCHING, REC_READY, REC_FAILED } link_record_status_t;
 link_record_status_t link_record_status(void);
 void link_record_request(void);   /* look for it, if it isn't known (a heap scan over a few frames) */
-/* move Link there now; v (x, z) is his velocity, which turns him to face it. The record may then lag
- * behind the drawn position for settle_frames without counting as lost. False if it isn't known. */
+/* move Link there now; v (x, z) is the velocity written with it (it doesn't turn him: link_record_turn does).
+ * The record may then lag behind the drawn position for settle_frames without counting as lost. False if it
+ * isn't known. */
 bool link_record_move(double x, double y, double z, float face_vx, float face_vz, int settle_frames);
+/* turn Link by that many radians (under a half turn either way; the way his facing counts up), at once.
+ * False if the record isn't known. */
+bool link_record_turn(double radians);
 void link_record_resync(void);    /* back to where Link is drawn (a move that didn't take) */
 
 #endif

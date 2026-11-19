@@ -481,20 +481,20 @@ static const dkind_t kind_of[W_COUNT] = {
 
 /* Each kind's types, in the order of its names below. A float: decimal (f32), whole number (s32) or the
  * float's bits (x32). An angle: degrees, the game's 16-bit angle (0x4000 = 90 degrees) as N64 OoT shows
- * it, the same signed, or radians. Flags: the bits, or a word for each one set. */
+ * it, the same signed, or radians. Flags: a word for each one set, or the bits. */
 enum { FLOAT_AS_F32, FLOAT_AS_S32, FLOAT_AS_X32, N_FLOAT_TYPES };
 enum { ANGLE_AS_DEG, ANGLE_AS_HEX, ANGLE_AS_S16, ANGLE_AS_RAD, N_ANGLE_TYPES };
 enum { COUNT_AS_DEC, COUNT_AS_HEX, N_COUNT_TYPES };
 enum { TIMER_AS_MIN_SEC, TIMER_AS_SEC, N_TIMER_TYPES };
 enum { STICK_AS_PERCENT, STICK_AS_RAW, N_STICK_TYPES };
-enum { FLAGS_AS_HEX, FLAGS_AS_WORDS, N_FLAGS_TYPES };
+enum { FLAGS_AS_WORDS, FLAGS_AS_HEX, N_FLAGS_TYPES };
 
 static const char *const names_float[N_FLOAT_TYPES] = { "f32", "s32", "x32" };
 static const char *const names_angle[N_ANGLE_TYPES] = { "deg", "hex", "s16", "rad" };
 static const char *const names_count[N_COUNT_TYPES] = { "dec", "hex" };
 static const char *const names_timer[N_TIMER_TYPES] = { "m:s", "sec" };
 static const char *const names_stick[N_STICK_TYPES] = { "%", "raw" };
-static const char *const names_flags[N_FLAGS_TYPES] = { "hex", "flags" };
+static const char *const names_flags[N_FLAGS_TYPES] = { "flags", "hex" };
 
 #define ANGLE_UNITS_PER_TURN 65536.0f /* the game's binary angles */
 
@@ -693,16 +693,20 @@ void watch_text(watch_t watch, char *buf, int len)
       uint32_t name_hash;
       if (!safety_state(&flags, &name_hash)) {
         snprintf(buf, len, "N/A");
-      } else if (watch == W_SAFETY) { /* the setting applied: its name, or its hash if it's not a known one */
+      } else if (watch == W_SAFETY) { /* the setting applied: its name; its hash only if it's not a known one */
         const char *name = safety_setting_name(name_hash);
         if (name)
           snprintf(buf, len, "%s", name);
+        else if (!name_hash)
+          snprintf(buf, len, "%s", T("none"));
         else
           snprintf(buf, len, "0x%08x", (unsigned)name_hash);
-      } else if (type == FLAGS_AS_WORDS) {
-        safety_flags_text(flags, buf, len);
-      } else {
+      } else if (type == FLAGS_AS_HEX) {
         snprintf(buf, len, "0x%04x", (unsigned)flags);
+      } else if (!flags) {
+        snprintf(buf, len, "%s", T("none"));
+      } else { /* a word for each thing the setting turns off */
+        safety_flags_text(flags, buf, len);
       }
       break;
     }

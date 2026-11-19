@@ -252,13 +252,14 @@ Under the list:
 
 **Display types.** Positions and speeds: **f32** (decimal), **s32** (whole number), **x32** (the float's bits).
 Angles: **deg**, **hex** (the game's 16-bit angle, 0x4000 = 90°), **s16**, **rad**. Counters: **dec**, **hex**.
-Timer: **m:s**, **sec**. Stick: **%**, **raw**. Safety flags: **hex**, **flags** (a word for each one set).
+Timer: **m:s**, **sec**. Stick: **%**, **raw**. Safety flags: **flags** (a word for each one set), **hex**.
 Memory watches: **u8 s8 x8 u16 s16 x16 u32 s32 x32 f32 x64**.
 
 **safety** and **safety flags** (1.1.1 only; **N/A** on 1.0.0 and while there's no scene) read the game's
 GameSafetyMgr: what a minigame, a boss fight or a story section is stopping you from doing right now. **safety** is
-the name of the setting the game has applied, such as `MiniGame_TimeStop` or `SageOfFire` (its hash, if it isn't one
-of the game's 28). **safety flags** is that setting's switches, as the game packs them:
+the name of the setting the game has applied, such as `MiniGame_TimeStop` or `SageOfFire` (**none** when there is
+none; its hash only if it isn't one of the game's 28). **safety flags** is that setting's switches, a word for each
+one that is set (**none** when none is), or as the game packs them with the **hex** type:
 
 | Bit | Word | Set when |
 |---|---|---|
@@ -276,7 +277,7 @@ of the game's 28). **safety flags** is that setting's switches, as the game pack
 | `0x4000` | pause | `IsDisableLoadingPause` |
 | `0x8000` | err | `IsNoDispErrorForTemporarySave` |
 
-So `0x14c8`, as read with `MiniGame_TimeStop` applied, shows as **on save warp grab time**. Any other bit shows as
+So with `MiniGame_TimeStop` applied it reads **on save warp grab time** (`0x14c8` as hex). Any other bit shows as
 a number after the words. Both watches only read; the wrench opens the value in **debug > memory**.
 
 **timer**: **start/stop timer**, **reset timer**, **reset lag counter** (also shortcuts,

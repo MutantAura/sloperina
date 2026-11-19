@@ -109,7 +109,7 @@ What changed from the Python version:
 | Tk overlay window | `gfx.h`: log backend now, on-screen backend next |
 | equipment component / magic meter: heap scan | same idea, in-process (`mem_find_u64`), after a cheap search near Link |
 
-## Verified in Lichii (2026-11-09)
+## Verified in Lichii
 
 - rtld loads `subsdk9` and calls `DT_INIT`; the IPS applies; the frame hook runs
   (`ootgz: frame hook installed`, `ootgz: running (patch v1, main 0x805e3000)`).

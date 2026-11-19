@@ -782,7 +782,7 @@ sloperinaGZ yet. Same build as everything else here.
   (values `None`, `ItemMenu`, `EquipmentMenu`, `CollectMenu`, `SystemMenu`, `Save`, `Load`, `Option`, `ActionGuide`,
   `ToTitle`, `WorldMap`, `DungeonMap`, `FieldMap`, `UnopenMap`, `ChallengeMenu`, `ChallengeMenuFullScreen`,
   `ImportantMenu`, `Ocarina`, `Title`, `Loading`, `GameOver`): the menu screen that's up. Logged in Lichii
-  (debug > pause research, 2026-11-15): the wheel left it `None`; Plus set `ItemMenu` and Minus `UnopenMap` one
+  (debug > pause research): the wheel left it `None`; Plus set `ItemMenu` and Minus `UnopenMap` one
   frame after the pre request, back to `None` with the post request. The wheel's own fields (`UI_IsNeedOpenShortCut`,
   `UI_IsShortCutBCancel`, `UI_CurrentShortCutCategory`, `Sequence_ShortCutOpenHoldCounter`) didn't change.
   **hide in game menus** now also needs it to be other than `None` (`gd_game_menu_screen`); paused with it `None`
@@ -927,7 +927,7 @@ Entries 1 to 4 and 14 were empty; 35 and 40 had no name getter.
   that previously trapped Link, after turning through walls ON. Void-trigger
   visualization and optional levitation void immunity are still under investigation.
 
-### 9.5 Actors, their life and position (from the disassembly, v131072; checked in game 9th November 2026)
+### 9.5 Actors, their life and position (from the disassembly, v131072; checked in game)
 - **The actor manager** `mgr = *(main+0x4E90D90)` (`+0x00` a mutex: lock `main+0x3C42460`, unlock `main+0x3C42470`).
   The live actors are in an intrusive red-black tree at `[mgr+0x38]`: node N has left `+0x00`, right `+0x08`,
   parent|colour `+0x10`; each node is at `+8` in an entry E (`E = N - 8`) with the actor at `[E+0x28]` and the next
@@ -955,7 +955,7 @@ Entries 1 to 4 and 14 were empty; 35 and 40 had no name getter.
 - A dungeon keeps all its rooms' actors: Forest Temple had 32+ live enemies, so scene > enemy health keeps the 32
   nearest Link within 30 m. Its summary (`actors:` lines) goes to the log every 300 frames while it's on.
 
-### 9.6 The scene's depth (1.0.0, nxnative; checked 10th November 2026)
+### 9.6 The scene's depth (1.0.0, nxnative; checked in game)
 - **The texture:** Depth32F (NVN `0x34`) at the render resolution: 1536x864, smaller under dynamic resolution
   (1457x820 seen), at offset 0 of the game's 305 MB render-target pool (flags `0x2a1`). The texture *object* is
   new every frame or two (16+ addresses, its texture-pool ID with it): never keep it, take it from the game's
@@ -1093,7 +1093,7 @@ point.
 - In Ghidra `thunk_FUN_03c41c50` is marked no-return, so decompiles stop after it (FUN_00945220, FUN_00375BA0):
   read the disassembly (`tools/re64.py dump/v131072 func <offset>`).
 
-### 9.8 Where Link voids out: the ground map, its two probes and the void areas (v131072; from the disassembly, the view checked in game 14th November 2026)
+### 9.8 Where Link voids out: the ground map, its two probes and the void areas (v131072; from the disassembly, the view checked in game)
 Link can void on ground that looks solid and walk on thin air without voiding, because the void check doesn't use
 the collision. It uses a voxel map of the walkable ground. Checked in game: the deadly cells, the 8 unit rule and
 the flags they set (the view and its log agree with where Link voids). From the disassembly and the files only:
@@ -1299,8 +1299,8 @@ reads every slot's caption once, at boot, and keeps it.
   `main+0x4E5420` runs every frame on the same thread as the mod's frame hook.
 - **Checked in Lichii:** after a restore, `main+0xBB0010` then `main+0xF6DA40` makes the update read every slot's
   caption again (about 58 frames).
-- **What the Load list shows comes straight from the CaptionMgr** (from the disassembly and the sequence graphs, 18th
-  November 2026; not checked in game unless stated). The GameData struct `CaptionData` (`0x46926D32`) holds only
+- **What the Load list shows comes straight from the CaptionMgr** (from the disassembly and the sequence graphs;
+  not checked in game unless stated). The GameData struct `CaptionData` (`0x46926D32`) holds only
   `SelectedSavePathIndex` (`0xD13D898B`), the slot to load. The list screen is `UISystemLoadListScreen`
   (`SystemLoadList_00`, name hash `0x73033AAB`), vtable `main+0x4BEEBA0`:
   - `+0x2B0` its list (0x80 bytes, vtable `main+0x4BEEF08`, made by slot 35 `main+0x3400B40` for the part
@@ -1377,7 +1377,7 @@ reads every slot's caption once, at boot, and keeps it.
   node's vtable, slot 39 is the work, whose first `adrp`/`ldr` gives the instance's GOT entry and whose `bl` is
   `F6DA40`'s match; the `b` at its end leads to `BB0010`'s match.
 
-### 9.12 Hookshot storage (1.0.0; read live in Lichii 19th to 20th November 2026)
+### 9.12 Hookshot storage (1.0.0; read live in Lichii)
 - **The record:** Link's AI component `A = [[actor+0x270]+0x3D8]` keeps a small hash map: buckets at `[A+0x20]`
   (0x38 bytes each: `+0x00` key, `+0x08` count, `+0x10` pointer to the records, 0xF8 bytes each), bucket count at
   `A+0x2C`. The longshot's record has key `0xAD28A0F2`, the hookshot's `0x9472DF51` (`main+0x2DAC3C0`, the code

@@ -1,6 +1,6 @@
 # Collision view (shelved)
 
-**Status: shelved (9th November 2026).** The collision files are fully decoded on the PC, but nothing is drawn in
+**Status: shelved.** The collision files are fully decoded on the PC, but nothing is drawn in
 the game yet. This page is everything needed to pick it up again: the plan, what it costs, what's unknown, and the
 file format.
 

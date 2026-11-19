@@ -1,4 +1,4 @@
-/* Hookshot storage (1.0; read live 19th November 2026).
+/* Hookshot storage (1.0; read live).
  *
  * Link's AI component A = [[actor+0x270]+0x3D8] keeps a small hash map of records: buckets at [A+0x20], 0x38 bytes
  * each (+0 the key, +8 how many records, +0x10 the records, 0xF8 bytes each), count A+0x2C. The hookshot's is key
@@ -44,7 +44,7 @@
 #define MAX_BUCKETS 64
 /* the record keys: one per weapon, each with its own record and its own storage */
 static const struct { uint32_t key; const char *name; } weapons[] = {
-  { 0xAD28A0F2u, "longshot" }, /* every test until 19th November 2026 */
+  { 0xAD28A0F2u, "longshot" }, /* the one tested */
   { 0x9472DF51u, "hookshot" }, /* same layout, the other record; assumed from that */
 };
 #define N_WEAPONS (sizeof(weapons) / sizeof(*weapons))
@@ -56,7 +56,7 @@ static const struct { uint32_t key; const char *name; } weapons[] = {
 #define ACTOR_POSITION 0x31C
 #define HIT_REVISION 65536 /* the build the record was taken from */
 
-/* The medium hit, as a bomb left it in H (1.0, 19th November 2026) */
+/* The medium hit, as a bomb left it in H (1.0) */
 enum { W_RAW, W_FRAME, W_MAIN64, W_H64, W_POS, W_DIR };
 static const struct { uint16_t off; uint8_t kind; uint32_t value; } hit_words[] = {
   { 0x0A0, W_RAW, 0xE7 },        { 0x0B8, W_RAW, 0xE7 },        { 0x0DC, W_RAW, 0x100 },

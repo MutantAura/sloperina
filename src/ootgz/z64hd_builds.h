@@ -202,6 +202,8 @@ static const struct z64hd_build z64hd_builds[] = {
     .player_nayru_reset = 0x2E78050,
     .vt_warp_mgr = 0x4BA2248, /* slot 6 main+0x57F4F0 */
     .warp_mgr_place = 0x32B0750,
+    .challenge_mgr_ptr = 0x4E29950,
+    .challenge_set_step = 0x2CF54A0,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

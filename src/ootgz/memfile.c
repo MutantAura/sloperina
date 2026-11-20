@@ -1814,7 +1814,7 @@ void memfile_frame(void)
 #define SZM_FILE_MAX    (GD_MAX_SAVE_BUF + (1u << 20))
 #define SZM_SLACK       0x10000u /* room for every section but the snapshot and the session fields */
 #define SZM_DIR         SD_DIR "/" MEMFILE_DIR_NAME
-#define SZM_PATH_LEN    (sizeof(SZM_DIR) + MEMFILE_NAME_MAX + 8)
+#define SZM_PATH_LEN    (sizeof(SZM_DIR) + MEMFILE_FOLDER_LEN + MEMFILE_NAME_MAX + 8)
 
 enum { STATE_POS = 1, STATE_LIFE = 2, STATE_MAGIC = 4, STATE_TIME = 8, STATE_NAYRU = 16 };
 enum { CAM_STATE = 1, CAM_COMPONENT = 2 };
@@ -2189,8 +2189,52 @@ typedef nn_result_t (*open_dir_fn)(fs_dir_t *out, const char *path, int mode);
 typedef nn_result_t (*read_dir_fn)(int64_t *count, fs_dir_entry_t *entries, fs_dir_t dir, int64_t max);
 typedef void (*close_dir_fn)(fs_dir_t dir);
 
+typedef nn_result_t (*delete_tree_fn)(const char *path);
+enum { FS_ENTRY_DIR = 0 };
+
+/* The folder looked at (relative to SZM_DIR, "" for it: the top, which up stops at; folders in folders to
+ * MEMFILE_FOLDER_LEN), and the last list of it: its folders first, then its .szm files (without the extension),
+ * each A to Z. Exports go into it and imports come from it. */
+static char browsing[MEMFILE_FOLDER_LEN];
 static char file_names[MEMFILE_FILES_MAX][MEMFILE_NAME_MAX + 1];
-static int  file_count;
+static int  file_count, folder_count;
+
+/* the sdk's directory functions, looked up in its exports (as savebackup.c's) */
+static struct {
+  open_dir_fn    open;
+  read_dir_fn    read;
+  close_dir_fn   close;
+  delete_tree_fn delete_tree;
+} dirs;
+
+static bool dir_fns(void)
+{
+  if (!dirs.open) {
+    uintptr_t sdk = got_module_of((uintptr_t)&fs_open); /* an sdk function this module imports */
+    dirs.read = (read_dir_fn)got_export(sdk, "_ZN2nn2fs13ReadDirectoryEPlPNS0_14DirectoryEntryENS0_15DirectoryHandleEl");
+    dirs.close = (close_dir_fn)got_export(sdk, "_ZN2nn2fs14CloseDirectoryENS0_15DirectoryHandleE");
+    dirs.delete_tree = (delete_tree_fn)got_export(sdk, "_ZN2nn2fs26DeleteDirectoryRecursivelyEPKc");
+    dirs.open = (open_dir_fn)got_export(sdk, "_ZN2nn2fs13OpenDirectoryEPNS0_15DirectoryHandleEPKci");
+  }
+  return dirs.open && dirs.read && dirs.close;
+}
+
+/* SZM_DIR/<folder>[/<name><ext>] */
+static void szm_path(char out[SZM_PATH_LEN], const char *folder, const char *name, const char *ext)
+{
+  int n = snprintf(out, SZM_PATH_LEN, "%s%s%s", SZM_DIR, folder[0] ? "/" : "", folder);
+  if (name)
+    snprintf(out + n, SZM_PATH_LEN - n, "/%s%s", name, ext);
+}
+
+static bool dir_exists(const char *path)
+{
+  fs_dir_t d;
+  if (!dir_fns() || dirs.open(&d, path, FS_OPEN_DIR_ALL) != 0)
+    return false;
+  dirs.close(d);
+  return true;
+}
 
 /* the name typed, as a file name: no characters the SD card can't hold, no spaces or dots at either end */
 static void clean_file_name(const char *typed, char out[MEMFILE_NAME_MAX + 1])
@@ -2240,7 +2284,7 @@ bool memfile_export(int s, const char *typed)
     gfx_notice("a memfile needs a name to export");
     return false;
   }
-  snprintf(path, sizeof(path), "%s/%s%s", SZM_DIR, name, MEMFILE_EXT);
+  szm_path(path, browsing, name, MEMFILE_EXT);
   fs_create_dir(SD_DIR);
   fs_create_dir(SZM_DIR);
   fs_file_t f;
@@ -2272,53 +2316,162 @@ bool memfile_export(int s, const char *typed)
     return false;
   }
   log_printf("memfile %d exported: %s (%u bytes)", s + 1, path, (unsigned)size); /* not menu text */
-  gfx_logf("memfile %d exported as %s", s + 1, name);
+  gfx_logf(TF("memfile %d exported as %s"), s + 1, name);
   return true;
 }
 
 int memfile_list_files(void)
 {
-  file_count = 0;
-  if (!settings_sd())
-    return 0;
-  uintptr_t sdk = got_module_of((uintptr_t)&fs_open); /* an sdk function this module imports */
-  open_dir_fn open_dir = (open_dir_fn)got_export(sdk, "_ZN2nn2fs13OpenDirectoryEPNS0_15DirectoryHandleEPKci");
-  read_dir_fn read_dir =
-    (read_dir_fn)got_export(sdk, "_ZN2nn2fs13ReadDirectoryEPlPNS0_14DirectoryEntryENS0_15DirectoryHandleEl");
-  close_dir_fn close_dir = (close_dir_fn)got_export(sdk, "_ZN2nn2fs14CloseDirectoryENS0_15DirectoryHandleE");
+  file_count = folder_count = 0;
+  char path[SZM_PATH_LEN];
+  szm_path(path, browsing, 0, 0);
   fs_dir_t dir;
-  if (!open_dir || !read_dir || !close_dir || open_dir(&dir, SZM_DIR, FS_OPEN_DIR_ALL) != 0)
+  if (!settings_sd() || !dir_fns() || dirs.open(&dir, path, FS_OPEN_DIR_ALL) != 0)
     return 0;
   static fs_dir_entry_t e;
   int64_t got = 0;
   const size_t ext = sizeof(MEMFILE_EXT) - 1;
-  while (file_count < MEMFILE_FILES_MAX && read_dir(&got, &e, dir, 1) == 0 && got == 1) {
+  while (file_count < MEMFILE_FILES_MAX && dirs.read(&got, &e, dir, 1) == 0 && got == 1) {
     e.name[sizeof(e.name) - 1] = 0;
     size_t n = strlen(e.name);
-    if (e.type != FS_ENTRY_FILE || n <= ext || n - ext > MEMFILE_NAME_MAX ||
-        compare_names(e.name + n - ext, MEMFILE_EXT) != 0)
+    bool folder = e.type == FS_ENTRY_DIR;
+    if (folder ? n > MEMFILE_NAME_MAX
+               : e.type != FS_ENTRY_FILE || n <= ext || n - ext > MEMFILE_NAME_MAX ||
+                   compare_names(e.name + n - ext, MEMFILE_EXT) != 0)
       continue;
-    char *name = file_names[file_count];
-    memcpy(name, e.name, n - ext);
-    name[n - ext] = 0;
-    int i = file_count++; /* sorted as they come in */
-    for (; i > 0 && compare_names(file_names[i - 1], name) > 0; i--) {
-      char t[MEMFILE_NAME_MAX + 1];
-      memcpy(t, file_names[i - 1], sizeof(t));
-      memcpy(file_names[i - 1], file_names[i], sizeof(t));
-      memcpy(file_names[i], t, sizeof(t));
-      name = file_names[i - 1];
-    }
+    if (!folder)
+      n -= ext;
+    /* sorted as they come in: a folder among the folders (the list's start), a file among the files */
+    int lo = folder ? 0 : folder_count, i = folder ? folder_count : file_count;
+    for (int k = file_count; k > i; k--)
+      memcpy(file_names[k], file_names[k - 1], sizeof(file_names[k]));
+    file_count++;
+    folder_count += folder;
+    char name[MEMFILE_NAME_MAX + 1];
+    memcpy(name, e.name, n);
+    name[n] = 0;
+    for (; i > lo && compare_names(file_names[i - 1], name) > 0; i--)
+      memcpy(file_names[i], file_names[i - 1], sizeof(file_names[i]));
+    memcpy(file_names[i], name, sizeof(name));
   }
-  close_dir(dir);
+  dirs.close(dir);
   return file_count;
 }
 
+int memfile_list_folders(void) { return folder_count; }
+
 const char *memfile_file_name(int i) { return i >= 0 && i < file_count ? file_names[i] : ""; }
+
+const char *memfile_browsing(void) { return browsing; }
+
+bool memfile_browse_into(int i)
+{
+  if (i < 0 || i >= folder_count)
+    return false;
+  char next[MEMFILE_FOLDER_LEN];
+  int n = snprintf(next, sizeof(next), browsing[0] ? "%s/%s" : "%s%s", browsing, file_names[i]);
+  if (n >= (int)sizeof(next)) {
+    gfx_notice("that folder is too deep to open here");
+    return false;
+  }
+  memcpy(browsing, next, sizeof(browsing));
+  return true;
+}
+
+void memfile_browse_up(void)
+{
+  int n = (int)strlen(browsing);
+  while (n > 0 && browsing[n - 1] != '/')
+    n--;
+  browsing[n > 0 ? n - 1 : 0] = 0;
+}
+
+void memfile_browse_top(void) { browsing[0] = 0; }
+
+bool memfile_delete_file(int i)
+{
+  if (i < folder_count || i >= file_count)
+    return false;
+  if (!settings_sd()) {
+    gfx_notice("no SD card: memfile not deleted");
+    return false;
+  }
+  char path[SZM_PATH_LEN], name[MEMFILE_NAME_MAX + 1];
+  szm_path(path, browsing, file_names[i], MEMFILE_EXT);
+  memcpy(name, file_names[i], sizeof(name));
+  nn_result_t r = fs_delete_file(path);
+  if (r != 0) {
+    log_printf("memfiles: couldn't delete %s (0x%x)", path, (unsigned)r); /* not menu text */
+    gfx_notice("memfile not deleted (see the log)");
+    return false;
+  }
+  log_printf("memfiles: deleted %s", path); /* not menu text */
+  gfx_logf(TF("deleted %s"), name);
+  memfile_list_files(); /* the list without it */
+  return true;
+}
+
+bool memfile_make_folder(const char *typed)
+{
+  if (!settings_sd() || !dir_fns()) {
+    gfx_notice("no SD card: no folder made");
+    return false;
+  }
+  char name[MEMFILE_NAME_MAX + 1], path[SZM_PATH_LEN];
+  clean_file_name(typed, name);
+  if (!name[0]) {
+    gfx_notice("no name: no folder made");
+    return false;
+  }
+  if (strlen(browsing) + 1 + strlen(name) >= MEMFILE_FOLDER_LEN) {
+    gfx_notice("that folder would be too deep");
+    return false;
+  }
+  szm_path(path, browsing, name, "");
+  if (dir_exists(path)) {
+    gfx_logf(TF("%s is already a folder here"), name);
+    return false;
+  }
+  fs_create_dir(SD_DIR);
+  fs_create_dir(SZM_DIR);
+  fs_create_dir(path);
+  if (!dir_exists(path)) {
+    log_printf("memfiles: couldn't make the folder %s", path); /* not menu text */
+    gfx_notice("folder not made (see the log)");
+    return false;
+  }
+  log_printf("memfiles: made the folder %s", path); /* not menu text */
+  gfx_logf(TF("folder made: %s"), name);
+  return true;
+}
+
+bool memfile_delete_folder(void)
+{
+  if (!browsing[0]) {
+    gfx_notice("the top folder can't be deleted");
+    return false;
+  }
+  if (!settings_sd() || !dir_fns() || !dirs.delete_tree) {
+    gfx_notice("no SD card: folder not deleted");
+    return false;
+  }
+  char path[SZM_PATH_LEN];
+  szm_path(path, browsing, 0, 0);
+  nn_result_t r = dirs.delete_tree(path);
+  if (r != 0) {
+    log_printf("memfiles: couldn't delete the folder %s (0x%x)", path, (unsigned)r); /* not menu text */
+    gfx_notice("folder not deleted (see the log)");
+    return false;
+  }
+  log_printf("memfiles: deleted the folder %s", path); /* not menu text */
+  memfile_browse_up();
+  gfx_notice("folder deleted");
+  return true;
+}
 
 bool memfile_import(int i, int s)
 {
-  if (i < 0 || i >= file_count || s < 0 || s >= MEMFILE_SLOTS)
+  if (i < folder_count || i >= file_count || s < 0 || s >= MEMFILE_SLOTS)
     return false;
   end_camera_guard();
   if (phase != L_IDLE) {
@@ -2330,7 +2483,7 @@ bool memfile_import(int i, int s)
     return false;
   }
   char path[SZM_PATH_LEN];
-  snprintf(path, sizeof(path), "%s/%s%s", SZM_DIR, file_names[i], MEMFILE_EXT);
+  szm_path(path, browsing, file_names[i], MEMFILE_EXT);
   fs_file_t f;
   int64_t size = 0;
   if (fs_open(&f, path, FS_READ) != 0) {

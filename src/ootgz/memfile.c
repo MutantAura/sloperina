@@ -79,7 +79,6 @@ float atan2f(float y, float x);                  /* from sdk */
 #define MOVE_RETRY_EVERY   4
 #define CAMERA_WAIT        (5 * GAME_FPS)
 #define CAMERA_WRITE_FRAMES 10
-#define CAMERA_GAP_EVERY   GAME_FPS /* while waiting for the handover, the eye gap is logged this often */
 #define CAMERA_SETTLE_MAX  GAME_FPS /* writes go on past CAMERA_WRITE_FRAMES until the look-at settles, up to this */
 #define CAMERA_NEAR        0.1f     /* the drawn look-at this near the saved one (largest axis): settled */
 #define CAMERA_STILL       0.01f    /* or moving less than this a frame: settled where it'll stay */
@@ -159,6 +158,8 @@ typedef struct {
   double            x, y, z, fx, fz;
   bool              have_pos, have_life, have_magic, have_time;
   int32_t           life, magic;
+  bool              have_nayru;
+  float             nayru_left, nayru_total; /* Nayru's Love: frames left and its length; 0 when off */
   uint32_t          time;
   int               child;
   bool              have_camera, have_component;
@@ -822,9 +823,6 @@ static void camera_put_actions(const memfile_t *st, bool find)
       if (match < 0 && st->action_vtable[k] == vt)
         match = k;
     }
-    if (find)
-      log_printf("memfiles: camera action main+%lx node %u %s", (unsigned long)vt, /* not menu text */
-                 (unsigned)node_idx, match < 0 ? "not in the memfile" : "put back"); /* not menu text */
     if (match < 0)
       continue;
     for (size_t r = 0; r < sizeof(action_ranges) / sizeof(*action_ranges); r++)
@@ -839,26 +837,6 @@ static bool camera_view(float out[6])
     return false;
   memcpy(out, (const void *)(cam + 0x38), 24);
   return true;
-}
-
-/* the drawn eye against the player camera's own (state +0x450): what camera_drawn compares */
-static void log_camera_gap(const char *when)
-{
-  const uint8_t *state = camera_state();
-  float v[6], e[3];
-  if (!state || !camera_view(v)) {
-    log_printf("memfile %d load: camera gap %s: camera not readable", active_slot + 1, when); /* not menu text */
-    return;
-  }
-  memcpy(e, state + 0x450, sizeof(e));
-  float gap = 0;
-  for (int i = 0; i < 3; i++) {
-    float d = v[i] > e[i] ? v[i] - e[i] : e[i] - v[i];
-    gap = d > gap ? d : gap;
-  }
-  log_printf("memfile %d load: camera gap %s: drawn eye %.3f %.3f %.3f, " /* not menu text */
-             "player camera eye %.3f %.3f %.3f, largest axis %.3f", active_slot + 1, when, /* not menu text */
-             v[0], v[1], v[2], e[0], e[1], e[2], gap);
 }
 
 typedef void (*camera_arrive_t)(uintptr_t component);
@@ -988,6 +966,63 @@ static bool move_link(const memfile_t *st)
   return cct_teleport(&to, rotation);
 }
 
+/* --- Nayru's Love --------------------------------------------------------------------------------- */
+
+/* Its time left lives in the player component, which a fast load (ResetGimmick) never rebuilds, and a frame
+ * update copies it over the GameData mirror the deserializer just restored: so the time is put back here. */
+#define PLAYER_COMPONENT 0x358u
+#define NAYRU_LEFT       0x1634u /* float frames left; the barrier is on while above NAYRU_EPS */
+#define NAYRU_TOTAL      0x1638u
+#define NAYRU_MARK       0x163Cu /* -1.0 whenever it's set or reset */
+#define NAYRU_EPS        1.19e-7f
+
+typedef void (*component_fn_t)(uintptr_t component);
+
+static uintptr_t player_component(void)
+{
+  uintptr_t link = link_actor();
+  uintptr_t comps = link ? sys_ptr(link + 0x270) : 0;
+  uintptr_t c = comps ? sys_ptr(comps + PLAYER_COMPONENT) : 0;
+  return c && sys_mapped(c + NAYRU_LEFT, 12, SYS_PERM_R | SYS_PERM_W) ? c : 0;
+}
+
+static bool nayru_get(float *left, float *total)
+{
+  uintptr_t c = player_component();
+  if (!c)
+    return false;
+  *left = *(volatile float *)(c + NAYRU_LEFT);
+  *total = *(volatile float *)(c + NAYRU_TOTAL);
+  if (!(*left > NAYRU_EPS))
+    *left = *total = 0;
+  return true;
+}
+
+static void restore_nayru(const memfile_t *st)
+{
+  uintptr_t c = st->have_nayru ? player_component() : 0;
+  if (!c)
+    return;
+  volatile float *t = (volatile float *)(c + NAYRU_LEFT);
+  bool on = t[0] > NAYRU_EPS;
+  if (st->nayru_left > NAYRU_EPS) {
+    if (!on)
+      log_printf("memfile %d load: Nayru's Love on, %d frames left", active_slot + 1, /* not menu text */
+                 (int)st->nayru_left);
+    t[0] = st->nayru_left;
+    t[1] = st->nayru_total;
+    *(volatile float *)(c + NAYRU_MARK) = -1.0f;
+  } else if (on) {
+    log_printf("memfile %d load: Nayru's Love off", active_slot + 1); /* not menu text */
+    if (z64hd_game->player_nayru_reset) {
+      MAIN_FN(component_fn_t, z64hd_game->player_nayru_reset)(c);
+    } else {
+      t[0] = t[1] = 0;
+      *(volatile float *)(c + NAYRU_MARK) = -1.0f;
+    }
+  }
+}
+
 static void restore_vitals_and_gear(const memfile_t *st)
 {
   uint32_t now = 0;
@@ -1009,10 +1044,156 @@ static void restore_vitals_and_gear(const memfile_t *st)
   }
   if (gear_reapply_now())
     log_printf("memfile %d load: gear put on", active_slot + 1); /* not menu text */
+  restore_nayru(st);
+}
+
+/* --- the item wheel after a fast load ----------------------------------------------------------- */
+
+/* Sequence/Main.module.ainb runs, side by side from its root (node 23), UpdateShortCutOpenHoldFrameCounter
+ * (what opens the item wheel on L/R) and the picker of its branches (node 15). The ResetGimmick branch (taken
+ * for DebugParam.IsRequestedResetGimmick) ends with a transition to node 15 alone, so after one the item wheel
+ * is dead until something leaves Main (a map change ends on node 23, menus and events re-enter it from the
+ * root). The game keeps the file loaded: find it once, in steps over a few seconds of frames, and point that
+ * transition at node 23 like the map change branch. The file is the same in 1.0.0 and 1.1.1. */
+#define MAIN_AINB_MAGIC    0x0000040820424941ull /* "AIB " v0x408 */
+#define MAIN_AINB_SIZE     11395u
+#define MAIN_AINB_RESET_TO 0x1204u               /* s32 node index: 15 in the file, 23 patched */
+#define AINB_SCAN_STEP     (8u << 20)            /* bytes read per frame */
+
+static const uint8_t main_ainb_head[0x40] = {
+  0x41, 0x49, 0x42, 0x20, 0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x24, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xfc, 0x08, 0x00, 0x00, 0x60, 0x27, 0x00, 0x00, 0x5c, 0x27, 0x00, 0x00, 0x58, 0x22, 0x00, 0x00,
+  0x6c, 0x26, 0x00, 0x00, 0x98, 0x24, 0x00, 0x00, 0x6c, 0x26, 0x00, 0x00, 0x58, 0x22, 0x00, 0x00,
+};
+/* the transition plug's context: index 15 then 7 (its transition entry) and the next plug's 4 */
+static const uint8_t main_ainb_reset_plug[12] = { 0x0f, 0, 0, 0, 0x07, 0, 0, 0, 0x04, 0, 0, 0 };
+
+#define MEM_TYPE_HEAP 5u
+
+static enum { AINB_WAIT, AINB_SCANNING, AINB_DONE } ainb_state;
+static uint64_t ainb_addr, ainb_region_end;  /* the scan's cursor and the end of its region */
+static uint64_t ainb_start_tick;
+static int      ainb_patched;
+
+/* The same walk finds WarpMgr, the game component behind Farore's Wind's sparkle (actor FaroreWindWarpPoint).
+ * It places the sparkle only when told GameData changed (its vtable slot 6, with change bits; none set means
+ * all), which the deserializer doesn't do, and ResetGimmick keeps the sparkle: so it's told after a fast load. */
+static uintptr_t warp_mgr;
+static int       warp_mgrs;
+
+/* a WarpMgr as its constructor (main+0xE0FE60) leaves it: its vtable, and a listener's vtable at +0xB8 */
+static bool is_warp_mgr(uintptr_t m, uintptr_t vt)
+{
+  if (!sys_mapped(m, 0xD0, SYS_PERM_R | SYS_PERM_W) || sys_ptr(m) != vt)
+    return false;
+  uintptr_t listener = sys_ptr(m + 0xB8);
+  return listener >= MAIN(0) && listener < MAIN(0x5000000);
+}
+
+typedef void (*gd_changed_t)(uintptr_t component, const void *change_bits);
+typedef void (*warp_place_t)(uintptr_t mgr, float x, float y, float z);
+
+#define F_FW_BANC 0xB09FBD99u /* WarpPoint_FaroreWind.BancName */
+#define F_FW_POS  0xBEB37B31u /* WarpPoint_FaroreWind.Pos */
+
+static void refresh_warp_mgr(const memfile_t *st)
+{
+  uintptr_t vt = z64hd_game->vt_warp_mgr ? MAIN(z64hd_game->vt_warp_mgr) : 0;
+  if (!warp_mgr || !vt || !is_warp_mgr(warp_mgr, vt))
+    return;
+  uintptr_t slot6 = sys_ptr(vt + 6 * 8);
+  if (slot6 < MAIN(0) || slot6 >= MAIN(0x3C80000))
+    return;
+  static const uint8_t everything[0x20];
+  ((gd_changed_t)slot6)(warp_mgr, everything);
+  /* the point is on this map: put the sparkle there, the way casting does */
+  const char *banc = gd_get_str(F_FW_BANC);
+  float pos[3];
+  if (banc && st->map[0] && str_equal(banc, st->map) && gd_get_vec3(F_FW_POS, pos) && z64hd_game->warp_mgr_place) {
+    MAIN_FN(warp_place_t, z64hd_game->warp_mgr_place)(warp_mgr, pos[0], pos[1], pos[2]);
+    log_printf("memfiles: Farore's Wind sparkle put at %.2f %.2f %.2f", /* not menu text */
+               (double)pos[0], (double)pos[1], (double)pos[2]);
+  } else {
+    log_printf("memfiles: Farore's Wind sparkle re-read (no point on this map)"); /* not menu text */
+  }
+}
+
+static bool ainb_next_region(void)
+{
+  sys_meminfo_t r;
+  for (int guard = 0; guard < 4096; guard++) {
+    if (sys_query_memory(&r, ainb_addr) != 0 || !r.size || r.addr + r.size <= ainb_addr)
+      return false;
+    if (r.type == MEM_TYPE_HEAP && (r.perm & (SYS_PERM_R | SYS_PERM_W)) == (SYS_PERM_R | SYS_PERM_W)) {
+      if (ainb_addr < r.addr)
+        ainb_addr = r.addr;
+      ainb_region_end = r.addr + r.size;
+      return true;
+    }
+    ainb_addr = r.addr + r.size;
+  }
+  return false;
+}
+
+static void ainb_check(uint64_t at, uint64_t region_end)
+{
+  const uint8_t *file = (const uint8_t *)(uintptr_t)at;
+  if (at + MAIN_AINB_SIZE > region_end || !bytes_equal(file, main_ainb_head, sizeof(main_ainb_head)))
+    return;
+  uint8_t *plug = (uint8_t *)(uintptr_t)(at + MAIN_AINB_RESET_TO);
+  if (bytes_equal(plug + 4, main_ainb_reset_plug + 4, 8) && (plug[0] == 15 || plug[0] == 23) && !plug[1] && !plug[2] &&
+      !plug[3]) {
+    plug[0] = 23;
+    ainb_patched++;
+    log_printf("memfiles: Main.module at %lx: ResetGimmick now returns to the root", /* not menu text */
+               (unsigned long)at);
+  }
+}
+
+static void ainb_patch_frame(void)
+{
+  if (ainb_state == AINB_DONE)
+    return;
+  if (ainb_state == AINB_WAIT) {
+    if (!link_actor())
+      return;
+    ainb_state = AINB_SCANNING;
+    ainb_addr = ainb_region_end = 0;
+    ainb_start_tick = sys_tick();
+  }
+  uint64_t budget = AINB_SCAN_STEP;
+  while (budget) {
+    if (ainb_addr >= ainb_region_end && !ainb_next_region()) {
+      unsigned s = (unsigned)((sys_tick() - ainb_start_tick) / sys_tick_freq());
+      if (!ainb_patched)
+        log_printf("memfiles: Main.module not found (%u s): no item wheel after fast loads", /* not menu text */
+                   s);
+      else
+        log_printf("memfiles: Main.module scan done in %u s, %d patched", s, ainb_patched); /* not menu text */
+      log_printf("memfiles: %d WarpMgr found%s", warp_mgrs, /* not menu text */
+                 warp_mgrs > 1 ? ", using the first" : ""); /* not menu text */
+      ainb_state = AINB_DONE;
+      return;
+    }
+    uint64_t end = ainb_region_end - ainb_addr > budget ? ainb_addr + budget : ainb_region_end;
+    budget -= end - ainb_addr;
+    uint64_t vt = z64hd_game->vt_warp_mgr ? MAIN(z64hd_game->vt_warp_mgr) : 1;
+    for (const uint64_t *p = (const uint64_t *)(uintptr_t)ainb_addr; (uint64_t)(uintptr_t)p < end; p++) {
+      if (*p == MAIN_AINB_MAGIC && !((uintptr_t)p & 15))
+        ainb_check((uint64_t)(uintptr_t)p, ainb_region_end);
+      else if (*p == vt && is_warp_mgr((uintptr_t)p, vt) && warp_mgrs++ == 0)
+        warp_mgr = (uintptr_t)p;
+    }
+    ainb_addr = end;
+  }
 }
 
 static void finish_load(void)
 {
+  if (fast_load) {
+    refresh_warp_mgr(&memfiles[active_slot]);
+  }
   gfx_notice("memfile loaded");
   status[0] = 0;
   set_phase(L_IDLE);
@@ -1084,6 +1265,18 @@ static void end_camera_guard(void)
     set_phase(L_IDLE);
 }
 
+/* --- when the game can't be saved or loaded from ------------------------------------------------- */
+
+static bool in_cutscene(void) { return eventskip_known() && eventskip_running(); }
+
+/* the game's pause screen, map, or item wheel is up or opening (their pause is the game's own) */
+static bool game_paused(void)
+{
+  bool is_pause = false;
+  int32_t requests = 0;
+  return (gd_game_paused(&is_pause, &requests) && (is_pause || requests > 0)) || gd_game_pausing();
+}
+
 bool memfile_save(int s)
 {
   if (s < 0 || s >= MEMFILE_SLOTS)
@@ -1097,6 +1290,16 @@ bool memfile_save(int s)
   gd_get_bool(F_IS_LOADING_BANC, &loading);
   if (loading || warp_pending()) {
     gfx_notice("can't save a memfile while a map is loading");
+    return false;
+  }
+  bool game_over = false;
+  gd_get_bool(F_IS_GAME_OVER, &game_over);
+  if (in_cutscene() || game_over) {
+    gfx_notice(game_over ? "can't save a memfile during a game over" : "can't save a memfile during a cutscene");
+    return false;
+  }
+  if (game_paused()) {
+    gfx_notice("can't save a memfile while the game is paused");
     return false;
   }
   retire_inflight_buf();
@@ -1139,6 +1342,7 @@ bool memfile_save(int s)
   staging.have_life = link_health(&cur, &max);
   staging.life = staging.have_life ? *cur : 0;
   staging.have_magic = gd_get_int(F_MAGIC, &staging.magic);
+  staging.have_nayru = nayru_get(&staging.nayru_left, &staging.nayru_total);
   bool child = false;
   staging.child = gd_get_bool(F_IS_CHILDHOOD, &child) ? child : -1;
   staging.have_time = time_of_day(&staging.time);
@@ -1179,8 +1383,6 @@ static bool can_fast_reload(const memfile_t *st)
   if (!cur_map || !str_equal(cur_map, st->map) || !gd_get_bool(F_IS_CHILDHOOD, &cur_child) ||
       (int)cur_child != st->child)
     return false;
-  if (eventskip_known() && eventskip_running())
-    return false;
   bool game_over = false, req = false;
   gd_get_bool(F_IS_GAME_OVER, &game_over);
   int32_t *cur_hp = 0, *max_hp = 0;
@@ -1206,6 +1408,14 @@ bool memfile_load(int s)
   gd_get_bool(F_IS_LOADING_BANC, &loading);
   if (loading || warp_pending()) {
     gfx_notice("a map is already loading");
+    return false;
+  }
+  if (in_cutscene()) {
+    gfx_notice("can't load a memfile during a cutscene");
+    return false;
+  }
+  if (game_paused()) {
+    gfx_notice("can't load a memfile while the game is paused");
     return false;
   }
   uint8_t *mgr = 0;
@@ -1468,20 +1678,16 @@ static void step_post_move(const memfile_t *st)
     if (fast_load) {
       camera_frames = 1; /* in place: the player camera stays the one drawn, so no handover to wait for */
     } else if (camera_drawn()) {
-      log_camera_gap("at handover"); /* not menu text */
       log_printf("memfile %d load: the player camera is drawn after %d frames", /* not menu text */
                  active_slot + 1, phase_frames);
       camera_frames = 1;
     } else if (phase_frames > CAMERA_WAIT) {
-      log_camera_gap("at timeout"); /* not menu text */
       log_printf("memfile %d load: the player camera wasn't drawn within %d frames, " /* not menu text */
                  "put back anyway", active_slot + 1, CAMERA_WAIT); /* not menu text */
       camera_frames = 1;
     } else {
       if (log_why)
         camera_state();
-      if (phase_frames == 1 || phase_frames % CAMERA_GAP_EVERY == 0)
-        log_camera_gap("waiting"); /* not menu text */
       return;
     }
   } else {
@@ -1505,9 +1711,6 @@ static void step_post_move(const memfile_t *st)
     log_printf("memfile %d load: the player camera wasn't found", active_slot + 1); /* not menu text */
   float gap = 0, moved = 0;
   bool seen = camera_at_gap(st->view + 3, &gap, &moved);
-  if (camera_frames == 1)
-    log_printf("memfile %d load: camera look-at %.3f from the saved one on the first write", /* not menu text */
-               active_slot + 1, gap);
   bool settled = !seen || gap <= CAMERA_NEAR || (camera_frames > 1 && moved <= CAMERA_STILL);
   if ((camera_frames >= CAMERA_WRITE_FRAMES && settled) || camera_frames >= CAMERA_SETTLE_MAX) {
     float v[6];
@@ -1532,6 +1735,7 @@ static void step_post_move(const memfile_t *st)
 void memfile_frame(void)
 {
   retire_inflight_buf();
+  ainb_patch_frame();
   if (phase == L_IDLE)
     return;
   phase_frames++;

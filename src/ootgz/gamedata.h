@@ -50,6 +50,7 @@ bool      gd_get_float(uint32_t hash, float *out);
 bool      gd_set_float(uint32_t hash, float value);
 bool      gd_get_enum(uint32_t hash, uint32_t *out);  /* value = murmur3(choice) */
 bool      gd_set_enum(uint32_t hash, uint32_t value);
+bool      gd_get_vec3(uint32_t hash, float v[3]);
 bool      gd_set_vec3(uint32_t hash, const float v[3]);
 
 /* String64 field hashes. Their array indices can change when a game update adds fields. */

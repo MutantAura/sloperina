@@ -1490,3 +1490,83 @@ reads every slot's caption once, at boot, and keeps it.
     `u32` at `+0x28` and `node_slots` pointer at `+0x30` (stride `0x18`, `node = [slot+0x00]`, last-visited generation
     `u32` at `+0x0C` compared against `[unit+0xD0]`). Every attached camera action node has `[node+0x20] == state` and
     its node index (`u16`) at `node+0x1C`.
+
+### 9.14 The game's sequence scripts and the ResetGimmick item wheel bug (both builds; checked in game on 1.0.0 20th November 2026)
+- **Where they are:** the game flow runs as AINB graphs in `romfs/Sequence/*.ainb` (version `0x408`), read here with the
+  `ainb` package (PyPI) after `tools/gamefiles.py read`. `Main.module.ainb` (11395 bytes) is the same in 1.0.0 and 1.1.1.
+- **Main.module:** its root (node 23) is an `Element_Simultaneous` running `UpdateShortCutOpenHoldFrameCounter.module`
+  (node 22: what opens the item wheel on L/R) beside a branch picker (node 15) with children `GameOver`, `ResetGimmick`,
+  `MinusMenu`, `PlusMenu`, `Event`, `AssignableItemShortCut`, `BancChange` and `None`.
+  - `ResetGimmick` is taken while `DebugParam.IsRequestedResetGimmick` is set: a sequence (node 12) runs
+    `ResetGimmickImpl.module` (requests a pause, FastLoadOn/Off, suspends and resumes the 3D layer, deletes and recreates
+    the reset actors, releases the pause) then clears the flag.
+  - **Bug:** node 12's transition goes to node 15 alone, not the root, so afterwards the hold counter never runs and
+    the item wheel can't be opened (`Sequence_ShortCutOpenHoldCounter` stays 0) until something leaves Main: a map change
+    (`ChangeBancOnMain` transitions to node 23), or a menu or event (they end Main, which restarts from its root).
+  - Fix (memfile.c): the game keeps the file loaded. Found on the heap by its first `0x40` bytes, the transition plug's
+    `s32` node index at file `+0x1204` (`15`, followed by transition entry `7`) is set to `23`. The runtime reads it from
+    there: patching it fixes the wheel.
+- **UpdateShortCutOpenHoldFrameCounter:** on L/R pressed with the shortcut openable (`SeqQueryIsOpenableShortCut`)
+  it sets `UI_IsNeedOpenShortCut`, zeroes the counter and sets `UI_CurrentShortCutCategory` = AssignableItem; while L/R
+  are held it adds the frame step rate to the counter, and a counter in `[1, 9999]` sets `UI_IsNeedOpenShortCut` too.
+- The UI side (`1.0.0: main+0x32A4980`, update slot of a 0x30-byte controller with vtable `main+0x4B6AD10`, factory
+  `main+0xE0BDC0` registered under hash `0x4AA865D7`) also reads `IsRequestedResetGimmick` and moves to its state at
+  `+0x28` while it's set (current state `+0x1E`, pending `+0x2A`), but its state was the same before and after a reset:
+  it isn't what broke the wheel.
+- `Sequence/ResetGimmick.module` (used from `Event.module` when `Sequence_ControlInEvent` = ResetGimmick) runs the same
+  `ResetGimmickImpl` inside an event, then sets the control back to Idle.
+
+### 9.15 Nayru's Love (1.0.0; 1.1.1 in brackets; checked in game on 1.0.0)
+- The player component `[[actor+0x270]+0x358]` (getter `main+0x943FE0` [`0x944E50`]) holds the time left (float,
+  frames) at `+0x1634`, its length at `+0x1638`, and `-1.0` at `+0x163C` whenever it's set or reset.
+- Active = time left `> 1.19e-7` (`main+0x2E23590` [`0x2E77F70`]; feeds the blackboard `IsUsingNayruLove`). A frame
+  update (`main+0xBF0138`) sets the barrier's sensor `[component+0x1138]` on or off from that, through
+  `[[sm]+0x88](sm, [component+0x1138], on)` with `sm = [[[[actor+0x270]+0x40]+0x18]+0x18]+0x40`; so writing the time
+  is enough to bring the barrier back or end it.
+- Start: `main+0x2E235B0` [`0x2E77F90`] (from `ExecutePlayerUseNayruLove`, vtable `main+0x49673A0`) sets the time from
+  the NayruLoveTime parameter × 60; the cast also costs 120 MP once. Reset: `main+0x2E23670` [`0x2E78050`] (from the
+  AINB node `ResetNayruLove`, `main+0x28B8C40`) zeroes it and resets an anim value.
+- The time is mirrored to a GameData float in `PlayerStatus` (member hash `0xD59B0D24`), read only when the component
+  is built (a map load) and written from the component every frame, so a GameData restore alone doesn't bring it back.
+
+### 9.16 Farore's Wind: WarpMgr and the sparkle (1.0.0; 1.1.1 in brackets; checked in game on 1.0.0)
+- The point is GameData struct `WarpPoint_FaroreWind` (`0x66CED69E`, 9 members, saved): flat keys `BancName`
+  `0xB09FBD99` (String64), `LocationName` `0xEA129426`, `Pos` `0xBEB37B31` (Vector3, Link's feet when cast). Setting it
+  (AINB node, `main+0x28E2D70`) writes all members at once; casting and arrival read them live.
+- The sparkle is actor `FaroreWindWarpPoint` (no AI: an effect and links), placed by **WarpMgr**, a game component
+  made once (factory `main+0xE0FE10`, constructor `main+0xE0FE60`, registered as `WarpMgr` at `main+0x4DFC950`; no static
+  pointer to the instance). Vtable `main+0x4B3CFF8` [`0x4BA2248`]; it's `0xD0` bytes, 8-aligned, with a listener vtable
+  at `+0xB8`.
+  - `WarpMgr::place(mgr, x, y, z)` `main+0x3251430` [`0x32B0750`] (from `OneShotFaroreWindSetActorPos`,
+    `main+0x2886F98`): writes the sparkle's transform at `+0x4C..+0x7B` (y + 2, or + 1.5 as a child) and sets `+0xB0`
+    bit `4`; the actor moves on the next update.
+  - Slot 6 `main+0x465210` [`0x57F4F0`] (mgr, change bits) is its GameData change listener: four `u32` of change bits
+    and a hash map at `+0x10`, all zero meaning everything. It compares `BancName` with the current map and rewrites the
+    transform at `+0x7C`, or hides it, but doesn't move an existing sparkle.
+- A GameData restore doesn't notify listeners, and ResetGimmick keeps a sparkle cast in the current visit (one placed by
+  the map load is rebuilt from GameData), so after a fast load it stays where it was last cast. memfile.c finds WarpMgr
+  by its vtable on the heap and calls `place` with the restored point.
+
+### 9.17 Link's actions: the BSA component and climbing (1.0.0; 1.1.1 in brackets; climbing not solved)
+- The player AI asks for actions by **verb** through the BSA component `[[actor+0x270]+0x188]` (same offset in both
+  builds); the current verb is the `u32` at `+0x54`: Wait 40, Walk 1, Fall 33, Swim 84, Climb (vines, walls) 70,
+  ClimbLadder 71 (checked in game; after letting go it reads 32 then 0).
+- `ExecuteBSASetActionVerb` (vtable `main+0x491A0F8`, enter `main+0x25DC2C0` [`0x262C160`]) builds a `0x60`-byte request
+  and calls `main+0x93440(bsa, request, 1)` [`0xC08F0`]: NaN at `+0x0/+0xC/+0x18/+0x2C/+0x30`, `u32` `4` at `+0x24` and
+  `0x11A` at `+0x28`, `0x10` at `+0x34`, optional variation at `+0x38`/`+0x40`, verb `+0x48`, action slot `+0x4C`, flags
+  `u16` `+0x50` (bit 0 and `0x100`: the two force booleans; `0x400` skips the controller at `[bsa+0x3C68]`), requester
+  node `+0x58` (the game itself sends some with none, `main+0x973EC`). Generic builder: `main+0x2AFB200`.
+- Schedulers (`Player.scheduler.*.module.ainb` in `Player_Base.pack`) choose the next verb from the current action;
+  their selectors are native (`SelectorPlayerSchedulerWalk`, vtable `main+0x4AA5620`).
+- **Restoring a climb failed:** forced ClimbLadder/Climb requests right after a teleport (flags `0x100`, then `0x501`)
+  were never taken; Link stays in Fall. Starting a climb seems to need the grab found by the climb check
+  (`FilterClimbingPlayerClimbCheck`, `IsEnableGrabClimbPlayer`, CCT `CharacterExternalPlayerClimb(Ladder)`);
+  `ExecutePlayerClimbLadder`'s enter (`main+0x277D4E0`) sets player component flags (`+0xE50`, `+0xE38`) and clears
+  `+0x150C`/`+0x1514`. Events can start Link climbing (event setting `IsPlayerEventStartWithClimb`, parsed at
+  `main+0x60E8F4` into byte `+0xBB`): a lead.
+
+### 9.18 Finding objects with no static pointer: a heap walk over frames
+- Heap regions are `svcQueryMemory` type 5, read-write (about 9.4 GB under the emulator). Reading all of them in one
+  frame took ~3.3 s; memfile.c reads 8 MB a frame from when Link first exists, finishing in ~17–21 s with no hitch, and
+  looks for the `Main.module` file (16-aligned) and WarpMgr (8-aligned) in the same pass. A pass that stepped 16 bytes
+  missed WarpMgr.

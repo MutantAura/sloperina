@@ -262,6 +262,19 @@ bool gd_set_enum(uint32_t hash, uint32_t value)
 #define GD_VEC3_STRIDE   0x40u
 #define GD_VEC3_VAL_OFF  0x24u
 
+bool gd_get_vec3(uint32_t hash, float v[3])
+{
+  const gd_type_t *t = gd_type_at(GD_VEC3_TYPE_OFF);
+  uint32_t index = 0;
+  if (!t || !v || !gd_type_index(t, hash, &index))
+    return false;
+  uintptr_t src = (uintptr_t)(t->objects + (size_t)index * GD_VEC3_STRIDE + GD_VEC3_VAL_OFF);
+  if (!sys_mapped(src, 12, SYS_PERM_R))
+    return false;
+  memcpy(v, (const void *)src, 12);
+  return true;
+}
+
 bool gd_set_vec3(uint32_t hash, const float v[3])
 {
   const gd_type_t *t = gd_type_at(GD_VEC3_TYPE_OFF);

@@ -203,6 +203,14 @@ In-memory snapshots stored until the game is closed, capturing full GameData (vi
 
 Under **return**: each of the 4 slots (showing `empty` or `<map> (child/adult)`), plus the current save/load status while busy.
 
+Memfiles also bring back Nayru's Love (on with its time left, or off) and Farore's Wind's warp point and sparkle.
+
+Saving is refused during a cutscene, a game over, or while the game is paused (pause screen, map, item wheel); loading is refused during a cutscene or while paused. Loading during a game over is allowed (it reloads the map).
+
+Caveats:
+- Link climbing a ladder, vine or wall isn't restored: he's put back at the spot and drops.
+- For about 20 seconds after reaching gameplay, the mod is still finding two things in the game's memory in the background; a fast load in that time leaves the item wheel off until the next map change, and Farore's Wind's sparkle where it was.
+
 ### 2.5 Cheats
 
 **infinite**: energy, rupees, magic, deku sticks, deku nuts, deku seeds, bombs, arrows, bombchus, magic beans,

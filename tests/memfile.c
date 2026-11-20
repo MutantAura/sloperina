@@ -53,6 +53,116 @@ static uintptr_t function_at(uint32_t off)
 
 #include "../src/ootgz/memfile.c"
 
+
+/* --- a simulated SD card: one folder of files, and its listing ------------------------------------ */
+
+#define SD_FILES 8
+static struct { char path[256]; uint8_t *data; size_t size; bool used; } sd_files[SD_FILES];
+static bool sd_mounted = true;
+static int  sd_list_at; /* the listing's next file */
+
+bool settings_sd(void) { return sd_mounted; }
+
+static int sd_find(const char *path)
+{
+  for (int i = 0; i < SD_FILES; i++)
+    if (sd_files[i].used && !strcmp(sd_files[i].path, path))
+      return i;
+  return -1;
+}
+
+nn_result_t fs_create_dir(const char *path) { (void)path; return 0; }
+nn_result_t fs_create_file(const char *path, int64_t size)
+{
+  if (sd_find(path) >= 0)
+    return 1;
+  for (int i = 0; i < SD_FILES; i++) {
+    if (sd_files[i].used)
+      continue;
+    snprintf(sd_files[i].path, sizeof(sd_files[i].path), "%s", path);
+    sd_files[i].data = calloc(1, (size_t)size + 1);
+    sd_files[i].size = (size_t)size;
+    sd_files[i].used = true;
+    return 0;
+  }
+  return 1;
+}
+nn_result_t fs_delete_file(const char *path)
+{
+  int i = sd_find(path);
+  if (i < 0)
+    return 1;
+  free(sd_files[i].data);
+  sd_files[i] = (typeof(sd_files[i])){ 0 };
+  return 0;
+}
+nn_result_t fs_open(fs_file_t *out, const char *path, int mode)
+{
+  (void)mode;
+  int i = sd_find(path);
+  if (i < 0)
+    return 1;
+  out->handle = &sd_files[i];
+  return 0;
+}
+nn_result_t fs_size(int64_t *out, fs_file_t f) { *out = (int64_t)((typeof(&sd_files[0]))f.handle)->size; return 0; }
+nn_result_t fs_read(size_t *got, fs_file_t f, int64_t offset, void *buf, size_t size)
+{
+  typeof(&sd_files[0]) e = f.handle;
+  size_t n = (size_t)offset >= e->size ? 0 : e->size - (size_t)offset;
+  if (n > size)
+    n = size;
+  memcpy(buf, e->data + offset, n);
+  *got = n;
+  return 0;
+}
+nn_result_t fs_write(fs_file_t f, int64_t offset, const void *buf, size_t size, const fs_write_option_t *opt)
+{
+  (void)opt;
+  typeof(&sd_files[0]) e = f.handle;
+  if ((size_t)offset + size > e->size)
+    return 1;
+  memcpy(e->data + offset, buf, size);
+  return 0;
+}
+void fs_close(fs_file_t f) { (void)f; }
+
+static nn_result_t fake_open_dir(fs_dir_t *out, const char *path, int mode)
+{
+  (void)mode;
+  out->handle = 0;
+  sd_list_at = 0;
+  return strcmp(path, SZM_DIR) != 0;
+}
+static nn_result_t fake_read_dir(int64_t *count, fs_dir_entry_t *e, fs_dir_t dir, int64_t max)
+{
+  (void)dir; (void)max;
+  *count = 0;
+  for (; sd_list_at < SD_FILES; sd_list_at++) {
+    if (!sd_files[sd_list_at].used)
+      continue;
+    const char *slash = strrchr(sd_files[sd_list_at].path, '/');
+    memset(e, 0, sizeof(*e));
+    snprintf(e->name, sizeof(e->name), "%s", slash ? slash + 1 : sd_files[sd_list_at].path);
+    e->type = FS_ENTRY_FILE;
+    e->size = (int64_t)sd_files[sd_list_at].size;
+    sd_list_at++;
+    *count = 1;
+    break;
+  }
+  return 0;
+}
+static void fake_close_dir(fs_dir_t dir) { (void)dir; }
+uintptr_t got_module_of(uintptr_t addr) { (void)addr; return 1; }
+void *got_export(uintptr_t module, const char *name)
+{
+  (void)module;
+  if (strstr(name, "OpenDirectory")) return (void *)fake_open_dir;
+  if (strstr(name, "ReadDirectory")) return (void *)fake_read_dir;
+  if (strstr(name, "CloseDirectory")) return (void *)fake_close_dir;
+  return 0;
+}
+
 /* --- simulated GameData, actors, world/navi/warp/camera state ---------------------------------- */
 
 #define H_SESSION_INT   0x11112222u
@@ -1189,6 +1299,151 @@ static void test_camera_ai_chain(void)
   puts("PASS: camera AI node traversal, node-idx match, scan fallback, non-0x5B8 turn, and safety");
 }
 
+static void fill_test_memfile(memfile_t *st)
+{
+  *st = (memfile_t){ 0 };
+  st->save_size = st->save_cap = 4096;
+  st->save_buf = alloc16(st->save_size);
+  for (uint32_t i = 0; i < st->save_size; i++)
+    st->save_buf[i] = (uint8_t)(i * 7u);
+  uint32_t magic = GD_SAVE_MAGIC;
+  memcpy(st->save_buf, &magic, 4);
+  st->s_scalar_count = 2;
+  st->s_scalars = alloc16(2 * sizeof(session_scalar_t));
+  st->s_scalars[0] = (session_scalar_t){ H_SESSION_INT, K_INT, 4, { 5, 0, 0, 0 } };
+  st->s_scalars[1] = (session_scalar_t){ H_SESSION_BOOL, K_BOOL, 1, { 1 } };
+  st->s_str_count = 1;
+  st->s_strs = alloc16(sizeof(session_str_t));
+  st->s_strs[0].hash = H_SESSION_STR;
+  snprintf(st->s_strs[0].val, GD_STR_LEN, "hello");
+  snprintf(st->map, GD_STR_LEN, "DekuTree");
+  snprintf(st->start, GD_STR_LEN, "Start_00");
+  st->x = 1.5, st->y = -2.25, st->z = 300.125, st->fx = 0.6, st->fz = 0.8;
+  st->have_pos = st->have_life = st->have_time = st->have_nayru = true;
+  st->life = 48, st->magic = 0, st->time = 43200, st->child = 1;
+  st->nayru_left = 600.0f, st->nayru_total = 1200.0f;
+  st->have_camera = st->have_component = true;
+  for (uint32_t i = 0; i < CAMERA_BYTES; i++)
+    st->camera[i] = (uint8_t)i;
+  st->comp_head[0x130] = 9;
+  st->comp_turn[4] = 3;
+  st->camera_actions = 2;
+  st->action_vtable[0] = 0x123450, st->action_vtable[1] = 0x678900;
+  st->action_node_idx[0] = 4, st->action_node_idx[1] = 11;
+  st->action[1][0x150] = 0x42;
+  for (int i = 0; i < 6; i++)
+    st->view[i] = (float)i * 1.5f;
+  st->used = true;
+}
+
+static uint8_t *sd_data(const char *name, size_t *size)
+{
+  char path[256];
+  snprintf(path, sizeof(path), "%s/%s%s", SZM_DIR, name, MEMFILE_EXT);
+  int i = sd_find(path);
+  assert(i >= 0);
+  *size = sd_files[i].size;
+  return sd_files[i].data;
+}
+
+static void test_szm_export_import(void)
+{
+  test_build.version = "1.0.0";
+  phase = L_IDLE;
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    free_memfile(&memfiles[i]);
+  fill_test_memfile(&memfiles[4]);
+
+  /* empty slot / no card / bad name refuse */
+  assert(!memfile_export(0, "x") && !strcmp(last_notice, "that memfile is empty"));
+  sd_mounted = false;
+  assert(!memfile_export(4, "x"));
+  sd_mounted = true;
+  assert(!memfile_export(4, " ..") && !strcmp(last_notice, "a memfile needs a name to export"));
+
+  /* export, cleaning the name; the same name again refuses */
+  assert(memfile_export(4, "  Deku: skip?. "));
+  assert(memfile_export(4, "beta"));
+  assert(!memfile_export(4, "beta") && strstr(last_notice, "already"));
+  size_t size;
+  uint8_t *data = sd_data("Deku_ skip_", &size);
+  szm_header_t h;
+  memcpy(&h, data, sizeof(h));
+  assert(!memcmp(h.magic, "SZMF", 4) && h.format == SZM_FORMAT && !strcmp(h.game, "1.0.0") &&
+         !strcmp(h.sloperina, BUILD_VERSION) && !strcmp(h.map, "DekuTree") && h.child == 1);
+
+  /* the listing: sorted, without the extension; a file that isn't .szm is left out */
+  assert(fs_create_file(SZM_DIR "/notes.txt", 4) == 0);
+  assert(memfile_list_files() == 2);
+  assert(!strcmp(memfile_file_name(0), "beta") && !strcmp(memfile_file_name(1), "Deku_ skip_"));
+
+  /* import round trip into slot 2 */
+  assert(memfile_import(1, 1));
+  const memfile_t *a = &memfiles[4], *b = &memfiles[1];
+  assert(b->used && b->save_size == a->save_size && !memcmp(b->save_buf, a->save_buf, a->save_size));
+  assert(b->s_scalar_count == 2 && b->s_scalars[0].hash == H_SESSION_INT && b->s_scalars[0].val[0] == 5 &&
+         b->s_scalars[1].kind == K_BOOL && b->s_scalars[1].width == 1);
+  assert(b->s_str_count == 1 && !strcmp(b->s_strs[0].val, "hello"));
+  assert(!strcmp(b->map, "DekuTree") && !strcmp(b->start, "Start_00"));
+  assert(b->x == a->x && b->y == a->y && b->z == a->z && b->fx == a->fx && b->fz == a->fz);
+  assert(b->have_pos && b->have_life && !b->have_magic && b->have_time && b->have_nayru);
+  assert(b->life == 48 && b->time == 43200 && b->child == 1 && b->nayru_left == 600.0f && b->nayru_total == 1200.0f);
+  assert(b->have_camera && b->have_component && !memcmp(b->camera, a->camera, CAMERA_BYTES));
+  assert(b->comp_head[0x130] == 9 && b->comp_turn[4] == 3 && !memcmp(b->view, a->view, sizeof(a->view)));
+  assert(b->camera_actions == 2 && b->action_vtable[1] == 0x678900 && b->action_node_idx[1] == 11 &&
+         b->action[1][0x150] == 0x42);
+
+  /* damaged, another game version, a newer format, not a memfile: refused, the slot left as it was */
+  data[sizeof(szm_header_t) + 20] ^= 1;
+  assert(!memfile_import(1, 2) && !strcmp(last_notice, "that memfile is damaged") && !memfiles[2].used);
+  data[sizeof(szm_header_t) + 20] ^= 1;
+  test_build.version = "1.1.1";
+  assert(!memfile_import(1, 2) && strstr(last_notice, "another version") && !memfiles[2].used);
+  test_build.version = "1.0.0";
+  h.format = SZM_FORMAT + 1;
+  memcpy(data, &h, sizeof(h));
+  assert(!memfile_import(1, 2) && strstr(last_notice, "newer sloperina"));
+  h.format = SZM_FORMAT;
+  memcpy(data, &h, sizeof(h));
+  data[0] = 'X';
+  assert(!memfile_import(1, 2) && strstr(last_notice, "isn't a memfile"));
+  data[0] = 'S';
+
+  /* a later version's file: a longer header and a section this one doesn't know, both skipped over */
+  {
+    size_t n = size + 8 + 16;
+    uint8_t *f = calloc(1, n);
+    szm_header_t later = h;
+    later.header_size = (uint16_t)(sizeof(h) + 8);
+    memcpy(f, &later, sizeof(later));
+    memcpy(f + later.header_size, data + sizeof(h), size - sizeof(h));
+    uint32_t tag = SZM_TAG('X', 'T', 'R', 'A'), tag_size = 8;
+    memcpy(f + n - 16, &tag, 4);
+    memcpy(f + n - 12, &tag_size, 4);
+    later.body_size = (uint32_t)(n - later.header_size);
+    later.body_crc = crc32(f + later.header_size, later.body_size);
+    memcpy(f, &later, sizeof(later));
+    assert(fs_create_file(SZM_DIR "/zeta" MEMFILE_EXT, (int64_t)n) == 0);
+    memcpy(sd_files[sd_find(SZM_DIR "/zeta" MEMFILE_EXT)].data, f, n);
+    free(f);
+    assert(memfile_list_files() == 3 && !strcmp(memfile_file_name(2), "zeta"));
+    assert(memfile_import(2, 2) && memfiles[2].used && memfiles[2].save_size == a->save_size &&
+           memfiles[2].camera_actions == 2 && memfiles[2].x == a->x);
+  }
+
+  /* busy refuses */
+  phase = L_WAIT_LOADING;
+  assert(!memfile_import(0, 3) && !memfile_export(4, "gamma"));
+  phase = L_IDLE;
+
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    free_memfile(&memfiles[i]);
+  for (int i = 0; i < SD_FILES; i++)
+    if (sd_files[i].used)
+      fs_delete_file(sd_files[i].path);
+  puts("PASS: .szm export/import round trip, name cleaning, listing, version/format/damage refusals");
+}
+
 int main(void)
 {
   test_async_save_and_staging();
@@ -1197,5 +1452,6 @@ int main(void)
   test_fast_same_map_reset_gimmick();
   test_link_at_tolerance_and_facing();
   test_camera_ai_chain();
+  test_szm_export_import();
   return 0;
 }

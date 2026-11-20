@@ -18,13 +18,23 @@
 #include "flagnames.h"
 #include "gamedata.h"
 #include "gfx.h"
+#include "got.h"
 #include "lang.h"
 #include "link.h"
 #include "memfilefields.h"
 #include "pouch.h"
+#include "sdfs.h"
+#include "settings.h"
 #include "sys.h"
 #include "warp.h"
 #include "z64hd.h"
+
+#if __has_include("build_info.h")
+#include "build_info.h" /* made by the Makefile */
+#endif
+#ifndef BUILD_VERSION
+#define BUILD_VERSION "unknown" /* not menu text */
+#endif
 
 void *aligned_alloc(size_t align, size_t size); /* from main */
 void  free(void *p);                             /* from main */
@@ -1054,11 +1064,18 @@ static void restore_vitals_and_gear(const memfile_t *st)
  * for DebugParam.IsRequestedResetGimmick) ends with a transition to node 15 alone, so after one the item wheel
  * is dead until something leaves Main (a map change ends on node 23, menus and events re-enter it from the
  * root). The game keeps the file loaded: find it once, in steps over a few seconds of frames, and point that
- * transition at node 23 like the map change branch. The file is the same in 1.0.0 and 1.1.1. */
+ * transition at node 23 like the map change branch. The file is the same in 1.0.0 and 1.1.1.
+ *
+ * The walk reads the whole heap (gigabytes), so it waits until memfiles are first used (memfile_scan_start: the
+ * memfiles menu shown, a save, an import) and works at most AINB_FRAME_US a frame on the game's thread.
+ * TODO: reverse engineer pointer chains to Main.module (the resource/AI system holding it) and WarpMgr (its owning
+ * manager) from main's data, so neither needs the walk: instant after boot, no window where a fast load misses
+ * them. */
 #define MAIN_AINB_MAGIC    0x0000040820424941ull /* "AIB " v0x408 */
 #define MAIN_AINB_SIZE     11395u
 #define MAIN_AINB_RESET_TO 0x1204u               /* s32 node index: 15 in the file, 23 patched */
-#define AINB_SCAN_STEP     (8u << 20)            /* bytes read per frame */
+#define AINB_CHUNK         (256u << 10)          /* bytes read between looks at the clock */
+#define AINB_FRAME_US      1000u                 /* the walk's time a frame, in microseconds */
 
 static const uint8_t main_ainb_head[0x40] = {
   0x41, 0x49, 0x42, 0x20, 0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
@@ -1071,10 +1088,12 @@ static const uint8_t main_ainb_reset_plug[12] = { 0x0f, 0, 0, 0, 0x07, 0, 0, 0, 
 
 #define MEM_TYPE_HEAP 5u
 
-static enum { AINB_WAIT, AINB_SCANNING, AINB_DONE } ainb_state;
+static enum { AINB_IDLE, AINB_WAIT, AINB_SCANNING, AINB_DONE } ainb_state;
 static uint64_t ainb_addr, ainb_region_end;  /* the scan's cursor and the end of its region */
 static uint64_t ainb_start_tick;
 static int      ainb_patched;
+static uint64_t ainb_busy_ticks, ainb_max_ticks, ainb_bytes; /* the walk's own cost, for its log line */
+static uint32_t ainb_frames;
 
 /* The same walk finds WarpMgr, the game component behind Farore's Wind's sparkle (actor FaroreWindWarpPoint).
  * It places the sparkle only when told GameData changed (its vtable slot 6, with change bits; none set means
@@ -1151,9 +1170,33 @@ static void ainb_check(uint64_t at, uint64_t region_end)
   }
 }
 
+/* memfiles are in use: start the walk (once) */
+void memfile_scan_start(void)
+{
+  if (ainb_state == AINB_IDLE)
+    ainb_state = AINB_WAIT;
+}
+
+static void ainb_done(void)
+{
+  uint64_t freq = sys_tick_freq();
+  unsigned s = (unsigned)((sys_tick() - ainb_start_tick) / freq);
+  if (!ainb_patched)
+    log_printf("memfiles: Main.module not found (%u s): no item wheel after fast loads", s); /* not menu text */
+  else
+    log_printf("memfiles: Main.module scan done in %u s, %d patched", s, ainb_patched); /* not menu text */
+  log_printf("memfiles: %d WarpMgr found%s", warp_mgrs, /* not menu text */
+             warp_mgrs > 1 ? ", using the first" : ""); /* not menu text */
+  log_printf("memfiles: scan read %u MB over %u frames, %.2f ms a frame on average, %.2f ms at most", /* not menu text */
+             (unsigned)(ainb_bytes >> 20), (unsigned)ainb_frames,
+             ainb_frames ? (double)ainb_busy_ticks * 1000.0 / (double)freq / ainb_frames : 0.0,
+             (double)ainb_max_ticks * 1000.0 / (double)freq);
+  ainb_state = AINB_DONE;
+}
+
 static void ainb_patch_frame(void)
 {
-  if (ainb_state == AINB_DONE)
+  if (ainb_state == AINB_DONE || ainb_state == AINB_IDLE)
     return;
   if (ainb_state == AINB_WAIT) {
     if (!link_actor())
@@ -1162,31 +1205,30 @@ static void ainb_patch_frame(void)
     ainb_addr = ainb_region_end = 0;
     ainb_start_tick = sys_tick();
   }
-  uint64_t budget = AINB_SCAN_STEP;
-  while (budget) {
+  uint64_t start = sys_tick(), limit = sys_tick_freq() * AINB_FRAME_US / 1000000u;
+  uint64_t vt = z64hd_game->vt_warp_mgr ? MAIN(z64hd_game->vt_warp_mgr) : 1;
+  for (;;) {
     if (ainb_addr >= ainb_region_end && !ainb_next_region()) {
-      unsigned s = (unsigned)((sys_tick() - ainb_start_tick) / sys_tick_freq());
-      if (!ainb_patched)
-        log_printf("memfiles: Main.module not found (%u s): no item wheel after fast loads", /* not menu text */
-                   s);
-      else
-        log_printf("memfiles: Main.module scan done in %u s, %d patched", s, ainb_patched); /* not menu text */
-      log_printf("memfiles: %d WarpMgr found%s", warp_mgrs, /* not menu text */
-                 warp_mgrs > 1 ? ", using the first" : ""); /* not menu text */
-      ainb_state = AINB_DONE;
-      return;
+      ainb_done();
+      break;
     }
-    uint64_t end = ainb_region_end - ainb_addr > budget ? ainb_addr + budget : ainb_region_end;
-    budget -= end - ainb_addr;
-    uint64_t vt = z64hd_game->vt_warp_mgr ? MAIN(z64hd_game->vt_warp_mgr) : 1;
+    uint64_t end = ainb_region_end - ainb_addr > AINB_CHUNK ? ainb_addr + AINB_CHUNK : ainb_region_end;
     for (const uint64_t *p = (const uint64_t *)(uintptr_t)ainb_addr; (uint64_t)(uintptr_t)p < end; p++) {
       if (*p == MAIN_AINB_MAGIC && !((uintptr_t)p & 15))
         ainb_check((uint64_t)(uintptr_t)p, ainb_region_end);
       else if (*p == vt && is_warp_mgr((uintptr_t)p, vt) && warp_mgrs++ == 0)
         warp_mgr = (uintptr_t)p;
     }
+    ainb_bytes += end - ainb_addr;
     ainb_addr = end;
+    if (sys_tick() - start >= limit)
+      break;
   }
+  uint64_t spent = sys_tick() - start;
+  ainb_busy_ticks += spent;
+  if (spent > ainb_max_ticks)
+    ainb_max_ticks = spent;
+  ainb_frames++;
 }
 
 static void finish_load(void)
@@ -1281,6 +1323,7 @@ bool memfile_save(int s)
 {
   if (s < 0 || s >= MEMFILE_SLOTS)
     return false;
+  memfile_scan_start();
   end_camera_guard();
   if (phase != L_IDLE) {
     gfx_notice("memfile is busy");
@@ -1759,6 +1802,516 @@ void memfile_frame(void)
     step_full_load(st, mgr, desc0, loading);
   else
     step_post_move(st);
+}
+
+/* --- sharing: .szm files ----------------------------------------------------------------------- */
+
+/* A .szm file (little endian): szm_header_t, then tagged sections { u32 tag, u32 size, bytes }. Readers skip tags
+ * they don't know and read a known section's fields only as far as the section goes, so a later version can add
+ * sections or add fields at a section's end without a new format. SZM_FORMAT goes up only when an older reader
+ * couldn't use the file at all; the game's version must match (GameData's binary and the camera's layout are
+ * that version's own). */
+#define SZM_MAGIC       "SZMF"
+#define SZM_FORMAT      1u
+#define SZM_TAG(a, b, c, d) ((uint32_t)(a) | (uint32_t)(b) << 8 | (uint32_t)(c) << 16 | (uint32_t)(d) << 24)
+#define SZM_GAMEDATA    SZM_TAG('G', 'D', 'A', 'T') /* GameDataMgr's file 0 snapshot */
+#define SZM_SCALARS     SZM_TAG('S', 'S', 'C', 'L') /* session fields: { u32 hash, u8 kind, u8 width, u8 val[12] } */
+#define SZM_STRINGS     SZM_TAG('S', 'S', 'T', 'R') /* session strings: { u32 hash, char val[64] } */
+#define SZM_STATE       SZM_TAG('S', 'T', 'A', 'T') /* start point, Link, vitals, clock, age */
+#define SZM_CAMERA      SZM_TAG('C', 'A', 'M', 'R') /* the player camera and its AI action nodes */
+#define SZM_SCALAR_SIZE 18u
+#define SZM_STRING_SIZE (4u + GD_STR_LEN)
+#define SZM_FILE_MAX    (GD_MAX_SAVE_BUF + (1u << 20))
+#define SZM_SLACK       0x10000u /* room for every section but the snapshot and the session fields */
+#define SZM_DIR         SD_DIR "/" MEMFILE_DIR_NAME
+#define SZM_PATH_LEN    (sizeof(SZM_DIR) + MEMFILE_NAME_MAX + 8)
+
+enum { STATE_POS = 1, STATE_LIFE = 2, STATE_MAGIC = 4, STATE_TIME = 8, STATE_NAYRU = 16 };
+enum { CAM_STATE = 1, CAM_COMPONENT = 2 };
+
+typedef struct {
+  char     magic[4];
+  uint16_t format, header_size; /* readers skip to header_size: later versions may add to the header */
+  uint32_t body_size, body_crc; /* the sections after the header: their length and CRC-32 */
+  int8_t   child;               /* 1 child, 0 adult, -1 unknown */
+  uint8_t  pad[3];
+  char     game[16];            /* the game's version: "1.0.0", "1.1.1" */
+  char     sloperina[32];       /* the sloperina that wrote it */
+  char     map[GD_STR_LEN];
+  char     name[32];            /* as it was exported */
+} szm_header_t;
+_Static_assert(sizeof(szm_header_t) == 164, "szm_header_t is the file's own layout");
+
+static uint32_t crc32(const uint8_t *p, uint32_t n)
+{
+  uint32_t c = ~0u;
+  while (n--) {
+    c ^= *p++;
+    for (int k = 0; k < 8; k++)
+      c = c >> 1 ^ (0xEDB88320u & (0u - (c & 1u)));
+  }
+  return ~c;
+}
+
+static void copy_str(char *dst, size_t len, const char *src)
+{
+  size_t i = 0;
+  for (; src && src[i] && i + 1 < len; i++)
+    dst[i] = src[i];
+  for (; i < len; i++)
+    dst[i] = 0;
+}
+
+typedef struct { uint8_t *p; uint32_t n, cap; bool ok; } szm_out_t;
+
+__attribute__((noinline)) static void out_bytes(szm_out_t *o, const void *b, uint32_t n)
+{
+  if (!o->ok || o->cap - o->n < n) {
+    o->ok = false;
+    return;
+  }
+  memcpy(o->p + o->n, b, n);
+  o->n += n;
+}
+#define OUT(o, v) out_bytes((o), &(v), sizeof(v))
+
+static uint32_t out_begin(szm_out_t *o, uint32_t tag)
+{
+  uint32_t at = o->n, zero = 0;
+  OUT(o, tag);
+  OUT(o, zero);
+  return at;
+}
+
+static void out_end(szm_out_t *o, uint32_t at)
+{
+  if (o->ok) {
+    uint32_t size = o->n - at - 8;
+    memcpy(o->p + at + 4, &size, 4);
+  }
+}
+
+/* the memfile as a .szm file's bytes (heap; the caller frees), or 0 */
+static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size_out)
+{
+  uint32_t cap = (uint32_t)sizeof(szm_header_t) + st->save_size + st->s_scalar_count * SZM_SCALAR_SIZE +
+                 st->s_str_count * SZM_STRING_SIZE + CAMERA_ACTIONS * (6u + ACTION_BYTES) + SZM_SLACK;
+  szm_out_t o = { alloc16(cap), (uint32_t)sizeof(szm_header_t), cap, true };
+  if (!o.p)
+    return 0;
+
+  uint32_t at = out_begin(&o, SZM_GAMEDATA);
+  out_bytes(&o, st->save_buf, st->save_size);
+  out_end(&o, at);
+
+  at = out_begin(&o, SZM_SCALARS);
+  for (uint32_t i = 0; i < st->s_scalar_count; i++) {
+    const session_scalar_t *e = &st->s_scalars[i];
+    OUT(&o, e->hash);
+    OUT(&o, e->kind);
+    OUT(&o, e->width);
+    out_bytes(&o, e->val, sizeof(e->val));
+  }
+  out_end(&o, at);
+
+  at = out_begin(&o, SZM_STRINGS);
+  for (uint32_t i = 0; i < st->s_str_count; i++) {
+    OUT(&o, st->s_strs[i].hash);
+    out_bytes(&o, st->s_strs[i].val, GD_STR_LEN);
+  }
+  out_end(&o, at);
+
+  at = out_begin(&o, SZM_STATE);
+  uint8_t flags = (st->have_pos ? STATE_POS : 0) | (st->have_life ? STATE_LIFE : 0) |
+                  (st->have_magic ? STATE_MAGIC : 0) | (st->have_time ? STATE_TIME : 0) |
+                  (st->have_nayru ? STATE_NAYRU : 0);
+  int32_t child = st->child;
+  out_bytes(&o, st->start, GD_STR_LEN);
+  OUT(&o, st->x);
+  OUT(&o, st->y);
+  OUT(&o, st->z);
+  OUT(&o, st->fx);
+  OUT(&o, st->fz);
+  OUT(&o, flags);
+  OUT(&o, st->life);
+  OUT(&o, st->magic);
+  OUT(&o, st->nayru_left);
+  OUT(&o, st->nayru_total);
+  OUT(&o, st->time);
+  OUT(&o, child);
+  out_end(&o, at);
+
+  at = out_begin(&o, SZM_CAMERA);
+  uint8_t cam = (st->have_camera ? CAM_STATE : 0) | (st->have_component ? CAM_COMPONENT : 0);
+  uint8_t actions = (uint8_t)(st->camera_actions > 0 ? st->camera_actions : 0);
+  OUT(&o, cam);
+  out_bytes(&o, st->camera, CAMERA_BYTES);
+  out_bytes(&o, st->comp_head, CAMERA_COMP_HEAD);
+  out_bytes(&o, st->comp_turn, CAMERA_TURN_BYTES);
+  OUT(&o, st->view);
+  OUT(&o, actions);
+  for (int i = 0; i < actions; i++) {
+    OUT(&o, st->action_vtable[i]);
+    OUT(&o, st->action_node_idx[i]);
+    out_bytes(&o, st->action[i], ACTION_BYTES);
+  }
+  out_end(&o, at);
+
+  if (!o.ok) {
+    free(o.p);
+    return 0;
+  }
+  szm_header_t h = { 0 };
+  memcpy(h.magic, SZM_MAGIC, 4);
+  h.format = SZM_FORMAT;
+  h.header_size = sizeof(h);
+  h.body_size = o.n - (uint32_t)sizeof(h);
+  h.body_crc = crc32(o.p + sizeof(h), h.body_size);
+  h.child = (int8_t)st->child;
+  copy_str(h.game, sizeof(h.game), z64hd_game->version);
+  copy_str(h.sloperina, sizeof(h.sloperina), BUILD_VERSION);
+  copy_str(h.map, sizeof(h.map), st->map);
+  copy_str(h.name, sizeof(h.name), name);
+  memcpy(o.p, &h, sizeof(h));
+  *size_out = o.n;
+  return o.p;
+}
+
+typedef struct { const uint8_t *p; uint32_t n, at; } szm_in_t;
+
+static bool in_bytes(szm_in_t *in, void *b, uint32_t n)
+{
+  if (in->n - in->at < n)
+    return false;
+  memcpy(b, in->p + in->at, n);
+  in->at += n;
+  return true;
+}
+#define IN(i, v) in_bytes((i), &(v), sizeof(v))
+
+static bool szm_state(szm_in_t *in, memfile_t *st)
+{
+  uint8_t flags = 0;
+  int32_t child = -1;
+  if (!in_bytes(in, st->start, GD_STR_LEN) || !IN(in, st->x) || !IN(in, st->y) || !IN(in, st->z) ||
+      !IN(in, st->fx) || !IN(in, st->fz) || !IN(in, flags) || !IN(in, st->life) || !IN(in, st->magic) ||
+      !IN(in, st->nayru_left) || !IN(in, st->nayru_total) || !IN(in, st->time) || !IN(in, child))
+    return false;
+  st->start[GD_STR_LEN - 1] = 0;
+  st->have_pos = flags & STATE_POS;
+  st->have_life = flags & STATE_LIFE;
+  st->have_magic = flags & STATE_MAGIC;
+  st->have_time = (flags & STATE_TIME) && st->time < DAY_SECONDS;
+  st->have_nayru = flags & STATE_NAYRU;
+  st->child = child == 0 || child == 1 ? child : -1;
+  return true;
+}
+
+/* the camera's section, or nothing of it (the load then leaves the camera as the map puts it) */
+static void szm_camera(szm_in_t *in, memfile_t *st)
+{
+  uint8_t cam = 0, actions = 0;
+  if (!IN(in, cam) || !in_bytes(in, st->camera, CAMERA_BYTES) || !in_bytes(in, st->comp_head, CAMERA_COMP_HEAD) ||
+      !in_bytes(in, st->comp_turn, CAMERA_TURN_BYTES) || !IN(in, st->view) || !IN(in, actions) ||
+      actions > CAMERA_ACTIONS)
+    return;
+  for (int i = 0; i < actions; i++)
+    if (!IN(in, st->action_vtable[i]) || !IN(in, st->action_node_idx[i]) ||
+        !in_bytes(in, st->action[i], ACTION_BYTES))
+      return;
+  st->camera_actions = actions;
+  st->have_camera = cam & CAM_STATE;
+  st->have_component = cam & CAM_COMPONENT;
+}
+
+static bool szm_scalars(const uint8_t *p, uint32_t size, memfile_t *st)
+{
+  uint32_t count = size / SZM_SCALAR_SIZE;
+  st->s_scalars = alloc16((size_t)(count ? count : 1) * sizeof(session_scalar_t));
+  if (!st->s_scalars)
+    return false;
+  for (uint32_t i = 0; i < count; i++, p += SZM_SCALAR_SIZE) {
+    session_scalar_t e;
+    memcpy(&e.hash, p, 4);
+    e.kind = p[4];
+    e.width = p[5];
+    memcpy(e.val, p + 6, sizeof(e.val));
+    if (e.kind >= K_COUNT || e.kind == K_STR || e.width != kind_width[e.kind])
+      continue; /* not one this version restores */
+    st->s_scalars[st->s_scalar_count++] = e;
+  }
+  return true;
+}
+
+static bool szm_strings(const uint8_t *p, uint32_t size, memfile_t *st)
+{
+  uint32_t count = size / SZM_STRING_SIZE;
+  st->s_strs = alloc16((size_t)(count ? count : 1) * sizeof(session_str_t));
+  if (!st->s_strs)
+    return false;
+  for (uint32_t i = 0; i < count; i++, p += SZM_STRING_SIZE) {
+    session_str_t *e = &st->s_strs[st->s_str_count++];
+    memcpy(&e->hash, p, 4);
+    memcpy(e->val, p + 4, GD_STR_LEN);
+    e->val[GD_STR_LEN - 1] = 0;
+  }
+  return true;
+}
+
+/* read a .szm file's bytes into st (zeroed; free_memfile it either way): 0, or why it can't be used */
+static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
+{
+  szm_header_t h;
+  if (n < sizeof(h))
+    return "that file isn't a memfile";
+  memcpy(&h, p, sizeof(h));
+  if (!bytes_equal(h.magic, SZM_MAGIC, 4) || h.header_size < sizeof(h) || h.header_size > n)
+    return "that file isn't a memfile";
+  if (h.format > SZM_FORMAT)
+    return "that memfile needs a newer sloperina";
+  h.game[sizeof(h.game) - 1] = 0;
+  if (!str_equal(h.game, z64hd_game->version))
+    return "that memfile is for another version of the game";
+  if (h.body_size != n - h.header_size || crc32(p + h.header_size, h.body_size) != h.body_crc)
+    return "that memfile is damaged";
+
+  bool have_state = false;
+  for (uint32_t at = h.header_size; at < n;) {
+    uint32_t tag, size;
+    if (n - at < 8)
+      return "that memfile is damaged";
+    memcpy(&tag, p + at, 4);
+    memcpy(&size, p + at + 4, 4);
+    at += 8;
+    if (size > n - at)
+      return "that memfile is damaged";
+    const uint8_t *body = p + at;
+    szm_in_t in = { body, size, 0 };
+    at += size;
+    if (tag == SZM_GAMEDATA) {
+      uint32_t magic = 0;
+      if (st->save_buf || size < 16u || size > GD_MAX_SAVE_BUF || (memcpy(&magic, body, 4), magic != GD_SAVE_MAGIC))
+        return "that memfile's game data isn't readable";
+      if (!(st->save_buf = alloc16(size)))
+        return "not enough memory for that memfile";
+      memcpy(st->save_buf, body, size);
+      st->save_cap = st->save_size = size;
+    } else if (tag == SZM_SCALARS && !st->s_scalars) {
+      if (!szm_scalars(body, size, st))
+        return "not enough memory for that memfile";
+    } else if (tag == SZM_STRINGS && !st->s_strs) {
+      if (!szm_strings(body, size, st))
+        return "not enough memory for that memfile";
+    } else if (tag == SZM_STATE) {
+      have_state = szm_state(&in, st);
+    } else if (tag == SZM_CAMERA) {
+      szm_camera(&in, st);
+    }
+  }
+  if (!st->save_buf || !have_state)
+    return "that memfile is damaged";
+  if ((!st->s_scalars && !szm_scalars(p, 0, st)) || (!st->s_strs && !szm_strings(p, 0, st)))
+    return "not enough memory for that memfile";
+  copy_str(st->map, sizeof(st->map), h.map);
+  st->map[GD_STR_LEN - 1] = 0;
+  if (!st->map[0])
+    return "that memfile is damaged";
+  st->used = true;
+  log_printf("memfile file: \"%.32s\" for game %s, made by sloperina %.32s (format %u)", /* not menu text */
+             h.name, h.game, h.sloperina, (unsigned)h.format);
+  return 0;
+}
+
+/* --- sharing: the SD card ---------------------------------------------------------------------- */
+
+typedef struct { void *handle; } fs_dir_t;
+typedef struct {
+  char    name[769];
+  uint8_t pad0[3];
+  int8_t  type; /* 0 directory, 1 file */
+  uint8_t pad1[3];
+  int64_t size;
+} fs_dir_entry_t;
+enum { FS_ENTRY_FILE = 1, FS_OPEN_DIR_ALL = 3 };
+typedef nn_result_t (*open_dir_fn)(fs_dir_t *out, const char *path, int mode);
+typedef nn_result_t (*read_dir_fn)(int64_t *count, fs_dir_entry_t *entries, fs_dir_t dir, int64_t max);
+typedef void (*close_dir_fn)(fs_dir_t dir);
+
+static char file_names[MEMFILE_FILES_MAX][MEMFILE_NAME_MAX + 1];
+static int  file_count;
+
+/* the name typed, as a file name: no characters the SD card can't hold, no spaces or dots at either end */
+static void clean_file_name(const char *typed, char out[MEMFILE_NAME_MAX + 1])
+{
+  int n = 0;
+  while (typed && *typed == ' ')
+    typed++;
+  for (; typed && *typed && n < MEMFILE_NAME_MAX; typed++) {
+    char c = *typed;
+    out[n++] = (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' ||
+                c == '|' || (uint8_t)c < 0x20) ? '_' : c;
+  }
+  while (n > 0 && (out[n - 1] == ' ' || out[n - 1] == '.'))
+    n--;
+  out[n] = 0;
+}
+
+static char lower(char c) { return c >= 'A' && c <= 'Z' ? (char)(c - 'A' + 'a') : c; }
+
+static int compare_names(const char *a, const char *b)
+{
+  while (*a && lower(*a) == lower(*b))
+    a++, b++;
+  return (uint8_t)lower(*a) - (uint8_t)lower(*b);
+}
+
+bool memfile_used(int s) { return s >= 0 && s < MEMFILE_SLOTS && memfiles[s].used; }
+const char *memfile_slot_map(int s) { return memfile_used(s) ? memfiles[s].map : ""; }
+
+bool memfile_export(int s, const char *typed)
+{
+  if (!memfile_used(s) || !memfiles[s].save_buf) {
+    gfx_notice("that memfile is empty");
+    return false;
+  }
+  if (memfile_busy()) {
+    gfx_notice("memfile is busy");
+    return false;
+  }
+  if (!settings_sd()) {
+    gfx_notice("no SD card: memfiles can't be exported");
+    return false;
+  }
+  char name[MEMFILE_NAME_MAX + 1], path[SZM_PATH_LEN];
+  clean_file_name(typed, name);
+  if (!name[0]) {
+    gfx_notice("a memfile needs a name to export");
+    return false;
+  }
+  snprintf(path, sizeof(path), "%s/%s%s", SZM_DIR, name, MEMFILE_EXT);
+  fs_create_dir(SD_DIR);
+  fs_create_dir(SZM_DIR);
+  fs_file_t f;
+  if (fs_open(&f, path, FS_READ) == 0) {
+    fs_close(f);
+    gfx_logf("%s is already a memfile on the SD card", name);
+    return false;
+  }
+  uint32_t size = 0;
+  uint8_t *bytes = szm_encode(&memfiles[s], name, &size);
+  if (!bytes) {
+    gfx_notice("not enough memory to export that memfile");
+    return false;
+  }
+  fs_write_option_t flush = { FS_WRITE_FLUSH };
+  bool ok = fs_create_file(path, size) == 0;
+  if (ok) {
+    ok = fs_open(&f, path, FS_WRITE) == 0;
+    if (ok) {
+      ok = fs_write(f, 0, bytes, size, &flush) == 0;
+      fs_close(f);
+    }
+    if (!ok)
+      fs_delete_file(path);
+  }
+  free(bytes);
+  if (!ok) {
+    gfx_notice("couldn't write the memfile to the SD card");
+    return false;
+  }
+  log_printf("memfile %d exported: %s (%u bytes)", s + 1, path, (unsigned)size); /* not menu text */
+  gfx_logf("memfile %d exported as %s", s + 1, name);
+  return true;
+}
+
+int memfile_list_files(void)
+{
+  file_count = 0;
+  if (!settings_sd())
+    return 0;
+  uintptr_t sdk = got_module_of((uintptr_t)&fs_open); /* an sdk function this module imports */
+  open_dir_fn open_dir = (open_dir_fn)got_export(sdk, "_ZN2nn2fs13OpenDirectoryEPNS0_15DirectoryHandleEPKci");
+  read_dir_fn read_dir =
+    (read_dir_fn)got_export(sdk, "_ZN2nn2fs13ReadDirectoryEPlPNS0_14DirectoryEntryENS0_15DirectoryHandleEl");
+  close_dir_fn close_dir = (close_dir_fn)got_export(sdk, "_ZN2nn2fs14CloseDirectoryENS0_15DirectoryHandleE");
+  fs_dir_t dir;
+  if (!open_dir || !read_dir || !close_dir || open_dir(&dir, SZM_DIR, FS_OPEN_DIR_ALL) != 0)
+    return 0;
+  static fs_dir_entry_t e;
+  int64_t got = 0;
+  const size_t ext = sizeof(MEMFILE_EXT) - 1;
+  while (file_count < MEMFILE_FILES_MAX && read_dir(&got, &e, dir, 1) == 0 && got == 1) {
+    e.name[sizeof(e.name) - 1] = 0;
+    size_t n = strlen(e.name);
+    if (e.type != FS_ENTRY_FILE || n <= ext || n - ext > MEMFILE_NAME_MAX ||
+        compare_names(e.name + n - ext, MEMFILE_EXT) != 0)
+      continue;
+    char *name = file_names[file_count];
+    memcpy(name, e.name, n - ext);
+    name[n - ext] = 0;
+    int i = file_count++; /* sorted as they come in */
+    for (; i > 0 && compare_names(file_names[i - 1], name) > 0; i--) {
+      char t[MEMFILE_NAME_MAX + 1];
+      memcpy(t, file_names[i - 1], sizeof(t));
+      memcpy(file_names[i - 1], file_names[i], sizeof(t));
+      memcpy(file_names[i], t, sizeof(t));
+      name = file_names[i - 1];
+    }
+  }
+  close_dir(dir);
+  return file_count;
+}
+
+const char *memfile_file_name(int i) { return i >= 0 && i < file_count ? file_names[i] : ""; }
+
+bool memfile_import(int i, int s)
+{
+  if (i < 0 || i >= file_count || s < 0 || s >= MEMFILE_SLOTS)
+    return false;
+  memfile_scan_start();
+  end_camera_guard();
+  if (phase != L_IDLE) {
+    gfx_notice("memfile is busy");
+    return false;
+  }
+  if (!settings_sd()) {
+    gfx_notice("no SD card: memfiles can't be imported");
+    return false;
+  }
+  char path[SZM_PATH_LEN];
+  snprintf(path, sizeof(path), "%s/%s%s", SZM_DIR, file_names[i], MEMFILE_EXT);
+  fs_file_t f;
+  int64_t size = 0;
+  if (fs_open(&f, path, FS_READ) != 0) {
+    gfx_notice("couldn't open that memfile");
+    return false;
+  }
+  uint8_t *bytes = 0;
+  size_t got = 0;
+  bool ok = fs_size(&size, f) == 0 && size > 0 && size <= (int64_t)SZM_FILE_MAX &&
+            (bytes = alloc16((size_t)size)) != 0 && fs_read(&got, f, 0, bytes, (size_t)size) == 0 &&
+            got == (size_t)size;
+  fs_close(f);
+  if (!ok) {
+    free(bytes);
+    gfx_notice(size > (int64_t)SZM_FILE_MAX ? "that file isn't a memfile" : "couldn't read that memfile");
+    return false;
+  }
+  static memfile_t loaded;
+  loaded = (memfile_t){ 0 };
+  const char *why = szm_decode(bytes, (uint32_t)size, &loaded);
+  free(bytes);
+  if (why) {
+    free_memfile(&loaded);
+    gfx_notice(why);
+    return false;
+  }
+  free_memfile(&memfiles[s]);
+  memfiles[s] = loaded;
+  loaded = (memfile_t){ 0 };
+  log_printf("memfile %d imported: %s (%s)", s + 1, path, memfiles[s].map); /* not menu text */
+  gfx_logf("%s imported to memfile %d", file_names[i], s + 1);
+  return true;
 }
 
 /* --- menu accessors ---------------------------------------------------------------------------- */

@@ -198,21 +198,25 @@ In-memory snapshots stored until the game is closed, capturing full GameData (vi
 
 | Item | What it does |
 |---|---|
-| **slot** `< 1..4 >` | Picks which of the four memfile slots **save memfile** and **load memfile** use. |
+| **slot** `< 1..5 >` | Picks which of the five memfile slots **save memfile**, **load memfile**, **export memfile** and **import memfile** use. |
 | **save memfile** | Saves the current state into the selected slot (kept in memory only). |
 | **load memfile** | Closes the menu and restores the selected slot's GameData, map, time, Link and camera. |
+| **export memfile** | Asks for a name (the slot's map to start with), then writes the selected slot to `sloperinaGZ/memfiles/<name>.szm` on the SD card. A name already used there is refused. |
+| **import memfile** | Lists the `.szm` files in `sloperinaGZ/memfiles`; **L** on one reads it into the selected slot (a slot in use: **L**, then **L** again to replace it). |
 | **fast same-map** | When on (default), loading while already in the same map and age with no event running resets actors and gimmicks in place without a loading screen. Otherwise, triggers a silent full map reload. |
 | **session flags** | When on (default), loads also restore unsaved session fields (`save_file == -1`, such as NPC talk state, minigame state, and destructibles/room state). |
 
-Under **return**: each of the 4 slots (showing `empty` or `<map> (child/adult)`), plus the current save/load status while busy.
+Under **return**: each of the 5 slots (showing `empty` or `<map> (child/adult)`), plus the current save/load status while busy.
 
 Memfiles also bring back Nayru's Love (on with its time left, or off) and Farore's Wind's warp point and sparkle.
+
+Memfiles are only written to or read from the SD card when you export or import one. A `.szm` file can be shared: it records the game version it was made on (1.0.0 or 1.1.1) and the sloperina version that wrote it, and is refused on another game version, by an older sloperina that can't read its format, or if it's damaged. A memfile holds a whole save's GameData, so loading someone else's replaces your current game's progress in memory, just as loading your own does: the game's save files are only changed if the game saves afterwards.
 
 Saving is refused during a cutscene, a game over, or while the game is paused (pause screen, map, item wheel); loading is refused during a cutscene or while paused. Loading during a game over is allowed (it reloads the map).
 
 Caveats:
 - Link climbing a ladder, vine or wall isn't restored: he's put back at the spot and drops.
-- For about 20 seconds after reaching gameplay, the mod is still finding two things in the game's memory in the background; a fast load in that time leaves the item wheel off until the next map change, and Farore's Wind's sparkle where it was.
+- The first time memfiles are used after starting the game (the memfiles menu opened, a save or an import), the mod starts finding two things in the game's memory, a little each frame in the background so the game keeps its speed; it can take a minute or so. A fast load before it's done leaves the item wheel off until the next map change, and Farore's Wind's sparkle where it was.
 
 ### 2.5 Cheats
 

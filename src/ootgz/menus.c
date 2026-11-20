@@ -2424,7 +2424,7 @@ static void build_savepos(void)
 /* --- memfiles ----------------------------------------------------------------------------- */
 
 static menu_t m_memfiles;
-static const char *const memfile_slot_names[MEMFILE_SLOTS] = { "1", "2", "3", "4" };
+static const char *const memfile_slot_names[MEMFILE_SLOTS] = { "1", "2", "3", "4", "5" };
 
 static int  get_memfile_slot(menu_item_t *it) { return memfile_slot(); }
 static void set_memfile_slot(menu_item_t *it, int choice) { memfile_set_slot(choice); }
@@ -2444,6 +2444,93 @@ static void act_load_memfile(menu_item_t *it)
     menu_close(); /* so the load can be watched */
 }
 
+/* export: name it (the map to start with), then write the selected slot */
+static void memfile_named(const char *text, intptr_t ctx)
+{
+  memfile_export((int)ctx, text);
+}
+
+static void act_export_memfile(menu_item_t *it)
+{
+  int s = memfile_slot();
+  if (!memfile_used(s)) {
+    gfx_notice("that memfile is empty");
+    return;
+  }
+  osk_open("memfile name", memfile_slot_map(s), MEMFILE_NAME_MAX, memfile_named, s);
+}
+
+/* import: the .szm files on the SD card; L on one reads it into the selected slot (a used slot: L, then L again) */
+static menu_t m_memfile_files;
+static int memfile_file_armed = -1;
+
+static void text_memfile_into(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, TF("import into memfile %d"), memfile_slot() + 1);
+}
+
+static void text_memfile_file(menu_item_t *it, char *buf, int len)
+{
+  int i = (int)it->data;
+  if (memfile_file_armed == i && &m_memfile_files.items[m_memfile_files.selected] != it)
+    memfile_file_armed = -1; /* the cursor moved off it */
+  if (memfile_file_armed != i) {
+    snprintf(buf, len, "%s", memfile_file_name(i));
+    return;
+  }
+  char expanded[96];
+  snprintf(buf, len, "%s %s", binds_expand(T("L again: replace with"), expanded, sizeof(expanded)),
+           memfile_file_name(i));
+}
+
+static void text_no_memfile_files(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, "%s", T("(no .szm files in sloperinaGZ/memfiles)"));
+}
+
+static void act_memfile_file(menu_item_t *it)
+{
+  int i = (int)it->data, s = memfile_slot();
+  if (memfile_used(s) && memfile_file_armed != i) {
+    memfile_file_armed = i;
+    return;
+  }
+  memfile_file_armed = -1;
+  if (memfile_import(i, s))
+    menu_goto(&m_memfiles);
+}
+
+static void act_import_memfile(menu_item_t *it)
+{
+  if (memfile_busy()) {
+    gfx_notice("memfile is busy");
+    return;
+  }
+  int n = memfile_list_files();
+  memfile_file_armed = -1;
+  menu_reset(&m_memfile_files);
+  menu_item_t *into = menu_add_text(&m_memfile_files, text_memfile_into, 0);
+  if (into)
+    into->plain = true;
+  for (int i = 0; i < n; i++) {
+    menu_item_t *row = menu_add_action(&m_memfile_files, "", act_memfile_file, i);
+    if (!row)
+      break;
+    row->text = text_memfile_file;
+    row->hint = "L: read this file into the selected memfile slot";
+    row->log_label = "";
+  }
+  if (!n)
+    menu_add_text(&m_memfile_files, text_no_memfile_files, 0);
+  menu_add_return(&m_memfile_files);
+  m_memfile_files.pinned = 1;
+  m_memfile_files.pinned_end = 1;
+  m_memfile_files.scroll = 0;
+  m_memfile_files.selected = 0;
+  menu_refresh(&m_memfile_files);
+  menu_goto(&m_memfile_files);
+}
+
 static void text_memfile_slot(menu_item_t *it, char *buf, int len)
 {
   memfile_slot_text((int)it->data, buf, len);
@@ -2451,16 +2538,19 @@ static void text_memfile_slot(menu_item_t *it, char *buf, int len)
 
 static void text_memfile_status(menu_item_t *it, char *buf, int len)
 {
+  memfile_scan_start(); /* drawn while the memfiles menu is shown */
   snprintf(buf, len, "%s", memfile_status());
 }
 
 static void build_memfiles(void)
 {
-  menu_init(&m_memfiles, "memfiles", 7 + MEMFILE_SLOTS);
+  menu_init(&m_memfile_files, "import memfile", MEMFILE_FILES_MAX + 3);
+  m_memfile_files.parent = &m_memfiles;
+  menu_init(&m_memfiles, "memfiles", 9 + MEMFILE_SLOTS);
   menu_item_t *slot = menu_add_option(&m_memfiles, "slot", MEMFILE_SLOTS, memfile_slot_names, get_memfile_slot,
                                       set_memfile_slot, 0);
   if (slot) {
-    slot->hint = "the memfile save and load use";
+    slot->hint = "the memfile save, load, export and import use";
     slot->log_label = "memfile slot:";
   }
   menu_item_t *save = menu_add_action(&m_memfiles, "save memfile", act_save_memfile, 0);
@@ -2469,6 +2559,14 @@ static void build_memfiles(void)
   menu_item_t *load = menu_add_action(&m_memfiles, "load memfile", act_load_memfile, 0);
   if (load)
     load->hint = "L: restore the memfile's game data, map, Link and camera";
+  menu_item_t *export = menu_add_action(&m_memfiles, "export memfile", act_export_memfile, 0);
+  if (export)
+    export->hint = "L: name the selected memfile and write it to sloperinaGZ/memfiles as a .szm file";
+  menu_item_t *import = menu_add_action(&m_memfiles, "import memfile", act_import_memfile, 0);
+  if (import) {
+    import->icon = GFX_ICON_FOLDER;
+    import->hint = "L: choose a .szm file from sloperinaGZ/memfiles to read into the selected slot";
+  }
   menu_item_t *fast = menu_add_check(&m_memfiles, "fast same-map", get_memfile_fast, set_memfile_fast, 0);
   if (fast) {
     fast->hint = "same map and age: reset actors in place without a loading screen";

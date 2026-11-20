@@ -198,11 +198,10 @@ In-memory snapshots stored until the game is closed, capturing full GameData (vi
 
 | Item | What it does |
 |---|---|
-| **slot** `< 1..5 >` | Picks which of the five memfile slots **save memfile**, **load memfile**, **export memfile** and **import memfile** use. |
+| **slot** `< 1..5 >` | Picks which of the five memfile slots **save memfile**, **load memfile** and **import/export** use. |
 | **save memfile** | Saves the current state into the selected slot (kept in memory only). |
 | **load memfile** | Closes the menu and restores the selected slot's GameData, map, time, Link and camera. |
-| **export memfile** | Asks for a name (the slot's map to start with), then writes the selected slot to `sloperinaGZ/memfiles/<name>.szm` on the SD card. A name already used there is refused. |
-| **import memfile** | Lists the `.szm` files in `sloperinaGZ/memfiles`; **L** on one reads it into the selected slot (a slot in use: **L**, then **L** again to replace it). |
+| **import/export** | Opens `sloperinaGZ/memfiles` on the SD card, one folder at a time: its path at the top, a row of buttons (left/right picks one, **L** presses it), a line, then the folder itself with its folders and `.szm` files under it. The buttons: **new folder** (asks for its name, made in this one); **export here** (asks for a name, the slot's map to start with, then writes the selected slot into this folder as `<name>.szm`; a name already used there is refused); **delete this folder** (not at the top: a screen says what's in it, with **no, keep it** first, then **yes, delete it** deletes the folder and every memfile and folder in it). **L** on the folder's own row goes up a folder (at `sloperinaGZ/memfiles`, as far up as it goes, it does nothing); **L** on a folder under it opens it; **L** on a file's name reads it into the selected slot (a slot in use: **L**, then **L** again to replace it); right to the red cross after it, then **L** and **L** again, deletes the file from the SD card. |
 | **fast same-map** | When on (default), loading while already in the same map and age with no event running resets actors and gimmicks in place without a loading screen. Otherwise, triggers a silent full map reload. |
 | **session flags** | When on (default), loads also restore unsaved session fields (`save_file == -1`, such as NPC talk state, minigame state, and destructibles/room state). |
 

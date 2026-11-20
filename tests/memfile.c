@@ -54,12 +54,15 @@ static uintptr_t function_at(uint32_t off)
 #include "../src/ootgz/memfile.c"
 
 
-/* --- a simulated SD card: one folder of files, and its listing ------------------------------------ */
+/* --- a simulated SD card: folders and files, and a folder's listing -------------------------------- */
 
-#define SD_FILES 8
+#define SD_FILES 16
+#define SD_DIRS  16
+static struct { char path[256]; bool used; } sd_dirs[SD_DIRS];
+static char sd_list_path[256];
 static struct { char path[256]; uint8_t *data; size_t size; bool used; } sd_files[SD_FILES];
 static bool sd_mounted = true;
-static int  sd_list_at; /* the listing's next file */
+static int  sd_list_at; /* the listing's next entry: folders, then files */
 
 bool settings_sd(void) { return sd_mounted; }
 
@@ -71,7 +74,50 @@ static int sd_find(const char *path)
   return -1;
 }
 
-nn_result_t fs_create_dir(const char *path) { (void)path; return 0; }
+static int sd_find_dir(const char *path)
+{
+  for (int i = 0; i < SD_DIRS; i++)
+    if (sd_dirs[i].used && !strcmp(sd_dirs[i].path, path))
+      return i;
+  return -1;
+}
+
+/* is path directly in dir? */
+static bool sd_in(const char *path, const char *dir)
+{
+  const char *slash = strrchr(path, '/');
+  size_t n = strlen(dir);
+  return slash && (size_t)(slash - path) == n && !strncmp(path, dir, n);
+}
+
+/* is path dir or in it, at any depth? */
+static bool sd_under(const char *path, const char *dir)
+{
+  size_t n = strlen(dir);
+  return !strncmp(path, dir, n) && (path[n] == 0 || path[n] == '/');
+}
+
+nn_result_t fs_create_dir(const char *path)
+{
+  if (sd_find_dir(path) >= 0)
+    return 1; /* already there, as nn::fs says */
+  for (int i = 0; i < SD_DIRS; i++) {
+    if (sd_dirs[i].used)
+      continue;
+    snprintf(sd_dirs[i].path, sizeof(sd_dirs[i].path), "%s", path);
+    sd_dirs[i].used = true;
+    return 0;
+  }
+  return 1;
+}
+
+static void sd_clear(void)
+{
+  for (int i = 0; i < SD_FILES; i++)
+    if (sd_files[i].used)
+      fs_delete_file(sd_files[i].path);
+  memset(sd_dirs, 0, sizeof(sd_dirs));
+}
 nn_result_t fs_create_file(const char *path, int64_t size)
 {
   if (sd_find(path) >= 0)
@@ -132,20 +178,23 @@ static nn_result_t fake_open_dir(fs_dir_t *out, const char *path, int mode)
   (void)mode;
   out->handle = 0;
   sd_list_at = 0;
-  return strcmp(path, SZM_DIR) != 0;
+  snprintf(sd_list_path, sizeof(sd_list_path), "%s", path);
+  return sd_find_dir(path) < 0;
 }
 static nn_result_t fake_read_dir(int64_t *count, fs_dir_entry_t *e, fs_dir_t dir, int64_t max)
 {
   (void)dir; (void)max;
   *count = 0;
-  for (; sd_list_at < SD_FILES; sd_list_at++) {
-    if (!sd_files[sd_list_at].used)
+  for (; sd_list_at < SD_DIRS + SD_FILES; sd_list_at++) {
+    bool dir = sd_list_at < SD_DIRS;
+    int i = dir ? sd_list_at : sd_list_at - SD_DIRS;
+    const char *path = dir ? sd_dirs[i].path : sd_files[i].path;
+    if (!(dir ? sd_dirs[i].used : sd_files[i].used) || !sd_in(path, sd_list_path))
       continue;
-    const char *slash = strrchr(sd_files[sd_list_at].path, '/');
     memset(e, 0, sizeof(*e));
-    snprintf(e->name, sizeof(e->name), "%s", slash ? slash + 1 : sd_files[sd_list_at].path);
-    e->type = FS_ENTRY_FILE;
-    e->size = (int64_t)sd_files[sd_list_at].size;
+    snprintf(e->name, sizeof(e->name), "%s", strrchr(path, '/') + 1);
+    e->type = dir ? FS_ENTRY_DIR : FS_ENTRY_FILE;
+    e->size = dir ? 0 : (int64_t)sd_files[i].size;
     sd_list_at++;
     *count = 1;
     break;
@@ -153,6 +202,18 @@ static nn_result_t fake_read_dir(int64_t *count, fs_dir_entry_t *e, fs_dir_t dir
   return 0;
 }
 static void fake_close_dir(fs_dir_t dir) { (void)dir; }
+static nn_result_t fake_delete_tree(const char *path)
+{
+  if (sd_find_dir(path) < 0)
+    return 1;
+  for (int i = 0; i < SD_FILES; i++)
+    if (sd_files[i].used && sd_under(sd_files[i].path, path))
+      fs_delete_file(sd_files[i].path);
+  for (int i = 0; i < SD_DIRS; i++)
+    if (sd_dirs[i].used && sd_under(sd_dirs[i].path, path))
+      sd_dirs[i].used = false;
+  return 0;
+}
 uintptr_t got_module_of(uintptr_t addr) { (void)addr; return 1; }
 void *got_export(uintptr_t module, const char *name)
 {
@@ -160,6 +221,7 @@ void *got_export(uintptr_t module, const char *name)
   if (strstr(name, "OpenDirectory")) return (void *)fake_open_dir;
   if (strstr(name, "ReadDirectory")) return (void *)fake_read_dir;
   if (strstr(name, "CloseDirectory")) return (void *)fake_close_dir;
+  if (strstr(name, "DeleteDirectoryRecursively")) return (void *)fake_delete_tree;
   return 0;
 }
 
@@ -1684,6 +1746,78 @@ static void test_szm_versions(void)
   puts("PASS: .szm from later versions (grown header, records, blobs, entries, sections), short camera, formats");
 }
 
+/* --- Test 10: memfile files in folders --------------------------------------------------------- */
+static void test_memfile_folders(void)
+{
+  test_build.version = "1.0.0";
+  phase = L_IDLE;
+  sd_clear();
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    free_memfile(&memfiles[i]);
+  fill_test_memfile(&memfiles[0]);
+  memfile_browse_top();
+
+  /* folders: made, cleaned; the same name again, no name: refused */
+  assert(memfile_make_folder("Bosses") && sd_find_dir(SZM_DIR "/Bosses") >= 0);
+  assert(!memfile_make_folder("Bosses") && strstr(last_notice, "already a folder"));
+  assert(!memfile_make_folder("  ..") && !strcmp(last_notice, "no name: no folder made"));
+  assert(memfile_make_folder("a/b:c") && sd_find_dir(SZM_DIR "/a_b_c") >= 0);
+  assert(!memfile_delete_folder() && !strcmp(last_notice, "the top folder can't be deleted"));
+
+  /* the top: folders first (A to Z), then the files */
+  assert(memfile_export(0, "zz root"));
+  assert(memfile_list_files() == 3 && memfile_list_folders() == 2);
+  assert(!strcmp(memfile_file_name(0), "a_b_c") && !strcmp(memfile_file_name(1), "Bosses") &&
+         !strcmp(memfile_file_name(2), "zz root"));
+  assert(!memfile_import(0, 1)); /* a folder isn't a file */
+
+  /* into a folder: exports go there, imports come from there */
+  assert(memfile_browse_into(1) && !strcmp(memfile_browsing(), "Bosses"));
+  assert(memfile_export(0, "ganon") && sd_find(SZM_DIR "/Bosses/ganon.szm") >= 0);
+  assert(memfile_make_folder("Phase 2") && sd_find_dir(SZM_DIR "/Bosses/Phase 2") >= 0);
+  assert(memfile_list_files() == 2 && memfile_list_folders() == 1);
+  assert(!strcmp(memfile_file_name(0), "Phase 2") && !strcmp(memfile_file_name(1), "ganon"));
+  assert(memfile_import(1, 2) && memfiles[2].used && memfiles[2].x == memfiles[0].x);
+
+  /* delete one file: only a file, from the folder looked at; the list without it */
+  assert(memfile_export(0, "spare") && memfile_list_files() == 3 && !strcmp(memfile_file_name(2), "spare"));
+  assert(!memfile_delete_file(0) && sd_find_dir(SZM_DIR "/Bosses/Phase 2") >= 0); /* a folder: no */
+  assert(memfile_delete_file(2) && sd_find(SZM_DIR "/Bosses/spare.szm") < 0 && sd_find(SZM_DIR "/Bosses/ganon.szm") >= 0);
+  assert(memfile_list_files() == 2 && !strcmp(memfile_file_name(1), "ganon") && !memfile_delete_file(2));
+
+  /* up stops at the top */
+  assert(memfile_browse_into(0) && !strcmp(memfile_browsing(), "Bosses/Phase 2"));
+  memfile_browse_up();
+  assert(!strcmp(memfile_browsing(), "Bosses"));
+  memfile_browse_up();
+  assert(!strcmp(memfile_browsing(), ""));
+  memfile_browse_up();
+  assert(!strcmp(memfile_browsing(), ""));
+
+  /* delete a folder: it and everything in it, then up a folder */
+  assert(memfile_list_files() == 3 && memfile_browse_into(1));
+  assert(memfile_delete_folder() && !strcmp(memfile_browsing(), ""));
+  assert(sd_find_dir(SZM_DIR "/Bosses") < 0 && sd_find_dir(SZM_DIR "/Bosses/Phase 2") < 0 &&
+         sd_find(SZM_DIR "/Bosses/ganon.szm") < 0 && sd_find(SZM_DIR "/zz root.szm") >= 0);
+  assert(memfile_list_files() == 2 && memfile_list_folders() == 1);
+
+  /* too deep: a folder past MEMFILE_FOLDER_LEN isn't made */
+  const char *long_name = "abcdefghijklmnopqrstuvwxyz0123"; /* MEMFILE_NAME_MAX */
+  int depth = 0;
+  for (;; depth++) {
+    if (!memfile_make_folder(long_name))
+      break;
+    assert(memfile_list_files() >= 1 && memfile_browse_into(0));
+  }
+  assert(depth == MEMFILE_FOLDER_LEN / (MEMFILE_NAME_MAX + 1) && strstr(last_notice, "too deep"));
+  memfile_browse_top();
+
+  sd_clear();
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    free_memfile(&memfiles[i]);
+  puts("PASS: memfile folders: make, list, export/import in one, delete a file, up to the top, delete a tree, depth");
+}
+
 int main(void)
 {
   test_async_save_and_staging();
@@ -1695,5 +1829,6 @@ int main(void)
   test_szm_export_import();
   test_scene_chains();
   test_szm_versions();
+  test_memfile_folders();
   return 0;
 }

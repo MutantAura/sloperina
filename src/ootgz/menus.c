@@ -2444,53 +2444,88 @@ static void act_load_memfile(menu_item_t *it)
     menu_close(); /* so the load can be watched */
 }
 
-/* export: name it (the map to start with), then write the selected slot */
-static void memfile_named(const char *text, intptr_t ctx)
-{
-  memfile_export((int)ctx, text);
-}
+/* import/export: one folder of sloperinaGZ/memfiles at a time. Its path; a row of buttons (new folder, export here,
+ * delete this folder, not at the top); a rule; then the folder's own row (L: up a folder, nothing at the top) and
+ * under it its folders (L opens one) and its .szm files (L on the name reads it into the selected slot, a slot in use
+ * L then L again; L on the x, then L again, deletes it). */
+static menu_t m_memfile_files, m_memfile_delete;
+static int memfile_file_armed = -1, memfile_delete_armed = -1; /* the file a second L imports / deletes */
+static int memfile_listed, memfile_folders; /* the folder's last list */
 
-static void act_export_memfile(menu_item_t *it)
-{
-  int s = memfile_slot();
-  if (!memfile_used(s)) {
-    gfx_notice("that memfile is empty");
-    return;
-  }
-  osk_open("memfile name", memfile_slot_map(s), MEMFILE_NAME_MAX, memfile_named, s);
-}
+static void fill_memfile_files(void);
 
-/* import: the .szm files on the SD card; L on one reads it into the selected slot (a used slot: L, then L again) */
-static menu_t m_memfile_files;
-static int memfile_file_armed = -1;
+static void text_memfile_path(menu_item_t *it, char *buf, int len)
+{
+  const char *rel = memfile_browsing();
+  snprintf(buf, len, rel[0] ? "memfiles/%s" : "memfiles", rel); /* not menu text */
+}
 
 static void text_memfile_into(menu_item_t *it, char *buf, int len)
 {
-  snprintf(buf, len, TF("import into memfile %d"), memfile_slot() + 1);
+  snprintf(buf, len, TF("slot %d: L on a file imports it, export here writes it"), memfile_slot() + 1);
 }
+
+/* a file's row: its name (L: import), then an x (L: delete); either armed shows "L again: ..." before the name */
+enum { MF_PART_IMPORT, MF_PART_DELETE, MF_FILE_PARTS };
+static const char *const mf_file_hints[MF_FILE_PARTS] = {
+  [MF_PART_IMPORT] = "L: read this file into the selected memfile slot",
+  [MF_PART_DELETE] = "delete this memfile: L, then L again to delete it from the SD card",
+};
+
+/* a file's row, on the grid so its x is in the same column on every row: "- <name, MEMFILE_NAME_MAX wide> x" (armed,
+ * "L again: ..." in the name's place) */
+#define MF_NAME_COL 2                                 /* after "- " */
+#define MF_X_COL    (MF_NAME_COL + MEMFILE_NAME_MAX + 1)
 
 static void text_memfile_file(menu_item_t *it, char *buf, int len)
 {
   int i = (int)it->data;
-  if (memfile_file_armed == i && &m_memfile_files.items[m_memfile_files.selected] != it)
+  bool on = &m_memfile_files.items[m_memfile_files.selected] == it;
+  if (memfile_file_armed == i && (!on || it->part != MF_PART_IMPORT))
     memfile_file_armed = -1; /* the cursor moved off it */
-  if (memfile_file_armed != i) {
+  if (memfile_delete_armed == i && (!on || it->part != MF_PART_DELETE))
+    memfile_delete_armed = -1;
+  if (i < memfile_folders) {
     snprintf(buf, len, "%s", memfile_file_name(i));
     return;
   }
+  const char *armed = memfile_file_armed == i ? "L again: replace" : memfile_delete_armed == i ? "L again: delete" : 0;
   char expanded[96];
-  snprintf(buf, len, "%s %s", binds_expand(T("L again: replace with"), expanded, sizeof(expanded)),
-           memfile_file_name(i));
+  const char *name = armed ? binds_expand(T(armed), expanded, sizeof(expanded)) : memfile_file_name(i);
+  snprintf(buf, len, "- %-*.*s %c", MEMFILE_NAME_MAX, MEMFILE_NAME_MAX, name, GFX_ICON_REMOVE);
 }
 
-static void text_no_memfile_files(menu_item_t *it, char *buf, int len)
+static bool memfile_file_cursor(menu_item_t *it, const char *line, int *start, int *len)
 {
-  snprintf(buf, len, "%s", T("(no .szm files in sloperinaGZ/memfiles)"));
+  if (it->part == MF_PART_DELETE) {
+    *start = MF_X_COL;
+    *len = 1;
+  } else {
+    int n = MF_NAME_COL + MEMFILE_NAME_MAX; /* the name, without the padding after it */
+    while (n > MF_NAME_COL && line[n - 1] == ' ')
+      n--;
+    *start = 0;
+    *len = n;
+  }
+  return true;
 }
 
-static void act_memfile_file(menu_item_t *it)
+static void text_memfile_empty(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, "%s", T("(empty)"));
+}
+
+static void act_memfile_entry(menu_item_t *it)
 {
   int i = (int)it->data, s = memfile_slot();
+  if (i < memfile_folders) {
+    if (memfile_browse_into(i)) {
+      fill_memfile_files();
+      m_memfile_files.selected = 4; /* the folder's own row: L again goes back up */
+      menu_refresh(&m_memfile_files);
+    }
+    return;
+  }
   if (memfile_used(s) && memfile_file_armed != i) {
     memfile_file_armed = i;
     return;
@@ -2500,33 +2535,233 @@ static void act_memfile_file(menu_item_t *it)
     menu_goto(&m_memfiles);
 }
 
-static void act_import_memfile(menu_item_t *it)
+static void memfile_file_press(menu_item_t *it, int part)
+{
+  int i = (int)it->data;
+  if (part != MF_PART_DELETE) {
+    act_memfile_entry(it);
+    return;
+  }
+  if (memfile_delete_armed != i) {
+    memfile_delete_armed = i;
+    return;
+  }
+  memfile_delete_armed = -1;
+  int selected = m_memfile_files.selected;
+  if (memfile_delete_file(i)) {
+    fill_memfile_files();
+    /* the cursor where the file was: on the next one, or the one before at the end */
+    m_memfile_files.selected = selected < m_memfile_files.n_items - 1 ? selected : m_memfile_files.n_items - 2;
+    menu_refresh(&m_memfile_files);
+  }
+}
+
+/* export here: name it (the slot's map to start with), then write the selected slot into this folder */
+static void memfile_named(const char *text, intptr_t ctx)
+{
+  if (memfile_export((int)ctx, text))
+    fill_memfile_files(); /* the new file in the list */
+}
+
+static void memfile_export_here(void)
+{
+  int s = memfile_slot();
+  if (!memfile_used(s)) {
+    gfx_notice("that memfile is empty");
+    return;
+  }
+  osk_open("memfile name", memfile_slot_map(s), MEMFILE_NAME_MAX, memfile_named, s);
+}
+
+static void memfile_folder_named(const char *text, intptr_t ctx)
+{
+  if (memfile_make_folder(text))
+    fill_memfile_files();
+}
+
+/* delete this folder: a screen of its own, the warning and no / yes, no first (back: no) */
+#define MEMFILE_DELETE_NO 4 /* three lines of warning, a blank, then no */
+
+static void text_memfile_delete(menu_item_t *it, char *buf, int len)
+{
+  int files = memfile_listed - memfile_folders;
+  switch (it->data) {
+    case 0: {
+      char where[MEMFILE_FOLDER_LEN + 16];
+      text_memfile_path(it, where, sizeof(where));
+      snprintf(buf, len, TF("delete %s"), where);
+      break;
+    }
+    case 1:
+      snprintf(buf, len, TF("and everything in it: %d memfile%s, %d folder%s (with what they hold)"), files,
+               files == 1 ? "" : "s", memfile_folders, memfile_folders == 1 ? "" : "s");
+      break;
+    default:
+      snprintf(buf, len, "%s", T("this can't be undone"));
+      break;
+  }
+}
+
+static void act_memfile_delete_no(menu_item_t *it)
+{
+  gfx_logf("%s", T("folder kept"));
+  menu_goto(&m_memfile_files);
+}
+
+static void act_memfile_delete_yes(menu_item_t *it)
+{
+  memfile_delete_folder(); /* then up a folder, or (failed) still on it; its notice says which */
+  fill_memfile_files();
+  m_memfile_files.selected = 1;
+  menu_refresh(&m_memfile_files);
+  menu_goto(&m_memfile_files);
+}
+
+enum { MF_NEW, MF_EXPORT, MF_DELETE, MF_BUTTONS };
+static int mf_buttons[MF_BUTTONS], n_mf_buttons;
+static const char *mf_hints[MF_BUTTONS];
+static const char *const mf_button_hint[MF_BUTTONS] = {
+  [MF_NEW] = "new folder: L names a folder, made in this one",
+  [MF_EXPORT] = "export here: L names the selected slot's memfile, then writes it into this folder",
+  [MF_DELETE] = "delete this folder: asks first, then deletes it and every memfile and folder in it",
+};
+static const char mf_icons[MF_BUTTONS] = {
+  [MF_NEW] = GFX_ICON_FOLDER_ADD, [MF_EXPORT] = GFX_ICON_SAVE_ADD,
+  [MF_DELETE] = GFX_ICON_FOLDER_REMOVE,
+};
+
+static void mf_row_text(menu_item_t *it, char *buf, int len)
+{
+  int n = 0;
+  for (int i = 0; i < n_mf_buttons && n + 4 < len; i++)
+    n += snprintf(buf + n, len - n, "%s%c%c", i ? " " : "", mf_icons[mf_buttons[i]], GFX_WIDE_REST);
+}
+
+static bool mf_row_cursor(menu_item_t *it, const char *line, int *start, int *len)
+{
+  *start = 3 * (it->part < n_mf_buttons ? it->part : 0); /* each two cells and a space */
+  *len = 2;
+  return true;
+}
+
+static void mf_row_press(menu_item_t *it, int part)
+{
+  switch (part < n_mf_buttons ? mf_buttons[part] : MF_NEW) {
+    case MF_EXPORT: memfile_export_here(); break;
+    case MF_DELETE:
+      m_memfile_delete.selected = MEMFILE_DELETE_NO;
+      menu_goto(&m_memfile_delete);
+      break;
+    default: osk_open("folder name", "", MEMFILE_NAME_MAX, memfile_folder_named, 0); break;
+  }
+}
+
+/* the folder's own row, over what's in it: L goes up a folder (at the top, sloperinaGZ/memfiles, nothing) */
+static void text_memfile_parent(menu_item_t *it, char *buf, int len)
+{
+  const char *rel = memfile_browsing(), *last = rel;
+  for (const char *p = rel; *p; p++)
+    if (*p == '/')
+      last = p + 1;
+  snprintf(buf, len, "%s", rel[0] ? last : "memfiles"); /* not menu text */
+}
+
+static void act_memfile_parent(menu_item_t *it)
+{
+  if (!memfile_browsing()[0])
+    return;
+  memfile_browse_up();
+  fill_memfile_files();
+}
+
+/* a line between the buttons and the folder: the game's style draws a heading's rule after it, gz's needs one */
+static const char *const mf_rule_gz = "--------------------------------------"; /* not menu text */
+
+/* the folder looked at: where it is; what to do with it; then it and what's in it, as a tree */
+static void fill_memfile_files(void)
+{
+  int n = memfile_list_files(), folders = memfile_list_folders();
+  memfile_listed = n, memfile_folders = folders;
+  bool top = !memfile_browsing()[0];
+  memfile_file_armed = memfile_delete_armed = -1;
+  menu_reset(&m_memfile_files);
+  menu_item_t *path = menu_add_text(&m_memfile_files, text_memfile_path, 0);
+  if (path)
+    path->plain = true;
+  n_mf_buttons = 0;
+  mf_buttons[n_mf_buttons++] = MF_NEW;
+  mf_buttons[n_mf_buttons++] = MF_EXPORT;
+  if (!top)
+    mf_buttons[n_mf_buttons++] = MF_DELETE;
+  menu_item_t *buttons = menu_add_action(&m_memfile_files, "", 0, 0);
+  if (buttons) {
+    buttons->text = mf_row_text;
+    buttons->cursor = mf_row_cursor;
+    buttons->press = mf_row_press;
+    buttons->n_parts = n_mf_buttons;
+    buttons->part = 1; /* on export here */
+    buttons->part_hints = mf_hints;
+    buttons->grid = true; /* the icons on gz's grid, so the cursor's columns are theirs */
+    buttons->log_label = "";
+    for (int i = 0; i < n_mf_buttons; i++)
+      mf_hints[i] = mf_button_hint[mf_buttons[i]];
+    buttons->hint = mf_hints[0];
+  }
+  menu_item_t *into = menu_add_text(&m_memfile_files, text_memfile_into, 0);
+  if (into)
+    into->plain = true;
+  menu_add_heading(&m_memfile_files, gfx_style == GFX_STYLE_GZ ? mf_rule_gz : "files");
+  menu_end_group(&m_memfile_files);
+  menu_item_t *parent = menu_add_action(&m_memfile_files, "", act_memfile_parent, 0);
+  if (parent) {
+    parent->text = text_memfile_parent;
+    parent->icon = top ? GFX_ICON_FOLDER : GFX_ICON_FOLDER_UP;
+    parent->hint = top ? "sloperinaGZ/memfiles: the top folder" : "L: up a folder, to the one this is in";
+    parent->log_label = "";
+  }
+  for (int i = 0; i < n; i++) {
+    menu_item_t *row = menu_add_action(&m_memfile_files, "", act_memfile_entry, i);
+    if (!row)
+      break;
+    row->text = text_memfile_file;
+    row->log_label = "";
+    row->indent = 1; /* under the folder's own row */
+    if (i < folders) {
+      row->icon = GFX_ICON_FOLDER;
+      row->hint = "L: open this folder";
+    } else {
+      row->press = memfile_file_press;
+      row->cursor = memfile_file_cursor;
+      row->n_parts = MF_FILE_PARTS;
+      row->part = MF_PART_IMPORT;
+      row->first_part = true; /* on its name, never straight onto the x from the buttons above */
+      row->part_hints = mf_file_hints;
+      row->hint = mf_file_hints[MF_PART_IMPORT];
+      row->grid = true; /* a character a cell: the x in one column */
+    }
+  }
+  if (!n) {
+    menu_item_t *empty = menu_add_text(&m_memfile_files, text_memfile_empty, 0);
+    if (empty)
+      empty->indent = 1;
+  }
+  menu_add_return(&m_memfile_files);
+  /* the folder's path, its buttons, the slot line, the rule and the folder's own row stay at the top and its return
+   * at the bottom; what's in it scrolls between */
+  m_memfile_files.pinned = 5;
+  m_memfile_files.pinned_end = 1;
+  m_memfile_files.scroll = 0;
+  menu_refresh(&m_memfile_files);
+}
+
+static void act_memfile_files(menu_item_t *it)
 {
   if (memfile_busy()) {
     gfx_notice("memfile is busy");
     return;
   }
-  int n = memfile_list_files();
-  memfile_file_armed = -1;
-  menu_reset(&m_memfile_files);
-  menu_item_t *into = menu_add_text(&m_memfile_files, text_memfile_into, 0);
-  if (into)
-    into->plain = true;
-  for (int i = 0; i < n; i++) {
-    menu_item_t *row = menu_add_action(&m_memfile_files, "", act_memfile_file, i);
-    if (!row)
-      break;
-    row->text = text_memfile_file;
-    row->hint = "L: read this file into the selected memfile slot";
-    row->log_label = "";
-  }
-  if (!n)
-    menu_add_text(&m_memfile_files, text_no_memfile_files, 0);
-  menu_add_return(&m_memfile_files);
-  m_memfile_files.pinned = 1;
-  m_memfile_files.pinned_end = 1;
-  m_memfile_files.scroll = 0;
-  m_memfile_files.selected = 0;
+  fill_memfile_files(); /* the folder last looked at (sloperinaGZ/memfiles to start with) */
+  m_memfile_files.selected = 1;
   menu_refresh(&m_memfile_files);
   menu_goto(&m_memfile_files);
 }
@@ -2543,9 +2778,27 @@ static void text_memfile_status(menu_item_t *it, char *buf, int len)
 
 static void build_memfiles(void)
 {
-  menu_init(&m_memfile_files, "import memfile", MEMFILE_FILES_MAX + 3);
+  menu_init(&m_memfile_files, "import/export", MEMFILE_FILES_MAX + 8);
   m_memfile_files.parent = &m_memfiles;
-  menu_init(&m_memfiles, "memfiles", 9 + MEMFILE_SLOTS);
+  menu_init(&m_memfile_delete, "delete this folder?", 8);
+  m_memfile_delete.parent = &m_memfile_files; /* back: no */
+  for (int line = 0; line < 3; line++) {
+    menu_item_t *warning = menu_add_text(&m_memfile_delete, text_memfile_delete, line);
+    if (warning)
+      warning->plain = true;
+  }
+  add_blank_line(&m_memfile_delete);
+  menu_item_t *no = menu_add_action(&m_memfile_delete, "no, keep it", act_memfile_delete_no, 0);
+  if (no) {
+    no->hint = "L: back to the folder, nothing deleted";
+    no->log_label = "";
+  }
+  menu_item_t *yes = menu_add_action(&m_memfile_delete, "yes, delete it", act_memfile_delete_yes, 0);
+  if (yes) {
+    yes->hint = "L: delete the folder and everything in it from the SD card";
+    yes->log_label = "";
+  }
+  menu_init(&m_memfiles, "memfiles", 8 + MEMFILE_SLOTS);
   menu_item_t *slot = menu_add_option(&m_memfiles, "slot", MEMFILE_SLOTS, memfile_slot_names, get_memfile_slot,
                                       set_memfile_slot, 0);
   if (slot) {
@@ -2558,13 +2811,10 @@ static void build_memfiles(void)
   menu_item_t *load = menu_add_action(&m_memfiles, "load memfile", act_load_memfile, 0);
   if (load)
     load->hint = "L: restore the memfile's game data, map, Link and camera";
-  menu_item_t *export = menu_add_action(&m_memfiles, "export memfile", act_export_memfile, 0);
-  if (export)
-    export->hint = "L: name the selected memfile and write it to sloperinaGZ/memfiles as a .szm file";
-  menu_item_t *import = menu_add_action(&m_memfiles, "import memfile", act_import_memfile, 0);
-  if (import) {
-    import->icon = GFX_ICON_FOLDER;
-    import->hint = "L: choose a .szm file from sloperinaGZ/memfiles to read into the selected slot";
+  menu_item_t *files = menu_add_action(&m_memfiles, "import/export", act_memfile_files, 0);
+  if (files) {
+    files->icon = GFX_ICON_FOLDER;
+    files->hint = "L: export to and import from sloperinaGZ/memfiles on the SD card, in folders";
   }
   menu_item_t *fast = menu_add_check(&m_memfiles, "fast same-map", get_memfile_fast, set_memfile_fast, 0);
   if (fast) {

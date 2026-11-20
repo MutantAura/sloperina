@@ -164,6 +164,9 @@ struct z64hd_build {
   /* WarpMgr::place(mgr, x, y, z): moves the sparkle to a point (Link's feet; it adds the height), as casting
    * does (AINB node OneShotFaroreWindSetActorPos) */
   uint32_t warp_mgr_place;
+  /* SetSavedSelectedChallenge's work (node): selects the quest GameData names (UInt 0x2029D3D8) in the manager, or
+   * none; it only marks node+0x18 done besides. A save load runs it (FINDINGS 9.19). 0: not known for this build */
+  uint32_t challenge_select_saved;
   struct z64hd_link_path link_paths[5];
 };
 

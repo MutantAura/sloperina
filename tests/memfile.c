@@ -357,6 +357,9 @@ bool gd_set_bool(uint32_t hash, bool v)
   gd_obj_bool[i][0x16] = gd_obj_bool[i][0x17] = (uint8_t)(v ? 1 : 0);
   return true;
 }
+/* the quest manager: counted (quests.c isn't built into the tests) */
+static int quests_resyncs;
+bool quests_on_load(void) { quests_resyncs++; return true; }
 /* Farore's Wind's point isn't simulated: WarpMgr is told GameData changed, but there's no point to place */
 bool gd_get_vec3(uint32_t hash, float v[3]) { (void)hash; (void)v; return false; }
 const char *gd_str_index(uint32_t i) { return i < type_str.count ? gd_str_bufs[i] : 0; }
@@ -790,7 +793,7 @@ static void init_env(uint32_t cam_state_off)
   sim_warp_pending = sim_warp_requested = sim_warp_abandoned = sim_ev_running = false;
   sim_silent_warp_accept = true;
   allow_req_save = allow_req_load = true;
-  wm_save_calls = wm_load_calls = navi_load_calls = gear_calls = 0;
+  wm_save_calls = wm_load_calls = navi_load_calls = gear_calls = quests_resyncs = 0;
   req_save_calls = req_load_calls = teleport_calls = warp_silent_calls = warp_cancel_calls = cam_snap_calls = cam_arrive_calls = 0;
   gd_set_str(GD_STR_MAP, "HyruleField_Adult");
   gd_set_str(GD_STR_SPAWN, "StartPos_00");
@@ -991,7 +994,7 @@ static void test_full_reload_happy_path(void)
   int32_t si = 0;
   assert(gd_get_int(H_SESSION_INT, &si) && si == 321);
   assert(strcmp(gd_get_str(H_SESSION_STR), "deku_talked") == 0);
-  assert(wm_load_calls == 1 && navi_load_calls == 1 && sim_time == 36000);
+  assert(wm_load_calls == 1 && navi_load_calls == 1 && quests_resyncs == 1 && sim_time == 36000);
 
   /* Map finishes loading with new actor */
   gd_set_bool(F_IS_LOADING_BANC, false);
@@ -1072,7 +1075,7 @@ static void test_fast_same_map_reset_gimmick(void)
     gd_poke_int(F_MAGIC, 24);
     complete_mock_load(true);
     memfile_frame();
-    assert(phase == L_FAST_MOVE_PRE && wm_load_calls == 1 && navi_load_calls == 1);
+    assert(phase == L_FAST_MOVE_PRE && wm_load_calls == 1 && navi_load_calls == 1 && quests_resyncs == 1);
     assert(gear_calls == 1 && sim_hp == 14 && sim_time == 43200);
     int32_t si = 0;
     assert(gd_get_int(H_SESSION_INT, &si) && si == 555);

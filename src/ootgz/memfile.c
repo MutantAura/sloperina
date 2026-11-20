@@ -21,6 +21,7 @@
 #include "got.h"
 #include "lang.h"
 #include "link.h"
+#include "quests.h"
 #include "memfilefields.h"
 #include "pouch.h"
 #include "sdfs.h"
@@ -359,6 +360,13 @@ static void navi_on_load(void)
   uintptr_t navi = MAIN_FN(navi_get_t, z64hd_game->navi_get)(scene);
   if (navi && sys_mapped(navi, 8, SYS_PERM_R))
     MAIN_FN(mgr_void_t, z64hd_game->navi_on_load)(navi);
+}
+
+/* the quests' stages: the ChallengeMgr keeps its own copy and re-reads GameData only on a save load */
+static void quests_resync(void)
+{
+  if (!quests_on_load())
+    log_printf("memfiles: quest manager not resynced (not known or not ready)"); /* not menu text */
 }
 
 /* --- session-field helpers (hash-keyed, save_file == -1) --------------------------------------- */
@@ -1515,6 +1523,7 @@ static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
       restore_session(st);
       world_on_load();
       navi_on_load();
+      quests_resync();
       restore_vitals_and_gear(st);
       if (st->have_pos && move_link(st)) {
         snprintf(status, sizeof(status), TF("loading memfile %d: placing Link"), active_slot + 1);
@@ -1612,6 +1621,7 @@ static void step_full_load(const memfile_t *st, uint8_t *mgr, const uint8_t *des
       if (st->have_time)
         set_time_of_day(st->time);
       navi_on_load();
+      quests_resync();
       set_phase(L_WAIT_ARRIVAL);
       break;
     case L_WAIT_ARRIVAL: {

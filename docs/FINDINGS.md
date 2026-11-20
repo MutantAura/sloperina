@@ -1780,3 +1780,21 @@ and **safety flags** watches read it (`safety.c`).
   (16-aligned) and WarpMgr (8-aligned; a pass that stepped 16 bytes missed it).
 - Both are now reached through the scene's components instead (§9.14, §9.16): no walk, nothing to wait for after boot.
   levitate.c's search for Link's physics record (§5.19) is still a walk.
+### 9.19 ChallengeMgr on save loads and memfiles (both builds; 1.0.0 addresses, 1.1.1 in brackets)
+- 1.0.0: the instance `*[main+0x4DB9998]` (GOT `main+0x4C19D48`), set-step `main+0x2CA16F0` (1.1.1's matched over 40
+  instructions), update `main+0x2CA00BC`; every offset below is the same in both builds.
+- The update (vtable slot `+0x10`, `main+0x2CA00B0` [`0x2CF3E60`]) does nothing until `+0x70` is 1 (set once by the
+  init). With `+0x72` = 1 it compares every quest's GameData field with its stage and applies any that differ, in
+  either direction, without set-step's NotReady/Complete refusal (and without flagging a regression at `+0x71`);
+  a field that isn't found is left alone. It then clears `+0x72` and `+0x73` together (`strh wzr`).
+- `+0x73` (SetChallengeMgrSaveLoading, work [`0x32E0100`]: set unconditionally) is read before each stage change:
+  set, the change is made quietly. `+0x75` bit 0 skips the resync (SyncToGameData's helper `main+0xD468F0`
+  [`0xD8D040`]: `if (!(+0x75 & 1)) +0x72 = 1`); nothing in main sets it.
+- **A save load** (`OnLoadGameSaveData.module`, run by the title's continue, the pause menu's Load and the game
+  over retry): the GameData resets, `OnResetGameData` (SetChallengeMgrSaveLoading), the deserializer, then
+  `AfterLoadSaveData`: SetSavedSelectedChallenge (work `main+0x3289D20` [`0x32E8D50`]: reads UInt `0x2029D3D8` and
+  selects that quest, `main+0x2CA1A00` [`0x2CF57B0`], or none, `main+0x2CA19C0` [`0x2CF5770`]), WorldMgr's and NaviMgr's
+  on-load, ..., then SyncToGameData; the map load follows.
+- A memfile restores GameData through the deserializer alone, so the manager kept its stages: loading one taken
+  after Ganondorf into the castle collapse on a fresh boot left Zelda standing. memfile.c (quests_on_load) now
+  does what the save load does after WorldMgr's and NaviMgr's on-load: the selected quest, `+0x73`, then `+0x72`.

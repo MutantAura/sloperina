@@ -140,6 +140,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .gd_request_load = 0x36FEDD0,
     /* the slot at navi_scene_ptr holds main+this (in both builds); WarpMgr's getter main+0x27C2AD0 */
     .scene_mgr_ptr = 0x4E271E8,
+    .challenge_select_saved = 0x3289D20,
     .wm_ptr = 0x4C18BF0,
     .wm_set_time = 0x33F1580,
     .wm_on_save = 0x33F1410,
@@ -254,6 +255,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .player_nayru_reset = 0x2E78050,
     .vt_warp_mgr = 0x4BA2248, /* slot 6 main+0x57F4F0 */
     .warp_mgr_place = 0x32B0750,
+    .challenge_select_saved = 0x32E8D50,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

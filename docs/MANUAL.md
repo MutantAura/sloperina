@@ -213,7 +213,6 @@ Saving is refused during a cutscene, a game over, or while the game is paused (p
 
 Caveats:
 - Link climbing a ladder, vine or wall isn't restored: he's put back at the spot and drops.
-- The first time memfiles are used after starting the game (the memfiles menu opened, a save or an import), the mod starts finding two things in the game's memory, a little each frame in the background so the game keeps its speed; it can take a minute or so. A fast load before it's done leaves the item wheel off until the next map change, and Farore's Wind's sparkle where it was.
 
 ### 2.5 Cheats
 

@@ -357,10 +357,8 @@ bool gd_set_bool(uint32_t hash, bool v)
   gd_obj_bool[i][0x16] = gd_obj_bool[i][0x17] = (uint8_t)(v ? 1 : 0);
   return true;
 }
-/* Farore's Wind's point isn't simulated: no WarpMgr is found in the tests */
+/* Farore's Wind's point isn't simulated: WarpMgr is told GameData changed, but there's no point to place */
 bool gd_get_vec3(uint32_t hash, float v[3]) { (void)hash; (void)v; return false; }
-uint64_t sys_tick(void) { return 0; }
-uint64_t sys_tick_freq(void) { return 1; } /* the Main.module scan only logs its time */
 const char *gd_str_index(uint32_t i) { return i < type_str.count ? gd_str_bufs[i] : 0; }
 const char *gd_get_str(uint32_t hash)
 {
@@ -1444,6 +1442,110 @@ static void test_szm_export_import(void)
   puts("PASS: .szm export/import round trip, name cleaning, listing, version/format/damage refusals");
 }
 
+/* --- Test 8: WarpMgr and Main.module through the scene's components, no heap walk ----------------- */
+static uintptr_t chain_main_slot;                    /* main+scene_mgr_ptr */
+static uintptr_t chain_warp_vt[8], chain_listener_vt[1];
+static int       chain_warp_changed;
+static void fake_warp_changed(uintptr_t mgr, const void *bits) { (void)mgr; (void)bits; chain_warp_changed++; }
+static _Alignas(16) uint8_t chain_scene_mgr[0x200], chain_scene[0x60], chain_warp[0xD0], chain_seq[0x100];
+static uintptr_t chain_components[23], chain_holder_list[1], chain_defs[2];
+static _Alignas(16) uint8_t chain_holders[0x20], chain_holder[0x20], chain_ctrl[0x180], chain_def_other[0x20],
+  chain_def_main[0x20], chain_other_file[0x40], chain_main_file[MAIN_AINB_SIZE];
+
+static void put_ptr(void *at, const void *p) { uintptr_t v = (uintptr_t)p; memcpy(at, &v, 8); }
+
+static void test_scene_chains(void)
+{
+  clear_regions();
+  uintptr_t lo = (uintptr_t)&chain_main_slot;
+  if ((uintptr_t)chain_warp_vt < lo) lo = (uintptr_t)chain_warp_vt;
+  if ((uintptr_t)chain_listener_vt < lo) lo = (uintptr_t)chain_listener_vt;
+  if ((uintptr_t)fake_warp_changed < lo) lo = (uintptr_t)fake_warp_changed;
+  z64hd_main = lo - 0x1000u;
+  test_build = (struct z64hd_build){
+    .scene_mgr_ptr = (uint32_t)((uintptr_t)&chain_main_slot - z64hd_main),
+    .vt_warp_mgr = (uint32_t)((uintptr_t)chain_warp_vt - z64hd_main),
+  };
+  chain_warp_vt[6] = (uintptr_t)fake_warp_changed;
+  assert(chain_warp_vt[6] - z64hd_main < 0x3C80000u && (uintptr_t)chain_listener_vt - z64hd_main < 0x5000000u);
+
+  /* the scene: component 0 Sequence, 22 WarpMgr */
+  chain_main_slot = (uintptr_t)chain_scene_mgr;
+  put_ptr(chain_scene_mgr + SCENE_CURRENT, chain_scene);
+  uint32_t n = 23; memcpy(chain_scene + SCENE_COUNT, &n, 4);
+  put_ptr(chain_scene + SCENE_COMPONENTS, chain_components);
+  chain_components[0] = (uintptr_t)chain_seq;
+  chain_components[SCENE_WARP_MGR] = (uintptr_t)chain_warp;
+  put_ptr(chain_warp, chain_warp_vt);
+  put_ptr(chain_warp + 0xB8, chain_listener_vt);
+
+  /* Sequence -> holders -> holder -> controller -> definitions (a decoy, then Main.module) -> files */
+  put_ptr(chain_seq + SEQ_HOLDERS, chain_holders);
+  uint32_t one = 1; memcpy(chain_holders, &one, 4);
+  put_ptr(chain_holders + 8, chain_holder_list);
+  chain_holder_list[0] = (uintptr_t)chain_holder;
+  put_ptr(chain_holder + HOLDER_CONTROLLER, chain_ctrl);
+  uint32_t two = 2; memcpy(chain_ctrl + CTRL_DEF_COUNT, &two, 4);
+  put_ptr(chain_ctrl + CTRL_DEFS, chain_defs);
+  chain_defs[0] = (uintptr_t)chain_def_other;
+  chain_defs[1] = (uintptr_t)chain_def_main;
+  put_ptr(chain_def_other + DEF_FILE, chain_other_file);
+  put_ptr(chain_def_main + DEF_FILE, chain_main_file);
+  memcpy(chain_other_file, main_ainb_head, 8); /* same magic, another file */
+  memset(chain_main_file, 0, sizeof(chain_main_file));
+  memcpy(chain_main_file, main_ainb_head, sizeof(main_ainb_head));
+  memcpy(chain_main_file + MAIN_AINB_RESET_TO, main_ainb_reset_plug, sizeof(main_ainb_reset_plug));
+
+  const uint32_t rw = SYS_PERM_R | SYS_PERM_W;
+  add_region(&chain_main_slot, sizeof(chain_main_slot), SYS_PERM_R);
+  add_region(chain_warp_vt, sizeof(chain_warp_vt), SYS_PERM_R);
+  add_region(chain_scene_mgr, sizeof(chain_scene_mgr), rw);
+  add_region(chain_scene, sizeof(chain_scene), rw);
+  add_region(chain_components, sizeof(chain_components), rw);
+  add_region(chain_warp, sizeof(chain_warp), rw);
+  add_region(chain_seq, sizeof(chain_seq), rw);
+  add_region(chain_holders, sizeof(chain_holders), rw);
+  add_region(chain_holder_list, sizeof(chain_holder_list), rw);
+  add_region(chain_holder, sizeof(chain_holder), rw);
+  add_region(chain_ctrl, sizeof(chain_ctrl), rw);
+  add_region(chain_defs, sizeof(chain_defs), rw);
+  add_region(chain_def_other, sizeof(chain_def_other), rw);
+  add_region(chain_def_main, sizeof(chain_def_main), rw);
+  add_region(chain_other_file, sizeof(chain_other_file), rw);
+  add_region(chain_main_file, sizeof(chain_main_file), rw);
+
+  /* WarpMgr: found as component 22 and told GameData changed */
+  uintptr_t vt = MAIN(test_build.vt_warp_mgr);
+  assert(find_warp_mgr(vt) == (uintptr_t)chain_warp);
+  memfile_t st = { 0 };
+  chain_warp_changed = 0;
+  refresh_warp_mgr(&st);
+  assert(chain_warp_changed == 1);
+  /* not a WarpMgr there, or too few components: nothing */
+  put_ptr(chain_warp, chain_listener_vt);
+  assert(!find_warp_mgr(vt));
+  put_ptr(chain_warp, chain_warp_vt);
+  n = SCENE_WARP_MGR; memcpy(chain_scene + SCENE_COUNT, &n, 4);
+  assert(!find_warp_mgr(vt));
+  n = 23; memcpy(chain_scene + SCENE_COUNT, &n, 4);
+
+  /* Main.module: the decoy is passed over, the transition patched to the root (once; again is harmless) */
+  patch_main_module();
+  assert(chain_main_file[MAIN_AINB_RESET_TO] == 23);
+  patch_main_module();
+  assert(chain_main_file[MAIN_AINB_RESET_TO] == 23);
+  /* a plug that isn't the expected transition is left alone */
+  chain_main_file[MAIN_AINB_RESET_TO] = 15;
+  chain_main_file[MAIN_AINB_RESET_TO + 4] = 8;
+  patch_main_module();
+  assert(chain_main_file[MAIN_AINB_RESET_TO] == 15);
+  /* an unknown build (no scene manager) finds nothing and doesn't crash */
+  test_build.scene_mgr_ptr = 0;
+  patch_main_module();
+  assert(!find_warp_mgr(vt));
+  printf("PASS: WarpMgr and Main.module through the scene's components, decoy file, refusals\n");
+}
+
 int main(void)
 {
   test_async_save_and_staging();
@@ -1453,5 +1555,6 @@ int main(void)
   test_link_at_tolerance_and_facing();
   test_camera_ai_chain();
   test_szm_export_import();
+  test_scene_chains();
   return 0;
 }

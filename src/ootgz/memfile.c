@@ -1063,19 +1063,23 @@ static void restore_vitals_and_gear(const memfile_t *st)
  * (what opens the item wheel on L/R) and the picker of its branches (node 15). The ResetGimmick branch (taken
  * for DebugParam.IsRequestedResetGimmick) ends with a transition to node 15 alone, so after one the item wheel
  * is dead until something leaves Main (a map change ends on node 23, menus and events re-enter it from the
- * root). The game keeps the file loaded: find it once, in steps over a few seconds of frames, and point that
- * transition at node 23 like the map change branch. The file is the same in 1.0.0 and 1.1.1.
+ * root). The game keeps the file loaded: before each fast load, find it through the Sequence component and point
+ * that transition at node 23 like the map change branch. The file is the same in 1.0.0 and 1.1.1.
  *
- * The walk reads the whole heap (gigabytes), so it waits until memfiles are first used (memfile_scan_start: the
- * memfiles menu shown, a save, an import) and works at most AINB_FRAME_US a frame on the game's thread.
- * TODO: reverse engineer pointer chains to Main.module (the resource/AI system holding it) and WarpMgr (its owning
- * manager) from main's data, so neither needs the walk: instant after boot, no window where a fast load misses
- * them. */
-#define MAIN_AINB_MAGIC    0x0000040820424941ull /* "AIB " v0x408 */
+ * The chain (the same offsets in both builds; FINDINGS 9.14): the scene's component 0 is Sequence; [+0xE8] lists
+ * its AI controllers' holders (count +0, array +8; the root's setup 1.0.0 main+0x3B60240, 1.1.1 main+0x3BBDE50);
+ * a holder's controller is at +0x18; a controller lists the AINB files it loaded (count +0x168, array +0x170;
+ * stored at 1.0.0 main+0x7B5E0, 1.1.1 main+0x38480), each a definition holding the file's bytes at +0x10
+ * (1.0.0 main+0x82C374, 1.1.1 main+0x840D60). Main.module is told apart by its header. */
 #define MAIN_AINB_SIZE     11395u
 #define MAIN_AINB_RESET_TO 0x1204u               /* s32 node index: 15 in the file, 23 patched */
-#define AINB_CHUNK         (256u << 10)          /* bytes read between looks at the clock */
-#define AINB_FRAME_US      1000u                 /* the walk's time a frame, in microseconds */
+#define SEQ_HOLDERS        0xE8                  /* [Sequence +this]: its controllers' holders */
+#define SEQ_HOLDERS_MAX    16
+#define HOLDER_CONTROLLER  0x18
+#define CTRL_DEF_COUNT     0x168                 /* u32 */
+#define CTRL_DEFS          0x170
+#define CTRL_DEFS_MAX      0x15E                 /* the loader's own cap */
+#define DEF_FILE           0x10
 
 static const uint8_t main_ainb_head[0x40] = {
   0x41, 0x49, 0x42, 0x20, 0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
@@ -1086,20 +1090,14 @@ static const uint8_t main_ainb_head[0x40] = {
 /* the transition plug's context: index 15 then 7 (its transition entry) and the next plug's 4 */
 static const uint8_t main_ainb_reset_plug[12] = { 0x0f, 0, 0, 0, 0x07, 0, 0, 0, 0x04, 0, 0, 0 };
 
-#define MEM_TYPE_HEAP 5u
-
-static enum { AINB_IDLE, AINB_WAIT, AINB_SCANNING, AINB_DONE } ainb_state;
-static uint64_t ainb_addr, ainb_region_end;  /* the scan's cursor and the end of its region */
-static uint64_t ainb_start_tick;
-static int      ainb_patched;
-static uint64_t ainb_busy_ticks, ainb_max_ticks, ainb_bytes; /* the walk's own cost, for its log line */
-static uint32_t ainb_frames;
-
-/* The same walk finds WarpMgr, the game component behind Farore's Wind's sparkle (actor FaroreWindWarpPoint).
- * It places the sparkle only when told GameData changed (its vtable slot 6, with change bits; none set means
- * all), which the deserializer doesn't do, and ResetGimmick keeps the sparkle: so it's told after a fast load. */
-static uintptr_t warp_mgr;
-static int       warp_mgrs;
+/* WarpMgr, the game component behind Farore's Wind's sparkle (actor FaroreWindWarpPoint), places the sparkle only
+ * when told GameData changed (its vtable slot 6, with change bits; none set means all), which the deserializer
+ * doesn't do, and ResetGimmick keeps the sparkle: so it's told after a fast load. It's the current scene's component
+ * 22, as the game's own getter reads it (1.0.0 main+0x27C2AD0, 1.1.1 main+0x28147E0; FINDINGS 9.16). */
+#define SCENE_CURRENT    0x1F0 /* [scene manager +this]: the current scene */
+#define SCENE_COUNT      0x50  /* u32 */
+#define SCENE_COMPONENTS 0x58  /* pointer to the components' pointers */
+#define SCENE_WARP_MGR   22
 
 /* a WarpMgr as its constructor (main+0xE0FE60) leaves it: its vtable, and a listener's vtable at +0xB8 */
 static bool is_warp_mgr(uintptr_t m, uintptr_t vt)
@@ -1116,11 +1114,29 @@ typedef void (*warp_place_t)(uintptr_t mgr, float x, float y, float z);
 #define F_FW_BANC 0xB09FBD99u /* WarpPoint_FaroreWind.BancName */
 #define F_FW_POS  0xBEB37B31u /* WarpPoint_FaroreWind.Pos */
 
+/* the current scene's WarpMgr, or 0 */
+static uintptr_t find_warp_mgr(uintptr_t vt)
+{
+  if (!vt || !z64hd_game->scene_mgr_ptr)
+    return 0;
+  uintptr_t scene_mgr = sys_ptr(MAIN(z64hd_game->scene_mgr_ptr));
+  uintptr_t scene = scene_mgr ? sys_ptr(scene_mgr + SCENE_CURRENT) : 0;
+  uint32_t count;
+  if (!scene || !sys_read32(scene + SCENE_COUNT, &count) || count <= SCENE_WARP_MGR)
+    return 0;
+  uintptr_t components = sys_ptr(scene + SCENE_COMPONENTS);
+  uintptr_t m = components ? sys_ptr(components + SCENE_WARP_MGR * sizeof(uintptr_t)) : 0;
+  return m && is_warp_mgr(m, vt) ? m : 0;
+}
+
 static void refresh_warp_mgr(const memfile_t *st)
 {
   uintptr_t vt = z64hd_game->vt_warp_mgr ? MAIN(z64hd_game->vt_warp_mgr) : 0;
-  if (!warp_mgr || !vt || !is_warp_mgr(warp_mgr, vt))
+  uintptr_t warp_mgr = find_warp_mgr(vt);
+  if (!warp_mgr) {
+    log_printf("memfiles: WarpMgr not found: Farore's Wind sparkle not refreshed"); /* not menu text */
     return;
+  }
   uintptr_t slot6 = sys_ptr(vt + 6 * 8);
   if (slot6 < MAIN(0) || slot6 >= MAIN(0x3C80000))
     return;
@@ -1138,97 +1154,49 @@ static void refresh_warp_mgr(const memfile_t *st)
   }
 }
 
-static bool ainb_next_region(void)
+/* point Main.module's ResetGimmick transition at the root, if the file is at f; true when f is Main.module */
+static bool patch_main_ainb(uintptr_t f)
 {
-  sys_meminfo_t r;
-  for (int guard = 0; guard < 4096; guard++) {
-    if (sys_query_memory(&r, ainb_addr) != 0 || !r.size || r.addr + r.size <= ainb_addr)
-      return false;
-    if (r.type == MEM_TYPE_HEAP && (r.perm & (SYS_PERM_R | SYS_PERM_W)) == (SYS_PERM_R | SYS_PERM_W)) {
-      if (ainb_addr < r.addr)
-        ainb_addr = r.addr;
-      ainb_region_end = r.addr + r.size;
-      return true;
-    }
-    ainb_addr = r.addr + r.size;
-  }
-  return false;
-}
-
-static void ainb_check(uint64_t at, uint64_t region_end)
-{
-  const uint8_t *file = (const uint8_t *)(uintptr_t)at;
-  if (at + MAIN_AINB_SIZE > region_end || !bytes_equal(file, main_ainb_head, sizeof(main_ainb_head)))
-    return;
-  uint8_t *plug = (uint8_t *)(uintptr_t)(at + MAIN_AINB_RESET_TO);
-  if (bytes_equal(plug + 4, main_ainb_reset_plug + 4, 8) && (plug[0] == 15 || plug[0] == 23) && !plug[1] && !plug[2] &&
-      !plug[3]) {
+  if (!sys_mapped(f, MAIN_AINB_SIZE, SYS_PERM_R | SYS_PERM_W) ||
+      !bytes_equal((const void *)f, main_ainb_head, sizeof(main_ainb_head)))
+    return false;
+  uint8_t *plug = (uint8_t *)(f + MAIN_AINB_RESET_TO);
+  if (!bytes_equal(plug + 4, main_ainb_reset_plug + 4, 8) || (plug[0] != 15 && plug[0] != 23) || plug[1] || plug[2] ||
+      plug[3])
+    return false;
+  if (plug[0] != 23) {
     plug[0] = 23;
-    ainb_patched++;
-    log_printf("memfiles: Main.module at %lx: ResetGimmick now returns to the root", /* not menu text */
-               (unsigned long)at);
+    log_printf("memfiles: Main.module at %lx: ResetGimmick now returns to the root", (unsigned long)f); /* not menu text */
   }
+  return true;
 }
 
-/* memfiles are in use: start the walk (once) */
-void memfile_scan_start(void)
+/* before a fast load: patch the loaded Main.module (see above) */
+static void patch_main_module(void)
 {
-  if (ainb_state == AINB_IDLE)
-    ainb_state = AINB_WAIT;
-}
-
-static void ainb_done(void)
-{
-  uint64_t freq = sys_tick_freq();
-  unsigned s = (unsigned)((sys_tick() - ainb_start_tick) / freq);
-  if (!ainb_patched)
-    log_printf("memfiles: Main.module not found (%u s): no item wheel after fast loads", s); /* not menu text */
-  else
-    log_printf("memfiles: Main.module scan done in %u s, %d patched", s, ainb_patched); /* not menu text */
-  log_printf("memfiles: %d WarpMgr found%s", warp_mgrs, /* not menu text */
-             warp_mgrs > 1 ? ", using the first" : ""); /* not menu text */
-  log_printf("memfiles: scan read %u MB over %u frames, %.2f ms a frame on average, %.2f ms at most", /* not menu text */
-             (unsigned)(ainb_bytes >> 20), (unsigned)ainb_frames,
-             ainb_frames ? (double)ainb_busy_ticks * 1000.0 / (double)freq / ainb_frames : 0.0,
-             (double)ainb_max_ticks * 1000.0 / (double)freq);
-  ainb_state = AINB_DONE;
-}
-
-static void ainb_patch_frame(void)
-{
-  if (ainb_state == AINB_DONE || ainb_state == AINB_IDLE)
-    return;
-  if (ainb_state == AINB_WAIT) {
-    if (!link_actor())
-      return;
-    ainb_state = AINB_SCANNING;
-    ainb_addr = ainb_region_end = 0;
-    ainb_start_tick = sys_tick();
-  }
-  uint64_t start = sys_tick(), limit = sys_tick_freq() * AINB_FRAME_US / 1000000u;
-  uint64_t vt = z64hd_game->vt_warp_mgr ? MAIN(z64hd_game->vt_warp_mgr) : 1;
-  for (;;) {
-    if (ainb_addr >= ainb_region_end && !ainb_next_region()) {
-      ainb_done();
-      break;
+  uintptr_t scene_mgr = z64hd_game->scene_mgr_ptr ? sys_ptr(MAIN(z64hd_game->scene_mgr_ptr)) : 0;
+  uintptr_t scene = scene_mgr ? sys_ptr(scene_mgr + SCENE_CURRENT) : 0;
+  uintptr_t components = scene ? sys_ptr(scene + SCENE_COMPONENTS) : 0;
+  uintptr_t sequence = components ? sys_ptr(components) : 0;
+  uintptr_t holders = sequence ? sys_ptr(sequence + SEQ_HOLDERS) : 0;
+  uint32_t n_holders = 0;
+  if (holders && sys_read32(holders, &n_holders) && n_holders <= SEQ_HOLDERS_MAX) {
+    uintptr_t holder_list = sys_ptr(holders + 8);
+    for (uint32_t i = 0; holder_list && i < n_holders; i++) {
+      uintptr_t holder = sys_ptr(holder_list + i * sizeof(uintptr_t));
+      uintptr_t ctrl = holder ? sys_ptr(holder + HOLDER_CONTROLLER) : 0;
+      uint32_t n_defs = 0;
+      if (!ctrl || !sys_read32(ctrl + CTRL_DEF_COUNT, &n_defs) || n_defs > CTRL_DEFS_MAX)
+        continue;
+      uintptr_t defs = sys_ptr(ctrl + CTRL_DEFS);
+      for (uint32_t k = 0; defs && k < n_defs; k++) {
+        uintptr_t def = sys_ptr(defs + k * sizeof(uintptr_t));
+        if (def && patch_main_ainb(sys_ptr(def + DEF_FILE)))
+          return;
+      }
     }
-    uint64_t end = ainb_region_end - ainb_addr > AINB_CHUNK ? ainb_addr + AINB_CHUNK : ainb_region_end;
-    for (const uint64_t *p = (const uint64_t *)(uintptr_t)ainb_addr; (uint64_t)(uintptr_t)p < end; p++) {
-      if (*p == MAIN_AINB_MAGIC && !((uintptr_t)p & 15))
-        ainb_check((uint64_t)(uintptr_t)p, ainb_region_end);
-      else if (*p == vt && is_warp_mgr((uintptr_t)p, vt) && warp_mgrs++ == 0)
-        warp_mgr = (uintptr_t)p;
-    }
-    ainb_bytes += end - ainb_addr;
-    ainb_addr = end;
-    if (sys_tick() - start >= limit)
-      break;
   }
-  uint64_t spent = sys_tick() - start;
-  ainb_busy_ticks += spent;
-  if (spent > ainb_max_ticks)
-    ainb_max_ticks = spent;
-  ainb_frames++;
+  log_printf("memfiles: Main.module not found: no item wheel after this fast load"); /* not menu text */
 }
 
 static void finish_load(void)
@@ -1323,7 +1291,6 @@ bool memfile_save(int s)
 {
   if (s < 0 || s >= MEMFILE_SLOTS)
     return false;
-  memfile_scan_start();
   end_camera_guard();
   if (phase != L_IDLE) {
     gfx_notice("memfile is busy");
@@ -1555,6 +1522,7 @@ static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
       } else {
         gd_poke_int(F_RESET_GIMMICK_OPT, 0);
         gd_set_int(F_RESET_GIMMICK_OPT, 0);
+        patch_main_module();
         gd_set_bool(F_REQ_RESET_GIMMICK, true);
         saw_reset_req = false;
         set_phase(L_FAST_WAIT_RESET);
@@ -1564,6 +1532,7 @@ static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
       if (link_at(st, phase_frames) || phase_frames >= FAST_MOVE_TIMEOUT) {
         gd_poke_int(F_RESET_GIMMICK_OPT, 0);
         gd_set_int(F_RESET_GIMMICK_OPT, 0);
+        patch_main_module();
         gd_set_bool(F_REQ_RESET_GIMMICK, true);
         saw_reset_req = false;
         set_phase(L_FAST_WAIT_RESET);
@@ -1778,7 +1747,6 @@ static void step_post_move(const memfile_t *st)
 void memfile_frame(void)
 {
   retire_inflight_buf();
-  ainb_patch_frame();
   if (phase == L_IDLE)
     return;
   phase_frames++;
@@ -2268,7 +2236,6 @@ bool memfile_import(int i, int s)
 {
   if (i < 0 || i >= file_count || s < 0 || s >= MEMFILE_SLOTS)
     return false;
-  memfile_scan_start();
   end_camera_guard();
   if (phase != L_IDLE) {
     gfx_notice("memfile is busy");

@@ -2509,7 +2509,6 @@ static void text_memfile_slot(menu_item_t *it, char *buf, int len)
 
 static void text_memfile_status(menu_item_t *it, char *buf, int len)
 {
-  memfile_scan_start(); /* drawn while the memfiles menu is shown */
   snprintf(buf, len, "%s", memfile_status());
 }
 

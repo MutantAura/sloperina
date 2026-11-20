@@ -1546,6 +1546,141 @@ static void test_scene_chains(void)
   printf("PASS: WarpMgr and Main.module through the scene's components, decoy file, refusals\n");
 }
 
+/* --- Test 9: .szm files from later and earlier sloperina versions ------------------------------- */
+/* a file as a later version might write it: every growable part grown, an unknown section; or (short_camera) the
+ * camera's bytes shorter than this version's */
+static uint8_t *later_szm(const memfile_t *st, bool short_camera, uint16_t format, uint32_t *size)
+{
+  const uint32_t extra = 8, hdr = (uint32_t)sizeof(szm_header_t) + extra;
+  szm_out_t o = { calloc(1, 1u << 20), hdr, 1u << 20, true };
+  uint8_t pad[16] = { 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE };
+  uint32_t at = out_begin(&o, SZM_GAMEDATA);
+  out_bytes(&o, st->save_buf, st->save_size);
+  out_end(&o, at);
+  at = out_begin(&o, SZM_SCALARS);
+  uint32_t record = SZM_SCALAR_SIZE + extra;
+  OUT(&o, record);
+  for (uint32_t i = 0; i < st->s_scalar_count; i++) {
+    const session_scalar_t *e = &st->s_scalars[i];
+    OUT(&o, e->hash);
+    OUT(&o, e->kind);
+    OUT(&o, e->width);
+    out_bytes(&o, e->val, sizeof(e->val));
+    out_bytes(&o, pad, extra);
+  }
+  out_end(&o, at);
+  at = out_begin(&o, SZM_STRINGS);
+  record = SZM_STRING_SIZE + extra;
+  OUT(&o, record);
+  for (uint32_t i = 0; i < st->s_str_count; i++) {
+    OUT(&o, st->s_strs[i].hash);
+    out_bytes(&o, st->s_strs[i].val, GD_STR_LEN);
+    out_bytes(&o, pad, extra);
+  }
+  out_end(&o, at);
+  at = out_begin(&o, SZM_TAG('N', 'E', 'W', '!'));
+  out_bytes(&o, pad, sizeof(pad));
+  out_end(&o, at);
+  at = out_begin(&o, SZM_STATE);
+  uint8_t flags = STATE_POS | STATE_LIFE | STATE_TIME | STATE_NAYRU;
+  int32_t child = st->child;
+  out_bytes(&o, st->start, GD_STR_LEN);
+  OUT(&o, st->x);
+  OUT(&o, st->y);
+  OUT(&o, st->z);
+  OUT(&o, st->fx);
+  OUT(&o, st->fz);
+  OUT(&o, flags);
+  OUT(&o, st->life);
+  OUT(&o, st->magic);
+  OUT(&o, st->nayru_left);
+  OUT(&o, st->nayru_total);
+  OUT(&o, st->time);
+  OUT(&o, child);
+  out_bytes(&o, pad, extra); /* a field added later */
+  out_end(&o, at);
+  at = out_begin(&o, SZM_CAMERA);
+  uint8_t cam = CAM_STATE | CAM_COMPONENT, actions = (uint8_t)st->camera_actions;
+  OUT(&o, cam);
+  uint8_t camera[CAMERA_BYTES + 8];
+  memcpy(camera, st->camera, CAMERA_BYTES);
+  memset(camera + CAMERA_BYTES, 0xEE, 8);
+  out_blob(&o, camera, short_camera ? CAMERA_BYTES - 1 : CAMERA_BYTES + 8);
+  out_blob(&o, st->comp_head, CAMERA_COMP_HEAD);
+  out_blob(&o, st->comp_turn, CAMERA_TURN_BYTES);
+  OUT(&o, st->view);
+  OUT(&o, actions);
+  for (int i = 0; i < actions; i++) {
+    uint32_t entry = out_sized(&o);
+    OUT(&o, st->action_vtable[i]);
+    OUT(&o, st->action_node_idx[i]);
+    out_blob(&o, st->action[i], ACTION_BYTES);
+    out_bytes(&o, pad, extra); /* a field added later */
+    out_sized_end(&o, entry);
+  }
+  out_bytes(&o, pad, extra); /* a field added later */
+  out_end(&o, at);
+  assert(o.ok);
+  szm_header_t h = { 0 };
+  memcpy(h.magic, SZM_MAGIC, 4);
+  h.format = format;
+  h.header_size = (uint16_t)hdr;
+  h.body_size = o.n - hdr;
+  h.body_crc = crc32(o.p + hdr, h.body_size);
+  h.child = (int8_t)st->child;
+  copy_str(h.game, sizeof(h.game), "1.0.0");
+  copy_str(h.sloperina, sizeof(h.sloperina), "v9.9.9-later");
+  copy_str(h.map, sizeof(h.map), st->map);
+  memcpy(o.p, &h, sizeof(h));
+  memset(o.p + sizeof(h), 0xEE, extra); /* a header field added later */
+  *size = o.n;
+  return o.p;
+}
+
+static void test_szm_versions(void)
+{
+  test_build.version = "1.0.0";
+  memfile_t a = { 0 }, b = { 0 };
+  fill_test_memfile(&a);
+  uint32_t n;
+
+  /* a later version's file, everything grown: read as far as this version knows */
+  uint8_t *f = later_szm(&a, false, SZM_FORMAT, &n);
+  assert(!szm_decode(f, n, &b));
+  assert(b.save_size == a.save_size && !memcmp(b.save_buf, a.save_buf, a.save_size));
+  assert(b.s_scalar_count == a.s_scalar_count && b.s_scalars[0].hash == a.s_scalars[0].hash &&
+         !memcmp(b.s_scalars[0].val, a.s_scalars[0].val, sizeof(a.s_scalars[0].val)) &&
+         b.s_scalars[1].kind == a.s_scalars[1].kind);
+  assert(b.s_str_count == a.s_str_count && !strcmp(b.s_strs[0].val, a.s_strs[0].val));
+  assert(b.x == a.x && b.z == a.z && b.life == a.life && b.time == a.time && b.child == a.child && b.have_nayru);
+  assert(b.have_camera && b.have_component && !memcmp(b.camera, a.camera, CAMERA_BYTES));
+  assert(b.camera_actions == 2 && b.action_vtable[1] == a.action_vtable[1] &&
+         b.action_node_idx[1] == a.action_node_idx[1] && b.action[1][0x150] == 0x42);
+  assert(!strcmp(b.map, a.map));
+  free_memfile(&b);
+  free(f);
+
+  /* camera bytes shorter than this version's: loads, without the camera */
+  f = later_szm(&a, true, SZM_FORMAT, &n);
+  assert(!szm_decode(f, n, &b) && b.used && b.have_pos && !b.have_camera && !b.camera_actions);
+  free_memfile(&b);
+  free(f);
+
+  /* format 1 (test builds) and a newer format: refused */
+  f = later_szm(&a, false, 1, &n);
+  const char *why = szm_decode(f, n, &b);
+  assert(why && strstr(why, "test build"));
+  free_memfile(&b);
+  free(f);
+  f = later_szm(&a, false, SZM_FORMAT + 1, &n);
+  why = szm_decode(f, n, &b);
+  assert(why && strstr(why, "newer sloperina"));
+  free_memfile(&b);
+  free(f);
+  free_memfile(&a);
+  puts("PASS: .szm from later versions (grown header, records, blobs, entries, sections), short camera, formats");
+}
+
 int main(void)
 {
   test_async_save_and_staging();
@@ -1556,5 +1691,6 @@ int main(void)
   test_camera_ai_chain();
   test_szm_export_import();
   test_scene_chains();
+  test_szm_versions();
   return 0;
 }

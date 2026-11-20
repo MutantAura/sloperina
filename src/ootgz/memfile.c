@@ -1774,20 +1774,32 @@ void memfile_frame(void)
 
 /* --- sharing: .szm files ----------------------------------------------------------------------- */
 
-/* A .szm file (little endian): szm_header_t, then tagged sections { u32 tag, u32 size, bytes }. Readers skip tags
- * they don't know and read a known section's fields only as far as the section goes, so a later version can add
- * sections or add fields at a section's end without a new format. SZM_FORMAT goes up only when an older reader
- * couldn't use the file at all; the game's version must match (GameData's binary and the camera's layout are
- * that version's own). */
+/* A .szm file (little endian): szm_header_t, then tagged sections { u32 tag, u32 size, bytes }. Every part that
+ * could grow says how big it is, so files stay shareable both ways between sloperina versions:
+ *  - the header: header_size. Readers skip what follows the fields they know, and zero the fields an older,
+ *    shorter header doesn't have (from SZM_HEADER_MIN).
+ *  - sections: unknown tags are skipped. Within a section, new fields go at its end and are read as optional
+ *    (`if (IN(in, x))`, a default otherwise): an older file then loads with that part off.
+ *  - record lists (SSCL, SSTR) start with a u32 record size: records can grow at their end.
+ *  - raw bytes from the game's memory (the camera's) are { u32 size, bytes }: a longer one is read as far as this
+ *    version knows; a shorter one means that part can't be restored.
+ *  - a camera action entry is { u32 size, fields }: fields can be added after its bytes.
+ * SZM_FORMAT goes up only for a change that isn't one of those: an older reader then refuses the file, and the
+ * section readers (in->format) read the older layouts into the current memfile_t. That's the migration: there's
+ * no separate converter. The sloperina string in the header is only for the log; nothing depends on it.
+ * Format 1 was only written by test builds before the above (refused). The game's version must match (GameData's
+ * binary and the camera's layout are that version's own). */
 #define SZM_MAGIC       "SZMF"
-#define SZM_FORMAT      1u
+#define SZM_FORMAT      2u
+#define SZM_FORMAT_MIN  2u   /* the oldest format this version reads */
+#define SZM_HEADER_MIN  164u /* format 2's header: every file's header is at least this */
 #define SZM_TAG(a, b, c, d) ((uint32_t)(a) | (uint32_t)(b) << 8 | (uint32_t)(c) << 16 | (uint32_t)(d) << 24)
 #define SZM_GAMEDATA    SZM_TAG('G', 'D', 'A', 'T') /* GameDataMgr's file 0 snapshot */
 #define SZM_SCALARS     SZM_TAG('S', 'S', 'C', 'L') /* session fields: { u32 hash, u8 kind, u8 width, u8 val[12] } */
 #define SZM_STRINGS     SZM_TAG('S', 'S', 'T', 'R') /* session strings: { u32 hash, char val[64] } */
 #define SZM_STATE       SZM_TAG('S', 'T', 'A', 'T') /* start point, Link, vitals, clock, age */
 #define SZM_CAMERA      SZM_TAG('C', 'A', 'M', 'R') /* the player camera and its AI action nodes */
-#define SZM_SCALAR_SIZE 18u
+#define SZM_SCALAR_SIZE 18u /* format 2's records; a file's own are at least this */
 #define SZM_STRING_SIZE (4u + GD_STR_LEN)
 #define SZM_FILE_MAX    (GD_MAX_SAVE_BUF + (1u << 20))
 #define SZM_SLACK       0x10000u /* room for every section but the snapshot and the session fields */
@@ -1808,7 +1820,7 @@ typedef struct {
   char     map[GD_STR_LEN];
   char     name[32];            /* as it was exported */
 } szm_header_t;
-_Static_assert(sizeof(szm_header_t) == 164, "szm_header_t is the file's own layout");
+_Static_assert(sizeof(szm_header_t) >= SZM_HEADER_MIN, "szm_header_t only grows");
 
 static uint32_t crc32(const uint8_t *p, uint32_t n)
 {
@@ -1859,11 +1871,33 @@ static void out_end(szm_out_t *o, uint32_t at)
   }
 }
 
+/* a u32 size, filled in by out_sized_end, for what follows */
+static uint32_t out_sized(szm_out_t *o)
+{
+  uint32_t at = o->n, zero = 0;
+  OUT(o, zero);
+  return at;
+}
+
+static void out_sized_end(szm_out_t *o, uint32_t at)
+{
+  if (o->ok) {
+    uint32_t size = o->n - at - 4;
+    memcpy(o->p + at, &size, 4);
+  }
+}
+
+static void out_blob(szm_out_t *o, const void *b, uint32_t n)
+{
+  OUT(o, n);
+  out_bytes(o, b, n);
+}
+
 /* the memfile as a .szm file's bytes (heap; the caller frees), or 0 */
 static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size_out)
 {
   uint32_t cap = (uint32_t)sizeof(szm_header_t) + st->save_size + st->s_scalar_count * SZM_SCALAR_SIZE +
-                 st->s_str_count * SZM_STRING_SIZE + CAMERA_ACTIONS * (6u + ACTION_BYTES) + SZM_SLACK;
+                 st->s_str_count * SZM_STRING_SIZE + CAMERA_ACTIONS * (16u + ACTION_BYTES) + SZM_SLACK;
   szm_out_t o = { alloc16(cap), (uint32_t)sizeof(szm_header_t), cap, true };
   if (!o.p)
     return 0;
@@ -1873,6 +1907,8 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
   out_end(&o, at);
 
   at = out_begin(&o, SZM_SCALARS);
+  uint32_t record = SZM_SCALAR_SIZE;
+  OUT(&o, record);
   for (uint32_t i = 0; i < st->s_scalar_count; i++) {
     const session_scalar_t *e = &st->s_scalars[i];
     OUT(&o, e->hash);
@@ -1883,6 +1919,8 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
   out_end(&o, at);
 
   at = out_begin(&o, SZM_STRINGS);
+  record = SZM_STRING_SIZE;
+  OUT(&o, record);
   for (uint32_t i = 0; i < st->s_str_count; i++) {
     OUT(&o, st->s_strs[i].hash);
     out_bytes(&o, st->s_strs[i].val, GD_STR_LEN);
@@ -1913,15 +1951,17 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
   uint8_t cam = (st->have_camera ? CAM_STATE : 0) | (st->have_component ? CAM_COMPONENT : 0);
   uint8_t actions = (uint8_t)(st->camera_actions > 0 ? st->camera_actions : 0);
   OUT(&o, cam);
-  out_bytes(&o, st->camera, CAMERA_BYTES);
-  out_bytes(&o, st->comp_head, CAMERA_COMP_HEAD);
-  out_bytes(&o, st->comp_turn, CAMERA_TURN_BYTES);
+  out_blob(&o, st->camera, CAMERA_BYTES);
+  out_blob(&o, st->comp_head, CAMERA_COMP_HEAD);
+  out_blob(&o, st->comp_turn, CAMERA_TURN_BYTES);
   OUT(&o, st->view);
   OUT(&o, actions);
   for (int i = 0; i < actions; i++) {
+    uint32_t entry = out_sized(&o);
     OUT(&o, st->action_vtable[i]);
     OUT(&o, st->action_node_idx[i]);
-    out_bytes(&o, st->action[i], ACTION_BYTES);
+    out_blob(&o, st->action[i], ACTION_BYTES);
+    out_sized_end(&o, entry);
   }
   out_end(&o, at);
 
@@ -1945,7 +1985,7 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
   return o.p;
 }
 
-typedef struct { const uint8_t *p; uint32_t n, at; } szm_in_t;
+typedef struct { const uint8_t *p; uint32_t n, at; uint16_t format; } szm_in_t;
 
 static bool in_bytes(szm_in_t *in, void *b, uint32_t n)
 {
@@ -1957,10 +1997,29 @@ static bool in_bytes(szm_in_t *in, void *b, uint32_t n)
 }
 #define IN(i, v) in_bytes((i), &(v), sizeof(v))
 
+/* { u32 size, bytes } as a reader of its own (the caller's moves past it) */
+static bool in_sized(szm_in_t *in, szm_in_t *sub)
+{
+  uint32_t n;
+  if (!IN(in, n) || in->n - in->at < n)
+    return false;
+  *sub = (szm_in_t){ in->p + in->at, n, 0, in->format };
+  in->at += n;
+  return true;
+}
+
+/* { u32 size, bytes } into want bytes: false if it's shorter (a longer one's rest is a later version's) */
+static bool in_blob(szm_in_t *in, void *b, uint32_t want)
+{
+  szm_in_t blob;
+  return in_sized(in, &blob) && in_bytes(&blob, b, want);
+}
+
 static bool szm_state(szm_in_t *in, memfile_t *st)
 {
   uint8_t flags = 0;
   int32_t child = -1;
+  /* format 2's fields: all needed. Fields added later go after them, each read as optional. */
   if (!in_bytes(in, st->start, GD_STR_LEN) || !IN(in, st->x) || !IN(in, st->y) || !IN(in, st->z) ||
       !IN(in, st->fx) || !IN(in, st->fz) || !IN(in, flags) || !IN(in, st->life) || !IN(in, st->magic) ||
       !IN(in, st->nayru_left) || !IN(in, st->nayru_total) || !IN(in, st->time) || !IN(in, child))
@@ -1979,26 +2038,38 @@ static bool szm_state(szm_in_t *in, memfile_t *st)
 static void szm_camera(szm_in_t *in, memfile_t *st)
 {
   uint8_t cam = 0, actions = 0;
-  if (!IN(in, cam) || !in_bytes(in, st->camera, CAMERA_BYTES) || !in_bytes(in, st->comp_head, CAMERA_COMP_HEAD) ||
-      !in_bytes(in, st->comp_turn, CAMERA_TURN_BYTES) || !IN(in, st->view) || !IN(in, actions) ||
+  if (!IN(in, cam) || !in_blob(in, st->camera, CAMERA_BYTES) || !in_blob(in, st->comp_head, CAMERA_COMP_HEAD) ||
+      !in_blob(in, st->comp_turn, CAMERA_TURN_BYTES) || !IN(in, st->view) || !IN(in, actions) ||
       actions > CAMERA_ACTIONS)
     return;
-  for (int i = 0; i < actions; i++)
-    if (!IN(in, st->action_vtable[i]) || !IN(in, st->action_node_idx[i]) ||
-        !in_bytes(in, st->action[i], ACTION_BYTES))
+  for (int i = 0; i < actions; i++) {
+    szm_in_t entry;
+    if (!in_sized(in, &entry) || !IN(&entry, st->action_vtable[i]) || !IN(&entry, st->action_node_idx[i]) ||
+        !in_blob(&entry, st->action[i], ACTION_BYTES))
       return;
+  }
   st->camera_actions = actions;
   st->have_camera = cam & CAM_STATE;
   st->have_component = cam & CAM_COMPONENT;
 }
 
+/* a record list's records: { u32 record size, records }; 0 records if it's not one this version can read */
+static uint32_t in_records(const uint8_t **p, uint32_t size, uint32_t min_record, uint32_t *record)
+{
+  if (size < 4)
+    return 0;
+  memcpy(record, *p, 4);
+  *p += 4;
+  return *record >= min_record ? (size - 4) / *record : 0;
+}
+
 static bool szm_scalars(const uint8_t *p, uint32_t size, memfile_t *st)
 {
-  uint32_t count = size / SZM_SCALAR_SIZE;
+  uint32_t record = 0, count = in_records(&p, size, SZM_SCALAR_SIZE, &record);
   st->s_scalars = alloc16((size_t)(count ? count : 1) * sizeof(session_scalar_t));
   if (!st->s_scalars)
     return false;
-  for (uint32_t i = 0; i < count; i++, p += SZM_SCALAR_SIZE) {
+  for (uint32_t i = 0; i < count; i++, p += record) {
     session_scalar_t e;
     memcpy(&e.hash, p, 4);
     e.kind = p[4];
@@ -2013,11 +2084,11 @@ static bool szm_scalars(const uint8_t *p, uint32_t size, memfile_t *st)
 
 static bool szm_strings(const uint8_t *p, uint32_t size, memfile_t *st)
 {
-  uint32_t count = size / SZM_STRING_SIZE;
+  uint32_t record = 0, count = in_records(&p, size, SZM_STRING_SIZE, &record);
   st->s_strs = alloc16((size_t)(count ? count : 1) * sizeof(session_str_t));
   if (!st->s_strs)
     return false;
-  for (uint32_t i = 0; i < count; i++, p += SZM_STRING_SIZE) {
+  for (uint32_t i = 0; i < count; i++, p += record) {
     session_str_t *e = &st->s_strs[st->s_str_count++];
     memcpy(&e->hash, p, 4);
     memcpy(e->val, p + 4, GD_STR_LEN);
@@ -2029,14 +2100,17 @@ static bool szm_strings(const uint8_t *p, uint32_t size, memfile_t *st)
 /* read a .szm file's bytes into st (zeroed; free_memfile it either way): 0, or why it can't be used */
 static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
 {
-  szm_header_t h;
-  if (n < sizeof(h))
+  szm_header_t h = { 0 };
+  if (n < SZM_HEADER_MIN)
     return "that file isn't a memfile";
-  memcpy(&h, p, sizeof(h));
-  if (!bytes_equal(h.magic, SZM_MAGIC, 4) || h.header_size < sizeof(h) || h.header_size > n)
+  memcpy(&h, p, SZM_HEADER_MIN);
+  if (!bytes_equal(h.magic, SZM_MAGIC, 4) || h.header_size < SZM_HEADER_MIN || h.header_size > n)
     return "that file isn't a memfile";
+  memcpy(&h, p, h.header_size < sizeof(h) ? h.header_size : sizeof(h)); /* an older header: the rest stays 0 */
   if (h.format > SZM_FORMAT)
     return "that memfile needs a newer sloperina";
+  if (h.format < SZM_FORMAT_MIN)
+    return "that memfile was made by a test build of sloperina";
   h.game[sizeof(h.game) - 1] = 0;
   if (!str_equal(h.game, z64hd_game->version))
     return "that memfile is for another version of the game";
@@ -2054,7 +2128,7 @@ static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
     if (size > n - at)
       return "that memfile is damaged";
     const uint8_t *body = p + at;
-    szm_in_t in = { body, size, 0 };
+    szm_in_t in = { body, size, 0, h.format };
     at += size;
     if (tag == SZM_GAMEDATA) {
       uint32_t magic = 0;

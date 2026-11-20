@@ -210,7 +210,7 @@ Under **return**: each of the 5 slots (showing `empty` or `<map> (child/adult)`)
 
 Memfiles also bring back Nayru's Love (on with its time left, or off) and Farore's Wind's warp point and sparkle.
 
-Memfiles are only written to or read from the SD card when you export or import one. A `.szm` file can be shared: it records the game version it was made on (1.0.0 or 1.1.1) and the sloperina version that wrote it, and is refused on another game version, by an older sloperina that can't read its format, or if it's damaged. A memfile holds a whole save's GameData, so loading someone else's replaces your current game's progress in memory, just as loading your own does: the game's save files are only changed if the game saves afterwards.
+Memfiles are only written to or read from the SD card when you export or import one. A `.szm` file can be shared: it records the game version it was made on (1.0.0 or 1.1.1) and the sloperina version that wrote it, and is refused on another game version, by an older sloperina that can't read its format, or if it's damaged. Newer sloperina versions read memfiles made by older ones; a part an older file doesn't have (or a newer file has that this version doesn't know) is left as the map sets it. Memfiles exported by the early test builds of this feature (format 1) can't be imported. A memfile holds a whole save's GameData, so loading someone else's replaces your current game's progress in memory, just as loading your own does: the game's save files are only changed if the game saves afterwards.
 
 Saving is refused during a cutscene, a game over, or while the game is paused (pause screen, map, item wheel); loading is refused during a cutscene or while paused. Loading during a game over is allowed (it reloads the map).
 

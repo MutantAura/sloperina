@@ -540,6 +540,7 @@ bool cct_teleport(const vec3f_t *p, const float *rot)
 }
 bool cct_clear_fall_distance(uintptr_t actor) { (void)actor; return true; }
 bool gear_reapply_now(void) { gear_calls++; return true; }
+bool cmd_pressed(command_t cmd) { (void)cmd; return false; }
 
 /* Mock Warp & Eventskip */
 static bool sim_warp_pending, sim_warp_requested, sim_warp_abandoned;
@@ -571,9 +572,10 @@ bool gd_game_paused(bool *is_pause, int32_t *pause_requests)
     *is_pause = sim_paused;
   if (pause_requests)
     *pause_requests = 0;
-  return true;
+  return sim_paused;
 }
 bool gd_game_pausing(void) { return false; }
+bool gd_game_menu_screen(void) { return true; }
 
 /* Mock Player Camera + AI Node Chain (cam_region holds cam_comp + optional scan-only node) */
 static uint8_t cam_holder_mem[0x60], cam_handle_entry[0x60];

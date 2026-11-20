@@ -20,6 +20,7 @@ void        memfile_set_slot(int s);
 bool        memfile_save(int s);
 bool        memfile_load(int s); /* true when the load started */
 void        memfile_frame(void); /* frame hook (after age_frame) */
+void        memfile_binds_frame(bool menu_open); /* the memfile commands (binds.h), before memfile_frame */
 bool        memfile_busy(void);
 void        memfile_slot_text(int s, char *buf, int len); /* for the memfiles menu */
 const char *memfile_status(void);                         /* current save/load line, or "" */

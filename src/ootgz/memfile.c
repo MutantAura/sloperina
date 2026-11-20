@@ -13,6 +13,7 @@
 #include "memfile.h"
 
 #include "age.h"
+#include "binds.h"
 #include "cct.h"
 #include "eventskip.h"
 #include "flagnames.h"
@@ -1287,13 +1288,8 @@ static void end_camera_guard(void)
 
 static bool in_cutscene(void) { return eventskip_known() && eventskip_running(); }
 
-/* the game's pause screen, map, or item wheel is up or opening (their pause is the game's own) */
-static bool game_paused(void)
-{
-  bool is_pause = false;
-  int32_t requests = 0;
-  return (gd_game_paused(&is_pause, &requests) && (is_pause || requests > 0)) || gd_game_pausing();
-}
+/* the game's pause screen or map is up or opening (the item wheel, which pauses with no menu screen, isn't) */
+static bool pause_menu_up(void) { return gd_game_pausing() || (gd_game_paused(0, 0) && gd_game_menu_screen()); }
 
 bool memfile_save(int s)
 {
@@ -1316,7 +1312,7 @@ bool memfile_save(int s)
     gfx_notice(game_over ? "can't save a memfile during a game over" : "can't save a memfile during a cutscene");
     return false;
   }
-  if (game_paused()) {
+  if (pause_menu_up()) {
     gfx_notice("can't save a memfile while the game is paused");
     return false;
   }
@@ -1432,7 +1428,7 @@ bool memfile_load(int s)
     gfx_notice("can't load a memfile during a cutscene");
     return false;
   }
-  if (game_paused()) {
+  if (pause_menu_up()) {
     gfx_notice("can't load a memfile while the game is paused");
     return false;
   }
@@ -2523,6 +2519,23 @@ bool memfile_import(int i, int s)
 int  memfile_slot(void) { return slot; }
 void memfile_set_slot(int s) { if (s >= 0 && s < MEMFILE_SLOTS) slot = s; }
 bool memfile_busy(void) { return phase != L_IDLE && !(phase == L_CAMERA && camera_guard); }
+
+void memfile_binds_frame(bool menu_open)
+{
+  if (menu_open)
+    return;
+  if (cmd_pressed(CMD_MEMFILE_SAVE)) {
+    memfile_save(slot);
+  } else if (cmd_pressed(CMD_MEMFILE_LOAD)) {
+    memfile_load(slot);
+  } else if (cmd_pressed(CMD_MEMFILE_NEXT) || cmd_pressed(CMD_MEMFILE_PREV)) {
+    int step = cmd_pressed(CMD_MEMFILE_NEXT) ? 1 : MEMFILE_SLOTS - 1;
+    slot = (slot + step) % MEMFILE_SLOTS;
+    char buf[64];
+    memfile_slot_text(slot, buf, sizeof(buf));
+    gfx_logf(TF("memfile slot %s"), buf);
+  }
+}
 
 void memfile_slot_text(int s, char *buf, int len)
 {

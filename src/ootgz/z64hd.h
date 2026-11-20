@@ -154,6 +154,16 @@ struct z64hd_build {
   uint32_t player_camera_state;
   uint32_t player_camera_snap;
   uint32_t player_camera_arrive;
+  /* Nayru's Love: the player component [[actor+0x270]+0x358] keeps the barrier's time left (float, frames) at
+   * +0x1634 and its length at +0x1638; a frame update turns the barrier on while the time left is above 0.
+   * nayru_reset(component) ends it like taking it off (time 0, its GameData mirror and an anim value too). */
+  uint32_t player_nayru_reset;
+  /* WarpMgr, the game component behind Farore's Wind's sparkle (made once, no static pointer to it): its vtable;
+   * slot 6 (mgr, change bits) re-reads WarpPoint_FaroreWind when told GameData changed (all-zero bits: everything) */
+  uint32_t vt_warp_mgr;
+  /* WarpMgr::place(mgr, x, y, z): moves the sparkle to a point (Link's feet; it adds the height), as casting
+   * does (AINB node OneShotFaroreWindSetActorPos) */
+  uint32_t warp_mgr_place;
   struct z64hd_link_path link_paths[5];
 };
 

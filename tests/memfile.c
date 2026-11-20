@@ -247,6 +247,10 @@ bool gd_set_bool(uint32_t hash, bool v)
   gd_obj_bool[i][0x16] = gd_obj_bool[i][0x17] = (uint8_t)(v ? 1 : 0);
   return true;
 }
+/* Farore's Wind's point isn't simulated: no WarpMgr is found in the tests */
+bool gd_get_vec3(uint32_t hash, float v[3]) { (void)hash; (void)v; return false; }
+uint64_t sys_tick(void) { return 0; }
+uint64_t sys_tick_freq(void) { return 1; } /* the Main.module scan only logs its time */
 const char *gd_str_index(uint32_t i) { return i < type_str.count ? gd_str_bufs[i] : 0; }
 const char *gd_get_str(uint32_t hash)
 {
@@ -387,6 +391,16 @@ bool age_warp_to_silent(const char *map, const char *start, bool have_pos)
 }
 bool eventskip_known(void) { return sim_ev_known; }
 bool eventskip_running(void) { return sim_ev_running; }
+static bool sim_paused;
+bool gd_game_paused(bool *is_pause, int32_t *pause_requests)
+{
+  if (is_pause)
+    *is_pause = sim_paused;
+  if (pause_requests)
+    *pause_requests = 0;
+  return true;
+}
+bool gd_game_pausing(void) { return false; }
 
 /* Mock Player Camera + AI Node Chain (cam_region holds cam_comp + optional scan-only node) */
 static uint8_t cam_holder_mem[0x60], cam_handle_entry[0x60];
@@ -986,7 +1000,7 @@ static void test_fast_same_map_reset_gimmick(void)
     assert(phase == L_IDLE && cam_arrive_calls == 1); /* in place: the target reset as on arrival, once */
     cam_arrive_calls = 0;
 
-    /* Verify fallback to full reload for all 5 disqualifiers */
+    /* Verify fallback to full reload for the 4 disqualifiers; a cutscene (why 1) refuses the load instead */
     for (int why = 0; why < 5; why++) {
       phase = L_IDLE;
       memfile_fast_reload = true;
@@ -1002,11 +1016,29 @@ static void test_fast_same_map_reset_gimmick(void)
       if (why == 2) memfile_fast_reload = false;
       if (why == 3) gd_set_bool(F_IS_GAME_OVER, true);
       if (why == 4) sim_hp = 0;
-      assert(memfile_load(0) && phase == L_WAIT_LOADING && warp_silent_calls == 1);
+      if (why == 1)
+        assert(!memfile_load(0) && phase == L_IDLE && warp_silent_calls == 0);
+      else
+        assert(memfile_load(0) && phase == L_WAIT_LOADING && warp_silent_calls == 1);
     }
+
+    /* refused outright: saving or loading while paused, saving in a cutscene or a game over */
+    phase = L_IDLE;
+    sim_ev_running = false;
+    gd_set_bool(F_IS_GAME_OVER, false);
+    sim_paused = true;
+    assert(!memfile_load(0) && phase == L_IDLE);
+    assert(!memfile_save(1) && phase == L_IDLE);
+    sim_paused = false;
+    sim_ev_running = true;
+    assert(!memfile_save(1) && phase == L_IDLE);
+    sim_ev_running = false;
+    gd_set_bool(F_IS_GAME_OVER, true);
+    assert(!memfile_save(1) && phase == L_IDLE);
+    gd_set_bool(F_IS_GAME_OVER, false);
   }
 
-  puts("PASS: fast same-map ResetGimmick (child & adult) and all 5 full-reload fallback guards");
+  puts("PASS: fast same-map ResetGimmick (child & adult), 4 full-reload fallbacks, cutscene/pause refusals");
 }
 
 /* --- Test 5: link_at frame delay, position tolerance, facing dot & fallback -------------------- */

@@ -151,6 +151,9 @@ struct z64hd_build {
    * set-step. 0: not known for this build (the story menu writes GameData only) */
   uint32_t challenge_mgr_ptr;
   uint32_t challenge_set_step;
+  /* SetSavedSelectedChallenge's work (node): selects the quest GameData names (UInt 0x2029D3D8) in the manager, or
+   * none; it only marks node+0x18 done besides. A save load runs it (FINDINGS 9.19). 0: not known for this build */
+  uint32_t challenge_select_saved;
   struct z64hd_link_path link_paths[5];
 };
 

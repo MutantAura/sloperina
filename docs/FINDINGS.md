@@ -1567,6 +1567,9 @@ reads every slot's caption once, at boot, and keeps it.
 
 ### 9.18 Finding objects with no static pointer: a heap walk over frames
 - Heap regions are `svcQueryMemory` type 5, read-write (about 9.4 GB under the emulator). Reading all of them in one
-  frame took ~3.3 s; memfile.c reads 8 MB a frame from when Link first exists, finishing in ~17–21 s with no hitch, and
-  looks for the `Main.module` file (16-aligned) and WarpMgr (8-aligned) in the same pass. A pass that stepped 16 bytes
-  missed WarpMgr.
+  frame took ~3.3 s. 8 MB a frame from when Link first exists finished in ~17–26 s but was felt as lower performance
+  after boot, so memfile.c now walks only once memfiles are used (the menu shown, a save, an import) and stops each
+  frame after 1 ms (logging its MB, frames, average and largest ms a frame). It looks for the `Main.module` file
+  (16-aligned) and WarpMgr (8-aligned) in the same pass. A pass that stepped 16 bytes missed WarpMgr.
+- Open: both are probably reachable from main's data (whatever loaded/owns them); a pointer chain would replace the
+  walk entirely.

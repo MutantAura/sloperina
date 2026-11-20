@@ -138,6 +138,8 @@ static const struct z64hd_build z64hd_builds[] = {
     .challenge_set_step = 0x2CA16F0,
     .gd_request_save = 0x36FED60,
     .gd_request_load = 0x36FEDD0,
+    /* the slot at navi_scene_ptr holds main+this (in both builds); WarpMgr's getter main+0x27C2AD0 */
+    .scene_mgr_ptr = 0x4E271E8,
     .wm_ptr = 0x4C18BF0,
     .wm_set_time = 0x33F1580,
     .wm_on_save = 0x33F1410,

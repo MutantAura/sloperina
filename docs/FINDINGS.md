@@ -1697,9 +1697,20 @@ and **safety flags** watches read it (`safety.c`).
   - **Bug:** node 12's transition goes to node 15 alone, not the root, so afterwards the hold counter never runs and
     the item wheel can't be opened (`Sequence_ShortCutOpenHoldCounter` stays 0) until something leaves Main: a map change
     (`ChangeBancOnMain` transitions to node 23), or a menu or event (they end Main, which restarts from its root).
-  - Fix (memfile.c): the game keeps the file loaded. Found on the heap by its first `0x40` bytes, the transition plug's
-    `s32` node index at file `+0x1204` (`15`, followed by transition entry `7`) is set to `23`. The runtime reads it from
-    there: patching it fixes the wheel.
+  - Fix (memfile.c): the game keeps the file loaded. Before each fast load it's found through the Sequence component
+    (below) by its first `0x40` bytes, and the transition plug's `s32` node index at file `+0x1204` (`15`, followed by
+    transition entry `7`) is set to `23`. The runtime reads it from there: patching it fixes the wheel.
+- **Where the file is** (static, the same offsets in both builds; 1.0.0 addresses, 1.1.1 in brackets):
+  - Sequence `C = [[S+0x58]+0]` (§9.3; vtable [`main+0x4C72AD8`], update slot 6 `main+0x3B60410` [`0x3BBE020`]).
+  - `X = [C+0xE8]`: its AI controllers' holders, `u32` count at `+0`, array at `+8` (made at `main+0x3B60224`
+    [`0x3BBDE34`], filled by the loader `main+0x3A59460` [`0x3AB8E90`]).
+  - A holder's controller is `[holder+0x18]` (the loader passes `holder+0x18` to the controller setup `0x382D0`
+    [1.1.1], and the setup's caller then stores the component at `[[holder]+0x18]+0x1F0`).
+  - The controller lists the AINB definitions it loaded, the root's and its modules': `u32` count at `+0x168`, array at
+    `+0x170` (stored at `main+0x7B5E0` [`0x38480`]; the loader's cap is `0x15E`).
+  - A definition (vtable [`main+0x4C26A98`], `0x68` bytes, `[resource+0x28]`) holds the file's bytes at `+0x10`
+    (init `main+0x82C374` [`0x840D60`]: `str x8,[x0,#0x10]; ldr w3,[x8,#4]; cmp w3,#0x408`).
+  - No name is kept with a definition ("Main.module" isn't in main): it's told apart by its header.
 - **UpdateShortCutOpenHoldFrameCounter:** on L/R pressed with the shortcut openable (`SeqQueryIsOpenableShortCut`)
   it sets `UI_IsNeedOpenShortCut`, zeroes the counter and sets `UI_CurrentShortCutCategory` = AssignableItem; while L/R
   are held it adds the frame step rate to the counter, and a counter in `[1, 9999]` sets `UI_IsNeedOpenShortCut` too.
@@ -1728,8 +1739,11 @@ and **safety flags** watches read it (`safety.c`).
   `0xB09FBD99` (String64), `LocationName` `0xEA129426`, `Pos` `0xBEB37B31` (Vector3, Link's feet when cast). Setting it
   (AINB node, `main+0x28E2D70`) writes all members at once; casting and arrival read them live.
 - The sparkle is actor `FaroreWindWarpPoint` (no AI: an effect and links), placed by **WarpMgr**, a game component
-  made once (factory `main+0xE0FE10`, constructor `main+0xE0FE60`, registered as `WarpMgr` at `main+0x4DFC950`; no static
-  pointer to the instance). Vtable `main+0x4B3CFF8` [`0x4BA2248`]; it's `0xD0` bytes, 8-aligned, with a listener vtable
+  made once (factory `main+0xE0FE10`, constructor `main+0xE0FE60`, registered as `WarpMgr` at `main+0x4DFC950`). It's
+  the scene's component 22 (§9.3): the game's getter `main+0x27C2AD0` [`0x28147E0`] reads `[[[M+0x1F0]+0x58]+0xB0]`
+  after checking the count at `+0x50` is at least 23, with `M = [main+0x4E271E8]` [`0x4E97648`] (the scene manager;
+  the GOT slot at `navi_scene_ptr` holds that address in both builds). Its caller `main+0x2886F30` [`0x28D94D0`]
+  then calls `place`. Vtable `main+0x4B3CFF8` [`0x4BA2248`]; it's `0xD0` bytes, 8-aligned, with a listener vtable
   at `+0xB8`.
   - `WarpMgr::place(mgr, x, y, z)` `main+0x3251430` [`0x32B0750`] (from `OneShotFaroreWindSetActorPos`,
     `main+0x2886F98`): writes the sparkle's transform at `+0x4C..+0x7B` (y + 2, or + 1.5 as a child) and sets `+0xB0`
@@ -1739,7 +1753,7 @@ and **safety flags** watches read it (`safety.c`).
     transform at `+0x7C`, or hides it, but doesn't move an existing sparkle.
 - A GameData restore doesn't notify listeners, and ResetGimmick keeps a sparkle cast in the current visit (one placed by
   the map load is rebuilt from GameData), so after a fast load it stays where it was last cast. memfile.c finds WarpMgr
-  by its vtable on the heap and calls `place` with the restored point.
+  through that chain (checking its vtable) and calls `place` with the restored point.
 
 ### 9.17 Link's actions: the BSA component and climbing (1.0.0; 1.1.1 in brackets; climbing not solved)
 - The player AI asks for actions by **verb** through the BSA component `[[actor+0x270]+0x188]` (same offset in both
@@ -1759,11 +1773,10 @@ and **safety flags** watches read it (`safety.c`).
   `+0x150C`/`+0x1514`. Events can start Link climbing (event setting `IsPlayerEventStartWithClimb`, parsed at
   `main+0x60E8F4` into byte `+0xBB`): a lead.
 
-### 9.18 Finding objects with no static pointer: a heap walk over frames
+### 9.18 Finding objects with no static pointer: a heap walk over frames (replaced)
 - Heap regions are `svcQueryMemory` type 5, read-write (about 9.4 GB under the emulator). Reading all of them in one
-  frame took ~3.3 s. 8 MB a frame from when Link first exists finished in ~17–26 s but was felt as lower performance
-  after boot, so memfile.c now walks only once memfiles are used (the menu shown, a save, an import) and stops each
-  frame after 1 ms (logging its MB, frames, average and largest ms a frame). It looks for the `Main.module` file
-  (16-aligned) and WarpMgr (8-aligned) in the same pass. A pass that stepped 16 bytes missed WarpMgr.
-- Open: both are probably reachable from main's data (whatever loaded/owns them); a pointer chain would replace the
-  walk entirely.
+  frame took ~3.3 s; 8 MB a frame from when Link first exists finished in ~17–26 s but was felt as lower performance
+  after boot, and 1 ms a frame took about a minute. memfile.c used such a walk to find the `Main.module` file
+  (16-aligned) and WarpMgr (8-aligned; a pass that stepped 16 bytes missed it).
+- Both are now reached through the scene's components instead (§9.14, §9.16): no walk, nothing to wait for after boot.
+  levitate.c's search for Link's physics record (§5.19) is still a walk.

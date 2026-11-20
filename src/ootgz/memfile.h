@@ -20,7 +20,6 @@ bool        memfile_save(int s);
 bool        memfile_load(int s); /* true when the load started */
 void        memfile_frame(void); /* frame hook (after age_frame) */
 bool        memfile_busy(void);
-void        memfile_scan_start(void); /* memfiles are in use: start the background walk the fast load needs */
 void        memfile_slot_text(int s, char *buf, int len); /* for the memfiles menu */
 const char *memfile_status(void);                         /* current save/load line, or "" */
 

@@ -43,6 +43,7 @@
 #include "savepos.h"
 #include "ragdoll.h"
 #include "tpose.h"
+#include "hsstore.h"
 #include "eventskip.h"
 #include "position.h"
 #include "lock.h"
@@ -405,6 +406,7 @@ static void frame(void)
   watches_frame(menu_current != 0);
   levitate_frame(menu_current != 0);
   savepos_frame();
+  hsstore_frame();
   ragdoll_frame(menu_current != 0);
   tpose_frame();
   position_frame(menu_current != 0);

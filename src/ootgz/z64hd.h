@@ -97,6 +97,9 @@ struct z64hd_build {
   uint32_t vt_autosave;
   /* GameSafetyMgr's vtable (safety.c, FINDINGS 9.14): the scene component holding the applied safety setting */
   uint32_t vt_safety_mgr;
+  /* the vtable a bomb's medium hit leaves in Link's hit component (hsstore.c, FINDINGS 9.16): link > force hookshot
+   * storage writes that hit. 0 where the trick doesn't work, which hides the option */
+  uint32_t hs_hit_vt;
   /* bool (actor, const float pos[3], float out[3], const void *riding, bool, int): the load's search for a safe
    * place round SavePos (FINDINGS 9.7); 0: not known for this build */
   uint32_t safety_search;

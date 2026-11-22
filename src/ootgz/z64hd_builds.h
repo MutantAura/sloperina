@@ -128,6 +128,10 @@ static const struct z64hd_build z64hd_builds[] = {
     .vt_load_list = 0x4B89340,
     .load_list_hide_rows = 0x3710A70,
     .vt_save_load_confirm = 0x4B89FE0,
+    /* the quest manager (FINDINGS 9.13): its GOT slot 0x4C19D48 through the code that loads it (10 of 10 agreeing),
+     * the set-step by masked signature (unique over 64 words) */
+    .challenge_mgr_ptr = 0x4DB9998,
+    .challenge_set_step = 0x2CA16F0,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -204,6 +208,8 @@ static const struct z64hd_build z64hd_builds[] = {
     .vt_load_list = 0x4BEEBA0,
     .load_list_hide_rows = 0x3773490,
     .vt_save_load_confirm = 0x4BEF840,
+    .challenge_mgr_ptr = 0x4E29950,
+    .challenge_set_step = 0x2CF54A0,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

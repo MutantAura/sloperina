@@ -1079,7 +1079,7 @@ point.
     near candidates, while rays and sweeps that start inside geometry pass through the wall behind it.
 - **Not known:** what `main+0xA47390` checks. GameSafetyMgr (`main+0x32857B0`, component 28) handles the story's
   NoEscape areas (`StartPos_` anchors; 28 entries in RSDB `GameSafetySetting.Product.111`); what it keeps is in
-  §9.12.
+  §9.14.
 
 **The mod's preview** (`savepos.c`, scene > save position):
 - AutoSaveMgr is found among the current scene's components by its update (`main+0x32762B0`) in its vtable; slots A
@@ -1389,36 +1389,6 @@ reads every slot's caption once, at boot, and keeps it.
   `+0x2C0` 1 when idle; the Enum after B; `main+0x3773490` empties the rows and slot 98 alone brings them back
   (before trying it with a reload), with the cursor where it was and A loading that row; a breakpoint at
   `main+0x33CC800` is hit for each visible row after the refresh with the getter returning true.
-- **1.0.0:** not looked at (its exefs `main` is compressed in a way the tools here don't read). Find the same
-  addresses from `SeqOneshotRequestLoadAndSerializeCaption`: the function returning the string is slot 19 of the
-  node's vtable, slot 39 is the work, whose first `adrp`/`ldr` gives the instance's GOT entry and whose `bl` is
-  `F6DA40`'s match; the `b` at its end leads to `BB0010`'s match.
-
-### 9.12 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game)
-What a minigame, a boss fight or a story section turns off (saving, warping, ...) is one **GameSafetySetting**: a row
-of RSDB `GameSafetySetting.Product.111` (28 rows), named by a Challenge (`GameSafetySetting`, or a step's
-`ReplaceGameSafetySetting`). GameSafetyMgr, the scene's component 28 (§9.3), holds the one applied. The **safety**
-and **safety flags** watches read it (`safety.c`).
-- **The manager:** vtable `main+0x4BA1058`. Slot 8 (`main+0x3286630`) is its name getter (`adrp x0; add x0; ret`,
-  giving `GameSafetyMgr`; the only function in main that returns that string), slot 6 is `main+0x32857B0`. The mod
-  finds the component by that name instead of by address, so it needs nothing per build but the scene manager.
-- **`+0x54` (u32): the applied setting's `NameHash`**, MurmurHash3_32 (seed 0) of the row's name: the file name of
-  `Work/Game/GameSafetySetting/<name>.game__GameSafetySetting.gyml`, not the whole path. All 28 names are in
-  `safety.c`; the test (`tests/safety.c`) hashes each one.
-- **`+0x50` (u16): that setting's switches, packed** by `main+0x3285B50`..`0x3285C40`, which looks the row up by the
-  hash. Bit 0: a Challenge entered an `IsMiniGame: true` step (`main+0x2CF1160` sets it and writes the hash). Bit 3:
-  a safety section is active. Then the row's fields: bit 5 `IsCheckSafetyArea`, 6 `IsDisableSave`, 7 `IsDisableWarp`,
-  8 `IsDisableAutoPlacement`, 9 `IsDisableOpenTreasureBox`, 10 `IsDisableGrab`, 11 `IsDisableBoot`,
-  12 `IsDisableTimeProgress`, 13 `DoSaveWhenEnd`, 14 `IsDisableLoadingPause`, 15 `IsNoDispErrorForTemporarySave`.
-- **A field left out of a row has its default, and several defaults are true.** `IsDisableSave` is (read at
-  `main+0x5A2288`), which is why only `Common_DisableWarp` writes `IsDisableSave: false`.
-- **In game (1.1.1):** with a `MiniGame_TimeStop` challenge running, `+0x54` read `0xFAE899F0` (that name's hash)
-  and `+0x50` read `0x14C8`: bits 3, 6, 7, 10 and 12. The row sets `IsDisableTimeProgress: true` and
-  `DoSaveWhenEnd`, `IsCheckSafetyArea` and `IsDisableBoot` to false and leaves the rest out, so `IsDisableWarp` and
-  `IsDisableGrab` default to true as well. The manager's first word was `main+0x4BA1058`.
-- **Not known:** bits 1, 2 and 4; why bit 0 was clear in that read (the step may not have been an `IsMiniGame` one);
-  what the two values hold when no section is active; 1.0.0 (its scene manager isn't known, so the watches show
-  N/A there).
 - **1.0.0 support (19 November 2026):** the extracted base executable was compared directly with v131072.
   Its `SeqOneshotRequestLoadAndSerializeCaption` work function at `0xF40FC0` calls `0xF41000` and
   loads the CaptionMgr through GOT `0x4C1B9B0`, whose stored address is `0x4E08A40`.
@@ -1518,3 +1488,32 @@ Tree. Writing the Enum alone, as before, left the manager at Ready: no scene, an
   (v131072's loads of its GOT slot matched, 10 of 10 agreeing); the set-step `main+0x2CA16F0` (v131072's matched by
   masked signature, unique over 64 words; leo gives the same address, and #43 found both separately). The set-step's
   code is the same, so the manager's fields it uses are at the same offsets.
+
+### 9.14 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game)
+What a minigame, a boss fight or a story section turns off (saving, warping, ...) is one **GameSafetySetting**: a row
+of RSDB `GameSafetySetting.Product.111` (28 rows), named by a Challenge (`GameSafetySetting`, or a step's
+`ReplaceGameSafetySetting`). GameSafetyMgr, the scene's component 28 (§9.3), holds the one applied. The **safety**
+and **safety flags** watches read it (`safety.c`).
+- **The manager:** vtable `main+0x4BA1058`. Slot 8 (`main+0x3286630`) is its name getter (`adrp x0; add x0; ret`,
+  giving `GameSafetyMgr`; the only function in main that returns that string), slot 6 is `main+0x32857B0`. The mod
+  finds the component by this vtable (`vt_safety_mgr`), entry 28 first, as it finds AutoSaveMgr (§9.7).
+- **`+0x54` (u32): the applied setting's `NameHash`**, MurmurHash3_32 (seed 0) of the row's name: the file name of
+  `Work/Game/GameSafetySetting/<name>.game__GameSafetySetting.gyml`, not the whole path. All 28 names are in
+  `safety.c`; the test (`tests/safety.c`) hashes each one.
+- **`+0x50` (u16): that setting's switches, packed** by `main+0x3285B50`..`0x3285C40`, which looks the row up by the
+  hash. Bit 0: a Challenge entered an `IsMiniGame: true` step (`main+0x2CF1160` sets it and writes the hash). Bit 3:
+  a safety section is active. Then the row's fields: bit 5 `IsCheckSafetyArea`, 6 `IsDisableSave`, 7 `IsDisableWarp`,
+  8 `IsDisableAutoPlacement`, 9 `IsDisableOpenTreasureBox`, 10 `IsDisableGrab`, 11 `IsDisableBoot`,
+  12 `IsDisableTimeProgress`, 13 `DoSaveWhenEnd`, 14 `IsDisableLoadingPause`, 15 `IsNoDispErrorForTemporarySave`.
+- **A field left out of a row has its default, and several defaults are true.** `IsDisableSave` is (read at
+  `main+0x5A2288`), which is why only `Common_DisableWarp` writes `IsDisableSave: false`.
+- **In game (1.1.1):** with a `MiniGame_TimeStop` challenge running, `+0x54` read `0xFAE899F0` (that name's hash)
+  and `+0x50` read `0x14C8`: bits 3, 6, 7, 10 and 12. The row sets `IsDisableTimeProgress: true` and
+  `DoSaveWhenEnd`, `IsCheckSafetyArea` and `IsDisableBoot` to false and leaves the rest out, so `IsDisableWarp` and
+  `IsDisableGrab` default to true as well. The manager's first word was `main+0x4BA1058`.
+- **Not known:** bits 1, 2 and 4; why bit 0 was clear in that read (the step may not have been an `IsMiniGame` one);
+  what the two values hold when no section is active.
+- **1.0.0** (22nd November 2026, from a memory dump): the vtable is `main+0x4B3BE08` (v131072's matched: its entries
+  are v131072's 0x5F080 lower, and slot 8 returns `GameSafetyMgr`). The packing (`0x3226AD0`) and the minigame bit's
+  setter (`0x2C9D3B0`) match v131072's whole but for relocated addresses and another object's fields, so `+0x50` and
+  `+0x54` are the same.

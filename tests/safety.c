@@ -49,13 +49,9 @@ void log_printf(const char *fmt, ...) { (void)fmt; }
 
 static void put32(uintptr_t addr, uint32_t value) { memcpy((void *)addr, &value, 4); }
 static void put64(uintptr_t addr, uint64_t value) { memcpy((void *)addr, &value, 8); }
-static void put_text(uintptr_t addr, const char *text) { memcpy((void *)addr, text, strlen(text) + 1); }
 
 /* the layout */
 #define SCENE_MGR_SLOT 0x100 /* main+: the scene manager's pointer */
-#define STR_BEFORE 0x800     /* a name on the page before the code (adrp backwards) */
-#define CODE 0x1000
-#define STR_AFTER 0x2010     /* a name on the page after it */
 #define SCENE_MGR 0x3000
 #define SCENE_A 0x3400
 #define SCENE_B 0x3600
@@ -66,26 +62,6 @@ static void put_text(uintptr_t addr, const char *text) { memcpy((void *)addr, te
 #define VT_SAFETY 0x6000
 #define VT_OTHER 0x6200
 #define VT_PLAIN 0x6400
-#define FN_SAFETY (CODE + 0x00)
-#define FN_OTHER (CODE + 0x10)
-#define FN_PLAIN (CODE + 0x20)
-#define FN_NEARLY (CODE + 0x30)
-
-/* adrp x0, <page of target>; add x0, x0, #<offset in it>; ret */
-static void put_getter(uintptr_t fn, uintptr_t target)
-{
-  int64_t pages = (int64_t)(target >> 12) - (int64_t)(fn >> 12);
-  uint32_t imm = (uint32_t)pages & 0x1FFFFF;
-  put32(fn, 0x90000000u | (imm & 3) << 29 | (imm >> 2) << 5);
-  put32(fn + 4, 0x91000000u | (uint32_t)(target & 0xFFF) << 10);
-  put32(fn + 8, 0xD65F03C0u);
-}
-
-static void put_vtable(uint32_t vtable, uint32_t name_fn, int name_slot)
-{
-  for (int slot = 0; slot < 32; slot++)
-    put64(AT(vtable + slot * 8), AT(slot == name_slot ? name_fn : FN_PLAIN));
-}
 
 /* a scene of `count` components, all plain but for GameSafetyMgr at `entry` (-1: none) */
 static uintptr_t put_scene(uint32_t scene, uint32_t count, int entry)
@@ -110,18 +86,8 @@ static void setup(void)
   hole_size = 0;
   z64hd_main = AT(0);
   build.scene_mgr_ptr = SCENE_MGR_SLOT;
+  build.vt_safety_mgr = VT_SAFETY; /* main+: GameSafetyMgr's vtable */
   put64(AT(SCENE_MGR_SLOT), AT(SCENE_MGR));
-  put_text(AT(STR_AFTER), "GameSafetyMgr");
-  put_text(AT(STR_BEFORE), "AutoSaveMgr");
-  put_text(AT(STR_BEFORE + 0x20), "GameSafetyMgrEx"); /* a longer name that starts the same */
-  put_getter(AT(FN_SAFETY), AT(STR_AFTER));
-  put_getter(AT(FN_OTHER), AT(STR_BEFORE));
-  put_getter(AT(FN_NEARLY), AT(STR_BEFORE + 0x20));
-  put32(AT(FN_PLAIN), 0xD503201Fu); /* nop; ret: not a name getter */
-  put32(AT(FN_PLAIN + 4), 0xD65F03C0u);
-  put_vtable(VT_SAFETY, FN_SAFETY, 8);
-  put_vtable(VT_OTHER, FN_OTHER, 8);
-  put_vtable(VT_PLAIN, FN_PLAIN, -1);
 }
 
 static uint32_t murmur3(const char *text)
@@ -204,6 +170,11 @@ static void test_find(void)
   put_scene(SCENE_A, 41, 28);
   reads = 0;
   assert(!state(&flags, &hash) && !safety_addresses(&flags_addr, &hash_addr) && reads == 0);
+  setup();
+  build.vt_safety_mgr = 0; /* or whose GameSafetyMgr vtable isn't */
+  put_scene(SCENE_A, 41, 28);
+  reads = 0;
+  assert(!state(&flags, &hash) && reads == 0);
 
   setup();
   uintptr_t mgr = put_scene(SCENE_A, 41, 28);
@@ -247,8 +218,7 @@ static void test_absent(void)
 
   setup();
   put_scene(SCENE_B, 41, -1);
-  put64(OBJECT(28), AT(VT_OTHER)); /* a different component's name */
-  put_vtable(VT_OTHER, FN_NEARLY, 8);            /* and one whose name only starts the same */
+  put64(OBJECT(28), AT(VT_OTHER)); /* a different component at entry 28 */
   assert(!state(&flags, &hash));
 
   setup();
@@ -265,15 +235,10 @@ static void test_absent(void)
   put64(AT(SCENE_B + 0x58), 0xDEAD0000); /* the components aren't mapped */
   assert(!state(&flags, &hash));
   setup();
-  put_scene(SCENE_A, 41, 28);
-  hole = AT(STR_AFTER & ~0xFFFu), hole_size = 0x1000; /* the name's page isn't readable */
+  put_scene(SCENE_A, 41, 28); /* a scene not looked through just before */
+  hole = OBJECT(28), hole_size = OBJECT_SIZE; /* the component isn't readable */
   assert(!state(&flags, &hash));
-  setup();
-  mgr = put_scene(SCENE_B, 41, 28);
-  put_vtable(VT_SAFETY, FN_SAFETY, 24); /* the getter past the slots looked at */
-  assert(!state(&flags, &hash));
-  (void)mgr;
-  puts("PASS: absent, retried later, other names, null/unmapped/implausible chains");
+  puts("PASS: absent, retried later, another component, null/unmapped/implausible chains");
 }
 
 int main(void)

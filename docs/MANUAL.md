@@ -258,7 +258,7 @@ Angles: **deg**, **hex** (the game's 16-bit angle, 0x4000 = 90°), **s16**, **ra
 Timer: **m:s**, **sec**. Stick: **%**, **raw**. Safety flags: **hex**, **flags** (a word for each one set).
 Memory watches: **u8 s8 x8 u16 s16 x16 u32 s32 x32 f32 x64**.
 
-**safety** and **safety flags** (1.1.1 only; **N/A** on 1.0.0 and while there's no scene) read the game's
+**safety** and **safety flags** (**N/A** while there's no scene) read the game's
 GameSafetyMgr: what a minigame, a boss fight or a story section is stopping you from doing right now. **safety** is
 the name of the setting the game has applied, such as `MiniGame_TimeStop` or `SageOfFire` (its hash, if it isn't one
 of the game's 28). **safety flags** is that setting's switches, as the game packs them:

@@ -45,7 +45,7 @@ The game and SD filesystem are mocked; this does not verify the game's setter/ch
 
 `python tests/run_safety.py --cc C:/msys64/mingw64/bin/gcc.exe` runs `safety.c` over a mocked main,
 scene and GameSafetyMgr. It checks that each of the 28 setting names hashes to its table entry, the
-flag words, finding the manager by its name getter at entry 28 and elsewhere, scene changes, and
+flag words, finding the manager by its vtable at entry 28 and elsewhere, scene changes, and
 that missing, unmapped or implausible chains give N/A. It does not read the game.
 
 ### Levitation host tests

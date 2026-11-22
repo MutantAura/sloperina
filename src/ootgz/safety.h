@@ -1,4 +1,4 @@
-/* The game's safety section: which GameSafetySetting GameSafetyMgr has applied, and its flags (FINDINGS 9.12).
+/* The game's safety section: which GameSafetySetting GameSafetyMgr has applied, and its flags (FINDINGS 9.14).
  * Read-only. */
 #ifndef SAFETY_H
 #define SAFETY_H

@@ -79,9 +79,19 @@ $(PATCHES): $(OBJDIR)/host/mkips | $(BINDIR)
 $(OBJDIR) $(BINDIR):
 	mkdir -p $@
 
-$(OBJDIR)/host/mkips: $(HOSTDIR)/mkips.c $(SRCDIR)/z64hd.h $(SRCDIR)/z64hd_builds.h $(SRCDIR)/ootgz_version.h
+# every u32 member of struct z64hd_build, as F(name): mkips checks each build fills them all (z64hd.h)
+$(OBJDIR)/host/z64hd_fields.h: $(SRCDIR)/z64hd.h
 	mkdir -p $(@D)
-	$(HOSTCC) -std=c11 -O2 -Wall -o $@ $<
+	awk '/^struct z64hd_build \{/ { on = 1; next } on && /^\};/ { on = 0 } \
+	  on && match($$0, /^[ \t]*uint32_t[ \t]+[a-z0-9_]+;/) { \
+	    f = substr($$0, RSTART, RLENGTH); sub(/^[ \t]*uint32_t[ \t]+/, "", f); sub(/;$$/, "", f); \
+	    printf "F(%s)\n", f; n++ } \
+	  END { if (n < 10) exit 1 }' $< > $@.tmp && mv $@.tmp $@
+
+$(OBJDIR)/host/mkips: $(HOSTDIR)/mkips.c $(OBJDIR)/host/z64hd_fields.h $(SRCDIR)/z64hd.h $(SRCDIR)/z64hd_builds.h \
+                      $(SRCDIR)/ootgz_version.h
+	mkdir -p $(@D)
+	$(HOSTCC) -std=c11 -O2 -Wall -I$(OBJDIR)/host -o $@ $<
 
 # the PC preview of the game's-style panels (src/host/nativepreview.c): run it with the game's RomFS folder
 NATIVEUI_SRC = $(HOSTDIR)/nativepreview.c $(HOSTDIR)/gpuui_stub.c $(SRCDIR)/gamefile.c $(SRCDIR)/zstd.c $(SRCDIR)/gamefont.c $(SRCDIR)/nativeui.c

@@ -1,5 +1,8 @@
 #include "sys.h"
 
+#include "link.h"
+#include "z64hd.h"
+
 #define PREFIX "sloperinaGZ: " /* on each line of the emulator's / Atmosphère's log */
 #define PREFIX_LEN (sizeof(PREFIX) - 1)
 
@@ -66,8 +69,6 @@ uint64_t sys_tick_freq(void)
 
 #define NULL_PAGE_END    0x1000 /* never mapped: anything below is a bad pointer */
 #define MEM_TYPE_UNMAPPED 0
-#define MEM_ATTR_LOCKED   0x1    /* locked/borrowed */
-#define MAX_REGIONS      100000 /* stops a region walk that never ends */
 
 /* The regions last queried (size 0: none), forgotten each frame (sys_frame). A frame's reads go back and
  * forth between a few of them (main's data, the heap, the module's own), so one remembered region was asked
@@ -120,22 +121,6 @@ bool sys_read32(uintptr_t addr, uint32_t *out)
   return true;
 }
 
-void sys_regions(uint32_t perm, void (*fn)(uintptr_t, size_t, void *), void *ctx)
-{
-  sys_meminfo_t region;
-  uint64_t addr = 0;
-  for (int guard = 0; guard < MAX_REGIONS; guard++) {
-    if (sys_query_memory(&region, addr) != 0 || region.size == 0)
-      break;
-    if (region.type != MEM_TYPE_UNMAPPED && (region.perm & perm) == perm && !(region.attr & MEM_ATTR_LOCKED))
-      fn((uintptr_t)region.addr, (size_t)region.size, ctx);
-    uint64_t next = region.addr + region.size;
-    if (next <= addr)
-      break;
-    addr = next;
-  }
-}
-
 /* --- logging --------------------------------------------------------------------------- */
 
 /* the last LOG_LINES lines, for the menu's log view; log_head is the newest */
@@ -161,13 +146,15 @@ static void file_lock_release(void)
   __atomic_clear(&file_lock, __ATOMIC_RELEASE);
 }
 
-/* Queue one line for the log file, with a "[seconds.ms] " stamp. */
+/* Queue one line for the log file, with a "[seconds.ms f<frame>] " stamp: the time since the game started and
+ * the game's frame counter (0 until the game's build is known), so a line can be matched to a frame. */
 static void file_pending_add(const char *text, size_t len)
 {
   file_lock_take();
   uint64_t ms = sys_tick() * 1000 / sys_tick_freq();
-  char stamp[24];
-  int stamp_len = snprintf(stamp, sizeof(stamp), "[%5u.%03u] ", (unsigned)(ms / 1000), (unsigned)(ms % 1000));
+  char stamp[40];
+  unsigned frame = z64hd_game ? (unsigned)frame_counter() : 0;
+  int stamp_len = snprintf(stamp, sizeof(stamp), "[%5u.%03u f%u] ", (unsigned)(ms / 1000), (unsigned)(ms % 1000), frame);
   if (stamp_len > 0 && file_pending_len + (size_t)stamp_len + len + 1 < FILE_PENDING_SIZE) {
     memcpy(file_pending + file_pending_len, stamp, (size_t)stamp_len);
     memcpy(file_pending + file_pending_len + stamp_len, text, len);

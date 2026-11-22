@@ -176,7 +176,7 @@ static bool get_lock_z(menu_item_t *it) { return lock_is_set(LOCK_Z); }
 static void set_lock_axis(lock_axis_t axis, bool on)
 {
   if (!lock_available()) {
-    gfx_notice("locks need the 1.1.1 game");
+    gfx_notice("locks aren't available on this game version");
     return;
   }
   lock_set(axis, on);

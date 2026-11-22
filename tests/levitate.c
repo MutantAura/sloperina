@@ -5,7 +5,9 @@
 #include <string.h>
 #include "../src/ootgz/levitate.c"
 
-static double physics[11]; /* the record and, at +0x50, its entry's handle */
+static double physics[11]; /* the physics record */
+static double physics2[11]; /* secondary record for stance/respawn relocation tests */
+static uintptr_t motion_record;
 static unsigned char actor_memory[1024];
 static float cam[24];
 static vec3f_t drawn_pos;
@@ -19,7 +21,7 @@ static bool on_ground;
 bool cct_reset_vertical_velocity(uintptr_t a) { (void)a; velocity_resets++; return controller_available; }
 bool cct_clear_fall_distance(uintptr_t a) { (void)a; distance_resets++; return controller_available; }
 bool cct_on_ground(uintptr_t a, bool *grounded) { (void)a; *grounded = on_ground; return controller_available; }
-uint64_t cct_body_handle(void) { return 0; }
+uintptr_t cct_motion_record(void) { return mapped ? motion_record : 0; }
 bool cct_noclip_begin(void) { return controller_active = controller_available; }
 bool cct_noclip_active(void) { return controller_active; }
 bool cct_noclip_move(const vec3f_t *p) { (void)p; controller_moves++; return controller_available; }
@@ -29,9 +31,15 @@ uint32_t input_hide_from_game;
 
 uintptr_t link_actor(void) { return (uintptr_t)actor_memory; }
 uintptr_t camera(void) { return (uintptr_t)cam; }
+uint32_t frame_counter(void) { return 0; }
 bool link_drawn_pos(vec3f_t *p) { *p = drawn_pos; return true; }
 bool link_health(int32_t **cur, int32_t **max) { (void)cur; (void)max; return false; }
 bool link_facing(double *fx, double *fz) { *fx = 0; *fz = 1; return true; }
+const char *gd_get_str(uint32_t hash) { (void)hash; return 0; }
+const airshape_t data_exitshapes[1] = {0};
+const airwall_t data_exits[1] = {0};
+const airmap_t data_exitmaps[1] = {0};
+const int data_n_exitmaps = 0;
 bool gd_game_paused(bool *is_pause, int32_t *requests)
 {
   if (is_pause) *is_pause = false;
@@ -42,22 +50,8 @@ bool sys_mapped(uintptr_t a, size_t n, uint32_t perm)
 {
   (void)perm;
   return mapped && ((a >= (uintptr_t)physics && a + n <= (uintptr_t)(physics + 11)) ||
+                    (a >= (uintptr_t)physics2 && a + n <= (uintptr_t)(physics2 + 11)) ||
                     (a >= (uintptr_t)cam && a + n <= (uintptr_t)(cam + 24)));
-}
-/* The game's heap as the record search sees it: one ordinary read/write region, the simulated record. With no
- * heap at all gcc proves the search can only ever test address 0, and warns about the writes there. */
-uint32_t sys_query_memory(sys_meminfo_t *m, uint64_t a)
-{
-  if (!mapped || a < (uintptr_t)physics || a >= (uintptr_t)(physics + 11))
-    return 1;
-  *m = (sys_meminfo_t){ .addr = (uintptr_t)physics, .size = sizeof(physics), .type = MEMORY_TYPE_NORMAL,
-                        .perm = SYS_PERM_R | SYS_PERM_W };
-  return 0;
-}
-void sys_regions(uint32_t perm, void (*fn)(uintptr_t, size_t, void *), void *ctx)
-{
-  if (mapped)
-    fn((uintptr_t)physics, sizeof(physics), ctx);
 }
 uint64_t sys_tick(void) { return 100; }
 uint64_t sys_tick_freq(void) { return 1000; }
@@ -75,13 +69,6 @@ bool cmd_pressed(command_t c) { return c == CMD_LEVITATE && (pressed & BTN_LSTIC
 void input_sticks(int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry)
 { *lx = stick_x; *ly = *rx = *ry = 0; }
 void log_printf(const char *fmt, ...) { (void)fmt; }
-/* no map names, so no loading zones: levitate never ends for one here */
-const char *gd_get_str(uint32_t hash) { (void)hash; return 0; }
-uint32_t frame_counter(void) { return 0; }
-const airshape_t data_exitshapes[1];
-const airwall_t data_exits[1];
-const airmap_t data_exitmaps[1];
-const int data_n_exitmaps = 0;
 void gfx_notice(const char *s) { (void)s; }
 
 static void sync_drawn(void)
@@ -108,8 +95,8 @@ static void start(bool walls)
   pressed = 0;
   stick_x = 0;
   record = (uintptr_t)physics;
+  motion_record = (uintptr_t)physics;
   record_has_motion = false;
-  search_state = SEARCH_READY;
   sync_drawn();
   float_start();
 }
@@ -280,6 +267,34 @@ static void test_controller_path(void)
   puts("PASS: controller move/restore, mode change, invalid controller and record loss");
 }
 
+static void test_direct_record(void)
+{
+  start(true);
+  floating = moving_link = false;
+  record = 0;
+  pressed = 0;
+  assert(link_record_status() == REC_READY && record == (uintptr_t)physics && record_has_motion);
+
+  record = 0;
+  record_has_motion = false;
+  pressed = BTN_LSTICK;
+  levitate_frame(false);
+  assert(floating && moving_link && record == (uintptr_t)physics && strcmp(levitate_state(), "floating") == 0);
+
+  pressed = 0;
+  memcpy(physics2, physics, sizeof(physics2));
+  double before[11];
+  memcpy(before, physics, sizeof(before));
+  motion_record = (uintptr_t)physics2;
+  levitate_frame(false);
+  assert(!floating && !moving_link && !controller_active && record == (uintptr_t)physics2);
+  assert(!memcmp(before, physics, sizeof(before)));
+
+  motion_record = 0;
+  assert(link_record_status() == REC_NONE && !link_record_move(0, 100, 0, 0, 0, 1) && !link_record_turn(0.1));
+  puts("PASS: instant direct record resolution, zero-scan L3 start, live relocation, missing record");
+}
+
 int main(void)
 {
   start(true);
@@ -363,7 +378,7 @@ int main(void)
   start(true);
   mapped = false;
   levitate_frame(false);
-  assert(search_state == SEARCH_IDLE && !floating && !moving_link && !record && physics[1] == 100);
+  assert(!floating && !moving_link && !record && physics[1] == 100);
   start(true); /* new record/scene starts from its own height, not an old floor */
   physics[1] = 20;
   sync_drawn();
@@ -375,5 +390,6 @@ int main(void)
   test_release();
   test_vertical_controls();
   test_controller_path();
+  test_direct_record();
   return 0;
 }

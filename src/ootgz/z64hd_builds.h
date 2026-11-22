@@ -98,17 +98,19 @@ static const struct z64hd_build z64hd_builds[] = {
     .cct_force_no_hit = 0x1A9C00,
     .cct_set_position = 0x6D7730,
     .cct_set_velocity = 0x1ED800,
+    .phive_mgr_ptr = 0x4C18258,
+    .vt_autosave = 0x4B3B5F8,
     /* v131072's 0x5F88C0, found through ExecuteEventPlayerImmediateRagdollDown's enter (identical in both);
      * the holder chain, the hit component and level, the controller's reaction / state and the player's
      * fields that ragdoll.c reads are at the same offsets as v131072's */
     .ragdoll_controller = 0x587460,
     /* save position (FINDINGS 9.7), from a memory dump of 1.0.0 (main at 0x80fc1000 in Lichii): AutoSaveMgr's
-     * update matched v131072's 0x32762B0 by masked signature, and its vtable (0x4B3B5F8) has v131072's slots in
-     * the same places; the safety search is v131072's 0x945310 but for its GOT load (both callers matched too).
-     * The scene manager and event state slots are 0x70460 below v131072's like the other bss slots: in game the
-     * scene's entry 12 was AutoSaveMgr with slot B set, and the event state is the event manager, as in v131072. */
+     * update matched v131072's 0x32762B0 by masked signature, in its vtable (vt_autosave above), which has
+     * v131072's slots in the same places; the safety search is v131072's 0x945310 but for its GOT load (both
+     * callers matched too). The scene manager and event state slots are 0x70460 below v131072's like the other bss
+     * slots: in game the scene's entry 12 was AutoSaveMgr with slot B set, and the event state is the event
+     * manager, as in v131072. */
     .scene_mgr_ptr = 0x4E271E8,
-    .autosave_update = 0x3217250,
     .safety_search = 0x9444A0,
     .event_state_ptr = 0x4E243E0,
     /* Found the same way (FINDINGS 9.8, 9.11): data through the code that loads it (v131072's loads matched, 9 to 12
@@ -185,8 +187,9 @@ static const struct z64hd_build z64hd_builds[] = {
     .cct_force_no_hit = 0x158D40,
     .cct_set_position = 0x6B2530,
     .cct_set_velocity = 0x12DBE0,
+    .phive_mgr_ptr = 0x4C7DF00,
     .scene_mgr_ptr = 0x4E97648,
-    .autosave_update = 0x32762B0,
+    .vt_autosave = 0x4BA0848,
     .safety_search = 0x945310,
     .voxel_mgr_ptr = 0x4C7DF00,
     .voxel_formats = 0x3EE8840,

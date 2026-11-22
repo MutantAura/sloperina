@@ -95,7 +95,7 @@ have none at first.
 | **age** | **child** or **adult**: what the next **reload map** gives you. |
 | **reload map** | Reloads the map you're in, at the age chosen above. Changing age loads the other age's version of the map and swaps sword and shield with the ones from the other age (adult-only tunics and boots come off a child). |
 
-| **save position (R + d-up)** | Remembers where Link is, which way he faces and the map (gz's save position). The first save in an area only finds Link's position in memory ("Locating Link's starting position, please try again"; he's lifted a little while it's tested, as with levitate, and it's quicker while he's moving): press it again once it says it's found him. |
+| **save position (R + d-up)** | Remembers where Link is, which way he faces and the map (gz's save position). Works at the first press, anywhere. |
 | **load position (R + d-down)** | Puts Link back there, facing the same way. Only in the same map. With nothing saved: "No position saved yet". |
 | **ragdoll (R3)** | Knocks Link over and tumbles him backwards: the game's own reaction to a bomb, so he can't attack and doesn't sink while it lasts. He gets up by himself and it unticks then; it can't be cut short. When the game wouldn't take a hit (a map's arrival, an event) it says so and does nothing. On 1.1.1 the game caps the tumble's speed; 1.0 has no cap. |
 

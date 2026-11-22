@@ -1,4 +1,4 @@
-/* The ocarina-breath T-pose on demand (FINDINGS 9.13): keep the Face animation layer's bone mask at the
+/* The ocarina-breath T-pose on demand (FINDINGS 9.15): keep the Face animation layer's bone mask at the
  * upper-body set the ocarina's breath leaves behind, so Link T-poses while he runs holding a bomb. */
 #ifndef TPOSE_H
 #define TPOSE_H

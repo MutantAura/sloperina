@@ -1,4 +1,4 @@
-/* The ocarina-breath T-pose on demand (FINDINGS 9.13).
+/* The ocarina-breath T-pose on demand (FINDINGS 9.15).
  *
  * Link's AS (romfs/AS/Player_*.root.asb) blends 9 layers (slots): Lower, Upper, RightArm, LeftArm, Face, Finger,
  * Mouth, MaskChange, MaskEquip. Each limits itself to a bone group. Holding a note on the ocarina for about
@@ -16,8 +16,8 @@
  * Face_Root in; a third, Mouth_Root, is often left over past the count), OcarinaBreath fourteen. Rewriting entry 1
  * (Face_Root) as Spine_2 is enough for the T-pose; the game rebuilds the table on its next mask change, so it is
  * written again every frame. Face_Root is the same bone in both skeletons, so the age comes from the game.
- * 1.1.1 checked in game; the walk is the same code in 1.0.0 (main+0x5754D4), and if the table isn't at +0x17198
- * there the slot objects are searched once for it. */
+ * The same in both builds: the walk is the same code in 1.0.0 (main+0x5754D4), and in game 1.0.0's slot objects
+ * held the table's pointer at +0x17198 too (FINDINGS 9.15). */
 #include "tpose.h"
 
 #include <stddef.h>
@@ -34,8 +34,7 @@
 #define SLOTS_ENTRIES 0x20
 #define SLOT_ENTRY_SIZE 0x48
 #define MAX_SLOTS 16
-#define TABLE_PTR_GUESS 0x17198 /* 1.1.1 */
-#define SLOT_SEARCH 0x18000     /* how far into a slot object to look for the table elsewhere */
+#define TABLE_PTR 0x17198     /* where a slot object keeps its mask table's pointer (both builds) */
 #define TABLE_INNER 0x08
 #define INNER_CAPACITY 0x08
 #define INNER_FLAGS 0x10
@@ -51,8 +50,7 @@
 #define SPINE_2_ADULT 0x06
 
 static bool enabled;
-static long table_ptr = TABLE_PTR_GUESS; /* where a slot object keeps its mask table's pointer */
-static uintptr_t searched_for;           /* the actor whose slots were searched for it (once) */
+static uintptr_t reported; /* the Link the table was last reported missing for */
 
 static uintptr_t next(uintptr_t p, size_t off)
 {
@@ -106,25 +104,12 @@ static bool find_face(face_t *out, uint16_t *spine_2)
   if (count <= 0 || count > MAX_SLOTS || !entries || !sys_mapped(entries, count * SLOT_ENTRY_SIZE, SYS_PERM_R))
     return false;
   for (int i = 0; i < count; i++)
-    if (face_table(next(sys_ptr(entries + i * SLOT_ENTRY_SIZE), table_ptr), *spine_2, out))
+    if (face_table(next(sys_ptr(entries + i * SLOT_ENTRY_SIZE), TABLE_PTR), *spine_2, out))
       return true;
-  if (searched_for == actor) /* a build where the table is elsewhere: look once per Link */
-    return false;
-  searched_for = actor;
-  for (int i = 0; i < count; i++) {
-    uintptr_t obj = sys_ptr(entries + i * SLOT_ENTRY_SIZE);
-    if (!obj || !sys_mapped(obj, SLOT_SEARCH, SYS_PERM_R))
-      continue;
-    for (long off = 0; off < SLOT_SEARCH; off += 8) {
-      uintptr_t p = *(const uintptr_t *)(obj + off);
-      if (p > obj && p < obj + SLOT_SEARCH && face_table(p, *spine_2, out)) {
-        log_printf("tpose: the mask table's pointer is at slot +%#lx (was +%#lx)", off, table_ptr);
-        table_ptr = off;
-        return true;
-      }
-    }
+  if (reported != actor) { /* once per Link, not every frame */
+    reported = actor;
+    log_raw("tpose: no Face mask table found"); /* not menu text */
   }
-  log_raw("tpose: no Face mask table found"); /* not menu text */
   return false;
 }
 

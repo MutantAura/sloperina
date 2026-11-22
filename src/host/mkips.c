@@ -76,20 +76,6 @@ static uint32_t insn_tbnz(int rt, uint32_t bit, uint32_t from, uint32_t to)
 
 /* --- every build fills every offset (z64hd.h) ---------------------------------------------- */
 
-/* the build's u32 offsets, by name */
-#define OFFSET_FIELDS \
-  F(nnmain) F(mod0) F(cave_start) F(cave_end) F(hook_slot) F(lock_slot) F(store_count) F(frame_site) \
-  F(gd_unlock) F(gd_mgr_ptr) F(gd_getint) F(gd_setint) F(vt_int_field) F(vt_bool_type) F(vt_float_type) \
-  F(vt_enum_type) F(pouch_mgr_ptr) F(pouch_add) F(pouch_notify) F(pouch_notify_ptr) F(pouch_remove) \
-  F(equip_slot_fn) F(equip_all_fn) F(vt_equip) F(vt_equip_owner) F(ui_mgr_ptr) F(vt_dpad) F(vt_hud) \
-  F(vt_map_screen) F(event_mgr_ptr) F(event_req_ctor) F(event_req_submit) F(event_req_sub_dtor) \
-  F(event_req_sub_vt) F(vt_linkobj) F(vt_param) F(disp_ptr) F(camera_ptr) F(frame_counter) F(actor_mgr_ptr) \
-  F(vt_life) F(vt_cct_property) F(vt_cct_body) F(vt_rigid_body) F(cct_force_no_hit) F(cct_set_position) \
-  F(cct_set_velocity) F(scene_mgr_ptr) F(autosave_update) F(safety_search) F(voxel_mgr_ptr) F(voxel_formats) \
-  F(event_state_ptr) F(event_flows) F(ragdoll_controller) F(caption_mgr_ptr) F(caption_empty) \
-  F(caption_request) F(caption_update) F(caption_empty_entry) F(vt_load_list) F(load_list_hide_rows) \
-  F(vt_save_load_confirm)
-
 /* true if name is one of the build's absent fields (a space-separated list) */
 static int named_absent(const struct z64hd_build *build, const char *name)
 {
@@ -119,7 +105,9 @@ static int missing_offsets(void)
       fprintf(stderr, "mkips: %s has no " #name " (find it, or name it in .absent)\n", b->version);  \
       missing++;                                                                                     \
     }
-    OFFSET_FIELDS
+    /* F(name) for every u32 member of struct z64hd_build, made from z64hd.h by the Makefile: a new offset is
+     * checked without being listed anywhere else */
+#include "z64hd_fields.h"
 #undef F
     if (!b->pair && !named_absent(b, "pair")) {
       fprintf(stderr, "mkips: %s has no pair (find it, or name it in .absent)\n", b->version);

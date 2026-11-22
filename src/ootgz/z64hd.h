@@ -32,8 +32,8 @@ struct z64hd_pair {
 /* One entry per supported game build (z64hd_builds.h). Every offset below is meant to be filled in for every
  * build: a feature reads its offsets from the running build's entry and stays off where one is 0, so a gap would
  * quietly turn a feature off on one version. mkips (run by every build) fails when an offset is 0 and the build's
- * `absent` list doesn't name it, so a field is only left out on purpose (the game doesn't have it). A new offset
- * goes in mkips.c's OFFSET_FIELDS too. */
+ * `absent` list doesn't name it, so a field is only left out on purpose (the game doesn't have it). Every uint32_t
+ * member is checked (the Makefile lists them for mkips); pair, stores and link_paths are checked by name. */
 struct z64hd_build {
   const char *version;
   const char *build_id;

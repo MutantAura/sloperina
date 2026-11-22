@@ -29,10 +29,16 @@ struct z64hd_pair {
 #define LOCK_BIT_Z         2u /* body Z (horizontal) */
 #define LOCK_BIT_COLLISION 3u /* the collision resolver's two stores; set whenever an axis is held */
 
+/* One entry per supported game build (z64hd_builds.h). Every offset below is meant to be filled in for every
+ * build: a feature reads its offsets from the running build's entry and stays off where one is 0, so a gap would
+ * quietly turn a feature off on one version. mkips (run by every build) fails when an offset is 0 and the build's
+ * `absent` list doesn't name it, so a field is only left out on purpose (the game doesn't have it). A new offset
+ * goes in mkips.c's OFFSET_FIELDS too. */
 struct z64hd_build {
   const char *version;
   const char *build_id;
   uint32_t revision;
+  const char *absent; /* offsets this game doesn't have, space-separated field names; NULL: none */
   uint32_t nnmain;
   uint32_t mod0;
   uint32_t cave_start;

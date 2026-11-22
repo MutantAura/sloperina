@@ -74,6 +74,71 @@ static uint32_t insn_tbnz(int rt, uint32_t bit, uint32_t from, uint32_t to)
          (uint32_t)rt;
 }
 
+/* --- every build fills every offset (z64hd.h) ---------------------------------------------- */
+
+/* the build's u32 offsets, by name */
+#define OFFSET_FIELDS \
+  F(nnmain) F(mod0) F(cave_start) F(cave_end) F(hook_slot) F(lock_slot) F(store_count) F(frame_site) \
+  F(gd_unlock) F(gd_mgr_ptr) F(gd_getint) F(gd_setint) F(vt_int_field) F(vt_bool_type) F(vt_float_type) \
+  F(vt_enum_type) F(pouch_mgr_ptr) F(pouch_add) F(pouch_notify) F(pouch_notify_ptr) F(pouch_remove) \
+  F(equip_slot_fn) F(equip_all_fn) F(vt_equip) F(vt_equip_owner) F(ui_mgr_ptr) F(vt_dpad) F(vt_hud) \
+  F(vt_map_screen) F(event_mgr_ptr) F(event_req_ctor) F(event_req_submit) F(event_req_sub_dtor) \
+  F(event_req_sub_vt) F(vt_linkobj) F(vt_param) F(disp_ptr) F(camera_ptr) F(frame_counter) F(actor_mgr_ptr) \
+  F(vt_life) F(vt_cct_property) F(vt_cct_body) F(vt_rigid_body) F(cct_force_no_hit) F(cct_set_position) \
+  F(cct_set_velocity) F(scene_mgr_ptr) F(autosave_update) F(safety_search) F(voxel_mgr_ptr) F(voxel_formats) \
+  F(event_state_ptr) F(event_flows) F(ragdoll_controller) F(caption_mgr_ptr) F(caption_empty) \
+  F(caption_request) F(caption_update) F(caption_empty_entry) F(vt_load_list) F(load_list_hide_rows) \
+  F(vt_save_load_confirm)
+
+/* true if name is one of the build's absent fields (a space-separated list) */
+static int named_absent(const struct z64hd_build *build, const char *name)
+{
+  size_t len = strlen(name);
+  for (const char *p = build->absent; p && *p;) {
+    while (*p == ' ')
+      p++;
+    const char *end = p;
+    while (*end && *end != ' ')
+      end++;
+    if ((size_t)(end - p) == len && strncmp(p, name, len) == 0)
+      return 1;
+    p = end;
+  }
+  return 0;
+}
+
+/* Every build's missing offsets, on stderr: how many aren't 0 and aren't named in its absent list. A gap would
+ * quietly turn a feature off on that version, so the build stops instead. */
+static int missing_offsets(void)
+{
+  int missing = 0;
+  for (size_t i = 0; i < sizeof(z64hd_builds) / sizeof(*z64hd_builds); i++) {
+    const struct z64hd_build *b = &z64hd_builds[i];
+#define F(name)                                                                                     \
+    if (!b->name && !named_absent(b, #name)) {                                                       \
+      fprintf(stderr, "mkips: %s has no " #name " (find it, or name it in .absent)\n", b->version);  \
+      missing++;                                                                                     \
+    }
+    OFFSET_FIELDS
+#undef F
+    if (!b->pair && !named_absent(b, "pair")) {
+      fprintf(stderr, "mkips: %s has no pair (find it, or name it in .absent)\n", b->version);
+      missing++;
+    }
+    if (!b->stores && !named_absent(b, "stores")) {
+      fprintf(stderr, "mkips: %s has no stores (find them, or name them in .absent)\n", b->version);
+      missing++;
+    }
+    for (size_t k = 0; k < sizeof(b->link_paths) / sizeof(*b->link_paths); k++)
+      if ((!b->link_paths[k].global || !b->link_paths[k].member) && !named_absent(b, "link_paths")) {
+        fprintf(stderr, "mkips: %s has no link_paths[%zu] (find it, or name link_paths in .absent)\n",
+                b->version, k);
+        missing++;
+      }
+  }
+  return missing;
+}
+
 /* --- writing the patch -------------------------------------------------------------------- */
 
 static void put_le32(uint8_t *p, uint32_t value)
@@ -99,6 +164,8 @@ int main(int argc, char **argv)
     fprintf(stderr, "usage: mkips <out.ips>\n");
     return 1;
   }
+  if (missing_offsets())
+    return 1;
   const char *name = argv[1];
   for (const char *p = name; *p; p++)
     if (*p == '/' || *p == '\\')

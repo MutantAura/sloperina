@@ -133,6 +133,52 @@ struct z64hd_build {
    * set-step. A build without them writes GameData only (stages reach the game after a save load) */
   uint32_t challenge_mgr_ptr;
   uint32_t challenge_set_step;
+  /* GameDataMgr in-memory binary save/load (memfile.c): bool (gd_mgr, buf, int file_idx); 0: unknown */
+  uint32_t gd_request_save;
+  uint32_t gd_request_load;
+  /* WorldMgr [[main+wm_ptr]]: [wm+0x578] clock (vfunc +0x30 -> seconds); on_save flushes live clock/weather
+   * into GameData before serialize, on_load reloads from GameData after deserialize; set_time(wm, seconds) */
+  uint32_t wm_ptr;
+  uint32_t wm_set_time;
+  uint32_t wm_on_save;
+  uint32_t wm_on_load;
+  /* NaviMgr reload hook: navi = navi_get([[main+navi_scene_ptr]]); if (navi) navi_on_load(navi); */
+  uint32_t navi_scene_ptr;
+  uint32_t navi_get;
+  uint32_t navi_on_load;
+  /* Player camera: actor handle at [[main+player_camera_holder]]+0x38, component [[actor+0x270]+component],
+   * view state at component+state, snap(component); arrive(component): what a map's arrival calls, rebuilding the
+   * camera's target from the actor it follows ([component+0x38]) and asking for a snap (state +0x7E4) */
+  uint32_t player_camera_holder;
+  uint32_t player_camera_component;
+  uint32_t player_camera_state;
+  uint32_t player_camera_snap;
+  uint32_t player_camera_arrive;
+  /* Nayru's Love: the player component [[actor+0x270]+0x358] keeps the barrier's time left (float, frames) at
+   * +0x1634 and its length at +0x1638; a frame update turns the barrier on while the time left is above 0.
+   * nayru_reset(component) ends it like taking it off (time 0, its GameData mirror and an anim value too). */
+  uint32_t player_nayru_reset;
+  /* WarpMgr, the game component behind Farore's Wind's sparkle (made once, no static pointer to it): its vtable;
+   * slot 6 (mgr, change bits) re-reads WarpPoint_FaroreWind when told GameData changed (all-zero bits: everything) */
+  uint32_t vt_warp_mgr;
+  /* WarpMgr::place(mgr, x, y, z): moves the sparkle to a point (Link's feet; it adds the height), as casting
+   * does (AINB node OneShotFaroreWindSetActorPos) */
+  uint32_t warp_mgr_place;
+  /* SetSavedSelectedChallenge's work (node): selects the quest GameData names (UInt 0x2029D3D8) in the manager, or
+   * none; it only marks node+0x18 done besides. A save load runs it (FINDINGS 9.19). 0: not known for this build */
+  uint32_t challenge_select_saved;
+  /* Scene actor restore (memfile.c): forceSetPosAndRot(physics_comp, pos, rot_mat33, immediate) called by
+   * ExecuteActorForceSetPos on [[actor+0x270]+0x50]; requestDelete(actor, reason) called by
+   * OneShotActorHolderRequestDelete; preactor_update_flags(node) is SeqExecuteUpdatePreActorFlag's update
+   * (clears PreActor dead/disable flags and resyncs GameData-backed dead flags before ResetGimmick). 0: unknown */
+  uint32_t actor_force_set_pos;
+  uint32_t actor_request_delete;
+  uint32_t preactor_update_flags;
+  /* Phase 3 memfiles: sead::GlobalRandom GOT slot ([[main+this]] -> u32 state[4]), and TimerMgr (scene #19) /
+   * MinigameMgr (scene #18) vtables whose slot 6 is onGameDataChanged(mgr, change_bits). 0: unknown */
+  uint32_t global_random_ptr;
+  uint32_t vt_timer_mgr;
+  uint32_t vt_minigame_mgr;
   struct z64hd_link_path link_paths[5];
 };
 

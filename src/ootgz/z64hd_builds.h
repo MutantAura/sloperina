@@ -136,6 +136,36 @@ static const struct z64hd_build z64hd_builds[] = {
      * the set-step by masked signature (unique over 64 words) */
     .challenge_mgr_ptr = 0x4DB9998,
     .challenge_set_step = 0x2CA16F0,
+    .gd_request_save = 0x36FED60,
+    .gd_request_load = 0x36FEDD0,
+    /* the slot at navi_scene_ptr holds main+this (in both builds); WarpMgr's getter main+0x27C2AD0 */
+    .scene_mgr_ptr = 0x4E271E8,
+    .challenge_select_saved = 0x3289D20,
+    .wm_ptr = 0x4C18BF0,
+    .wm_set_time = 0x33F1580,
+    .wm_on_save = 0x33F1410,
+    .wm_on_load = 0x33F1300,
+    .navi_scene_ptr = 0x4C184D0,
+    .navi_get = 0x945E50,
+    .navi_on_load = 0x3230F70,
+    .player_camera_holder = 0x4C18B70,
+    .player_camera_component = 0x360,
+    .player_camera_state = 0x5B8,
+    .player_camera_snap = 0x2E2D5D0,
+    .player_camera_arrive = 0x2E2D590, /* called at main+0xE8F208 */
+    .player_nayru_reset = 0x2E23670, /* from AINB node ResetNayruLove (main+0x28B8C40) */
+    .vt_warp_mgr = 0x4B3CFF8, /* built at main+0xE0FE60; slot 6 main+0x465210 */
+    .warp_mgr_place = 0x3251430, /* called at main+0x2886F98 */
+    /* ExecuteActorForceSetPos (main+0x661F80) -> PhysicsComponent::forceSetPosAndRot;
+     * OneShotActorHolderRequestDelete (main+0xE63BE0 -> main+0x944AE0) -> ActorBase::requestDelete;
+     * SeqExecuteUpdatePreActorFlag (vt 0x4B43BF8, slot +0xF0) */
+    .actor_force_set_pos = 0x665790,
+    .actor_request_delete = 0xC4FA0,
+    .preactor_update_flags = 0x3266A00,
+    /* sead::GlobalRandom GOT slot (main+0x10BC); TimerMgr #19 (slot 6 0x324EA40) & MinigameMgr #18 (0x10DF7A0) */
+    .global_random_ptr = 0x4C18260,
+    .vt_timer_mgr = 0x4B3CEF8,
+    .vt_minigame_mgr = 0x4B3C268,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -218,6 +248,34 @@ static const struct z64hd_build z64hd_builds[] = {
     .vt_save_load_confirm = 0x4BEF840,
     .challenge_mgr_ptr = 0x4E29950,
     .challenge_set_step = 0x2CF54A0,
+    .gd_request_save = 0x37617B0,
+    .gd_request_load = 0x3761820,
+    .wm_ptr = 0x4C7E898,
+    .wm_set_time = 0x34522D0,
+    .wm_on_save = 0x3452160,
+    .wm_on_load = 0x3452050,
+    .navi_scene_ptr = 0x4C7E178,
+    .navi_get = 0xCAF800,
+    .navi_on_load = 0x3290060,
+    .player_camera_holder = 0x4C7E818,
+    .player_camera_component = 0x360,
+    .player_camera_state = 0x5B8,
+    .player_camera_snap = 0x2E821D0,
+    .player_camera_arrive = 0x2E82190,
+    .player_nayru_reset = 0x2E78050,
+    .vt_warp_mgr = 0x4BA2248, /* slot 6 main+0x57F4F0 */
+    .warp_mgr_place = 0x32B0750,
+    .challenge_select_saved = 0x32E8D50,
+    /* ExecuteActorForceSetPos (main+0x4C8300) -> PhysicsComponent::forceSetPosAndRot;
+     * OneShotActorHolderRequestDelete (main+0xE91290 -> main+0x945E80) -> ActorBase::requestDelete;
+     * SeqExecuteUpdatePreActorFlag (vt 0x4BA8E48, slot +0xF0) */
+    .actor_force_set_pos = 0x4C6630,
+    .actor_request_delete = 0xA6490,
+    .preactor_update_flags = 0x32C58C0,
+    /* sead::GlobalRandom GOT slot (main+0x105C); TimerMgr #19 (slot 6 0x32ADB40) & MinigameMgr #18 (0x1127420) */
+    .global_random_ptr = 0x4C7DF08,
+    .vt_timer_mgr = 0x4BA2148,
+    .vt_minigame_mgr = 0x4BA14B8,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

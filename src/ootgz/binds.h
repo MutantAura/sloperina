@@ -27,12 +27,15 @@ typedef enum {
   CMD_RAGDOLL,
   CMD_LEVITATE,    /* levitate on / off */
   CMD_RISE, CMD_SINK, CMD_HOVER, /* while levitating: up, down, hold the height */
+  /* the scene: unbound until given buttons in settings > rebind commands */
+  CMD_RELOAD_MAP,  /* link > reload map */
+  CMD_END_CUTSCENE, /* scene > end cutscene */
   /* watches and the timer */
   CMD_WATCHES, CMD_TIMER, CMD_RESET_TIMER, CMD_RESET_LAG, CMD_RESET_JS,
   CMD_COUNT
 } command_t;
 
-enum { CMD_GROUP_MENU, CMD_GROUP_FRAME_ADVANCE, CMD_GROUP_LINK, CMD_GROUP_WATCHES, CMD_GROUPS };
+enum { CMD_GROUP_MENU, CMD_GROUP_FRAME_ADVANCE, CMD_GROUP_LINK, CMD_GROUP_SCENE, CMD_GROUP_WATCHES, CMD_GROUPS };
 
 typedef struct {
   const char *name;  /* as settings > rebind commands shows it */

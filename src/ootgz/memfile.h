@@ -14,6 +14,7 @@
 
 extern bool memfile_session;     /* restore unsaved session fields (memfilefields.h) too */
 extern bool memfile_fast_reload; /* reset actors in place via ResetGimmick on same map & age */
+extern bool memfile_actors;      /* restore scene actors' positions, rotations, HP and dead/alive state */
 
 int         memfile_slot(void);
 void        memfile_set_slot(int s);

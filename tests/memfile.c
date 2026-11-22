@@ -19,20 +19,26 @@ static uintptr_t fake_navi_get(uintptr_t scene);
 static void      fake_navi_on_load(uintptr_t mgr);
 static void      fake_camera_snap(uintptr_t component);
 static void      fake_camera_arrive(uintptr_t component);
+static bool      fake_actor_force_set_pos(uintptr_t phys, const float pos[3], const float rot[9], bool immediate);
+static void      fake_actor_request_delete(uintptr_t actor, uint32_t reason);
+static void      fake_preactor_update_flags(void *node);
 
 static struct z64hd_build test_build;
 const struct z64hd_build *z64hd_game = &test_build;
 uintptr_t z64hd_main;
 
-#define OFF_GD_REQ_SAVE   0x1100u
-#define OFF_GD_REQ_LOAD   0x1200u
-#define OFF_WM_SET_TIME   0x1300u
-#define OFF_WM_ON_SAVE    0x1400u
-#define OFF_WM_ON_LOAD    0x1500u
-#define OFF_NAVI_GET      0x1600u
-#define OFF_NAVI_ON_LOAD  0x1700u
-#define OFF_CAMERA_SNAP   0x1800u
-#define OFF_CAMERA_ARRIVE 0x1900u
+#define OFF_GD_REQ_SAVE      0x1100u
+#define OFF_GD_REQ_LOAD      0x1200u
+#define OFF_WM_SET_TIME      0x1300u
+#define OFF_WM_ON_SAVE       0x1400u
+#define OFF_WM_ON_LOAD       0x1500u
+#define OFF_NAVI_GET         0x1600u
+#define OFF_NAVI_ON_LOAD     0x1700u
+#define OFF_CAMERA_SNAP      0x1800u
+#define OFF_CAMERA_ARRIVE    0x1900u
+#define OFF_ACTOR_FORCE_POS  0x1A00u
+#define OFF_ACTOR_REQ_DELETE 0x1B00u
+#define OFF_PREACTOR_UPDATE  0x1C00u
 
 static uintptr_t function_at(uint32_t off)
 {
@@ -44,6 +50,9 @@ static uintptr_t function_at(uint32_t off)
   if (off == OFF_NAVI_GET) return (uintptr_t)fake_navi_get;
   if (off == OFF_NAVI_ON_LOAD) return (uintptr_t)fake_navi_on_load;
   if (off == OFF_CAMERA_ARRIVE) return (uintptr_t)fake_camera_arrive;
+  if (off == OFF_ACTOR_FORCE_POS) return (uintptr_t)fake_actor_force_set_pos;
+  if (off == OFF_ACTOR_REQ_DELETE) return (uintptr_t)fake_actor_request_delete;
+  if (off == OFF_PREACTOR_UPDATE) return (uintptr_t)fake_preactor_update_flags;
   assert(off == OFF_CAMERA_SNAP);
   return (uintptr_t)fake_camera_snap;
 }
@@ -461,6 +470,7 @@ static struct {
   uintptr_t wm_holder_ptr, wm_ptr;
   uintptr_t navi_scene_holder_ptr, navi_scene_ptr;
   uintptr_t cam_holder_ptr, cam_ptr;
+  uintptr_t actor_mgr_ptr;
 } main_slots;
 
 static uint8_t wm_mem[0x600], clock_mem[0x80], clock_vt[0x40];
@@ -1820,6 +1830,265 @@ static void test_memfile_folders(void)
   puts("PASS: memfile folders: make, list, export/import in one, delete a file, up to the top, delete a tree, depth");
 }
 
+/* --- simulated scene actors for Phase 1 tests --------------------------------------------------- */
+
+typedef struct {
+  _Alignas(8) uint8_t actor[0x4C0];
+  uint8_t comps[0x300];
+  uint8_t phys[0x40];
+  uint8_t life[0x1C30];
+  uint8_t param_cur[0x10];
+  uint8_t param_max[0x10];
+  uint8_t preactor[0xA0];
+  uint8_t entry[0x40];
+  char    name[32];
+  int     force_pos_calls;
+  int     delete_calls;
+  bool    force_pos_ok;
+} sim_actor_t;
+
+#define N_SIM_ACTORS 12
+static sim_actor_t sim_actors[N_SIM_ACTORS];
+static uint8_t     sim_actor_mgr[0x50];
+
+static bool fake_actor_force_set_pos(uintptr_t phys, const float pos[3], const float rot[9], bool immediate)
+{
+  assert(immediate);
+  for (int i = 0; i < N_SIM_ACTORS; i++) {
+    if ((uintptr_t)sim_actors[i].phys == phys) {
+      sim_actors[i].force_pos_calls++;
+      if (!sim_actors[i].force_pos_ok)
+        return false;
+      memcpy(sim_actors[i].actor + A_POS, pos, 12);
+      uint32_t w0 = 0;
+      memcpy(&w0, rot, 4);
+      if (w0 != 0x7FC00000u)
+        memcpy(sim_actors[i].actor + A_ROT, rot, 36);
+      return true;
+    }
+  }
+  assert(!"unknown physics component");
+  return false;
+}
+
+static int preactor_update_calls;
+
+static void fake_preactor_update_flags(void *node)
+{
+  uint64_t *n = (uint64_t *)node;
+  for (int i = 4; i <= 8; i++) {
+    const uint8_t *flag = (const uint8_t *)(uintptr_t)n[i];
+    assert(flag && *flag == 1);
+  }
+  preactor_update_calls++;
+}
+
+static void fake_actor_request_delete(uintptr_t actor, uint32_t reason)
+{
+  assert(reason == 0);
+  for (int i = 0; i < N_SIM_ACTORS; i++) {
+    if ((uintptr_t)sim_actors[i].actor == actor) {
+      sim_actors[i].delete_calls++;
+      uint32_t dead = 9u;
+      memcpy(sim_actors[i].actor + A_STATE, &dead, 4);
+      return;
+    }
+  }
+  assert(!"unknown actor for delete");
+}
+
+static void setup_sim_actor(sim_actor_t *a, const char *name, uint64_t id, uint32_t state,
+                            const float pos[3], const float rot[9], bool has_phys, bool has_life,
+                            int32_t hp, int32_t max_hp)
+{
+  memset(a, 0, sizeof(*a));
+  snprintf(a->name, sizeof(a->name), "%s", name);
+  a->force_pos_ok = true;
+  uintptr_t np = (uintptr_t)a->name;
+  memcpy(a->actor + A_NAME, &np, 8);
+  memcpy(a->actor + A_STATE, &state, 4);
+  memcpy(a->actor + A_POS, pos, 12);
+  memcpy(a->actor + A_ROT, rot, 36);
+  uint32_t flags = 0x8000u;
+  memcpy(a->actor + A_FLAGS, &flags, 4);
+  uintptr_t cp = (uintptr_t)a->comps;
+  memcpy(a->actor + A_COMPONENTS, &cp, 8);
+  if (has_phys) {
+    uintptr_t pp = (uintptr_t)a->phys;
+    memcpy(a->comps + ACOMP_PHYSICS, &pp, 8);
+  }
+  if (has_life) {
+    uintptr_t lp = (uintptr_t)a->life, curp = (uintptr_t)a->param_cur, maxp = (uintptr_t)a->param_max;
+    uintptr_t vt = z64hd_main + 0x1000u;
+    memcpy(a->param_cur, &vt, 8);
+    memcpy(a->param_cur + APARAM_VAL, &hp, 4);
+    memcpy(a->param_max, &vt, 8);
+    memcpy(a->param_max + APARAM_VAL, &max_hp, 4);
+    memcpy(a->life + ALIFE_CUR, &curp, 8);
+    memcpy(a->life + ALIFE_MAX, &maxp, 8);
+    memcpy(a->comps + ACOMP_LIFE, &lp, 8);
+  }
+  if (id) {
+    uintptr_t prep = (uintptr_t)a->preactor;
+    memcpy(a->preactor + PREACTOR_INSTANCE_ID, &id, 8);
+    memcpy(a->actor + A_PREACTOR, &prep, 8);
+  }
+  uintptr_t ap = (uintptr_t)a->actor;
+  memcpy(a->entry + AENTRY_ACTOR, &ap, 8);
+  add_region(a, sizeof(*a), SYS_PERM_R | SYS_PERM_W);
+}
+
+static void link_tree_node(sim_actor_t *parent, sim_actor_t *left, sim_actor_t *right, sim_actor_t *next)
+{
+  uintptr_t l = left ? (uintptr_t)(left->entry + AENTRY_NODE) : 0;
+  uintptr_t r = right ? (uintptr_t)(right->entry + AENTRY_NODE) : 0;
+  uintptr_t n = next ? (uintptr_t)next->entry : 0;
+  memcpy(parent->entry + AENTRY_NODE + ANODE_LEFT, &l, 8);
+  memcpy(parent->entry + AENTRY_NODE + ANODE_RIGHT, &r, 8);
+  memcpy(parent->entry + AENTRY_NEXT, &n, 8);
+}
+
+static void test_scene_actors(void)
+{
+  init_env(0x5B8);
+  test_build.version = "1.1.1";
+  memfile_actors = true;
+  memfile_fast_reload = true;
+  memset(sim_actor_mgr, 0, sizeof(sim_actor_mgr));
+  add_region(sim_actor_mgr, sizeof(sim_actor_mgr), SYS_PERM_R | SYS_PERM_W);
+  main_slots.actor_mgr_ptr = (uintptr_t)sim_actor_mgr;
+  test_build.actor_mgr_ptr = (uint32_t)((uintptr_t)&main_slots.actor_mgr_ptr - z64hd_main);
+  test_build.actor_force_set_pos = OFF_ACTOR_FORCE_POS;
+  test_build.actor_request_delete = OFF_ACTOR_REQ_DELETE;
+  test_build.preactor_update_flags = OFF_PREACTOR_UPDATE;
+  preactor_update_calls = 0;
+
+  const float rot_a[9] = { 0, 0, 1, 0, 1, 0, -1, 0, 0 };
+  const float rot_b[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+  const float pos_npc[3] = { 12.5f, 3.0f, -4.5f };
+  const float pos_enemy[3] = { 20.0f, 1.0f, 8.0f };
+  const float pos_pot[3] = { 5.0f, 2.0f, 3.0f };
+  const float pos_dying[3] = { 15.0f, 1.0f, 5.0f };
+  const float pos_static[3] = { 0.0f, 0.0f, 0.0f };
+  const float pos_dyn[3] = { 1.0f, 1.0f, 1.0f };
+  const float pos_killed_near[3] = { 18.0f, 2.0f, 10.0f };  /* within 30 m of Link (10,2,3) */
+  const float pos_killed_far[3] = { 200.0f, 2.0f, 200.0f }; /* > 30 m from Link */
+
+  /* At save time: 0=Npc, 1=Enemy(hp 5/18), 2=Obj pot(no phys), 3=Enemy(dying state 8),
+   * 4=DgnObj_Wall(phys, no life: ignored), 5=dyn(no id: ignored),
+   * 8=Enemy_Sentinel(id=UINT64_MAX: ignored), 9 & 10=two actors sharing colliding id 0x9999 (both poisoned!) */
+  setup_sim_actor(&sim_actors[0], "Npc_Kokiri_Mido", 0x1001ULL, 4, pos_npc, rot_a, true, false, 0, 0);
+  setup_sim_actor(&sim_actors[1], "Enemy_Wolfos",    0x1002ULL, 4, pos_enemy, rot_a, true, true, 5, 18);
+  setup_sim_actor(&sim_actors[2], "Obj_Pot",         0x1003ULL, 4, pos_pot, rot_a, false, true, 1, 1);
+  setup_sim_actor(&sim_actors[3], "Enemy_Stalfos",   0x1004ULL, 8, pos_dying, rot_b, true, true, 0, 18);
+  setup_sim_actor(&sim_actors[4], "DgnObj_Wall",     0x1005ULL, 4, pos_static, rot_b, true, false, 0, 0);
+  setup_sim_actor(&sim_actors[5], "Enemy_Dynamic",   0ULL,      4, pos_dyn, rot_b, true, true, 4, 4);
+  setup_sim_actor(&sim_actors[8], "Enemy_Sentinel",  UINT64_MAX, 4, pos_dyn, rot_b, true, true, 4, 4);
+  setup_sim_actor(&sim_actors[9], "Enemy_DupA",      0x9999ULL, 4, pos_npc, rot_a, true, true, 4, 4);
+  setup_sim_actor(&sim_actors[10], "FldObj_DupB",    0x9999ULL, 4, pos_static, rot_b, false, false, 0, 0);
+
+  /* Build tree: root=1, left=0 (next=2->8->9->10), right=3 (left=4, right=5) */
+  link_tree_node(&sim_actors[0], 0, 0, &sim_actors[2]);
+  link_tree_node(&sim_actors[2], 0, 0, &sim_actors[8]);
+  link_tree_node(&sim_actors[8], 0, 0, &sim_actors[9]);
+  link_tree_node(&sim_actors[9], 0, 0, &sim_actors[10]);
+  link_tree_node(&sim_actors[10], 0, 0, 0);
+  link_tree_node(&sim_actors[4], 0, 0, 0);
+  link_tree_node(&sim_actors[5], 0, 0, 0);
+  link_tree_node(&sim_actors[3], &sim_actors[4], &sim_actors[5], 0);
+  link_tree_node(&sim_actors[1], &sim_actors[0], &sim_actors[3], 0);
+  uintptr_t root = (uintptr_t)(sim_actors[1].entry + AENTRY_NODE);
+  memcpy(sim_actor_mgr + AMGR_TREE_ROOT, &root, 8);
+
+  sim_pos = (vec3f_t){ 10.0f, 2.0f, 3.0f };
+  assert(memfile_save(0));
+  complete_mock_save(GD_SAVE_MAGIC, 256, "actors");
+  memfile_frame();
+  assert(phase == L_IDLE && memfiles[0].used && memfiles[0].have_actors && !memfiles[0].actors_truncated);
+  assert(memfiles[0].actor_count == 4); /* Npc, Wolfos, Pot, dying Stalfos (Wall, dynamic, sentinel, dup poisoned) */
+
+  /* .szm export/import round-trip preserves actors */
+  sd_clear();
+  assert(memfile_export(0, "actors_test") && memfile_list_files() == 1 && memfile_import(0, 1));
+  assert(memfiles[1].have_actors && memfiles[1].actor_count == 4 && !memfiles[1].actors_truncated);
+
+  /* Simulate ResetGimmick: actors respawn at default positions, full HP, alive, plus 2 enemies that were killed
+   * before save (one within 30 m, one 200 m away), plus an actor with a mismatched name sharing Mido's ID. */
+  const float def_pos[3] = { 0.0f, 0.0f, 0.0f };
+  setup_sim_actor(&sim_actors[0], "Npc_Kokiri_Mido", 0x1001ULL, 4, def_pos, rot_b, true, false, 0, 0);
+  setup_sim_actor(&sim_actors[1], "Enemy_Wolfos",    0x1002ULL, 4, def_pos, rot_b, true, true, 18, 18);
+  setup_sim_actor(&sim_actors[2], "Obj_Pot",         0x1003ULL, 4, def_pos, rot_b, false, true, 1, 1);
+  setup_sim_actor(&sim_actors[3], "Enemy_Stalfos",   0x1004ULL, 4, def_pos, rot_b, true, true, 18, 18);
+  setup_sim_actor(&sim_actors[6], "Enemy_KeeseNear", 0x1006ULL, 4, pos_killed_near, rot_b, true, true, 2, 2);
+  setup_sim_actor(&sim_actors[7], "Enemy_KeeseFar",  0x1007ULL, 4, pos_killed_far, rot_b, true, true, 2, 2);
+  setup_sim_actor(&sim_actors[11], "DgnObj_Door",    0x1001ULL, 4, def_pos, rot_b, true, false, 0, 0);
+  link_tree_node(&sim_actors[0], 0, 0, &sim_actors[2]);
+  link_tree_node(&sim_actors[2], 0, 0, &sim_actors[11]);
+  link_tree_node(&sim_actors[11], 0, 0, 0);
+  link_tree_node(&sim_actors[6], 0, 0, 0);
+  link_tree_node(&sim_actors[7], 0, 0, 0);
+  link_tree_node(&sim_actors[3], &sim_actors[6], &sim_actors[7], 0);
+  link_tree_node(&sim_actors[1], &sim_actors[0], &sim_actors[3], 0);
+  root = (uintptr_t)(sim_actors[1].entry + AENTRY_NODE);
+  memcpy(sim_actor_mgr + AMGR_TREE_ROOT, &root, 8);
+
+  /* Fast load slot 1 (imported from .szm) */
+  assert(memfile_load(1));
+  complete_mock_load(true);
+  for (int i = 0; i < 60 && phase != L_IDLE; i++) {
+    memfile_frame();
+    if (phase == L_FAST_WAIT_RESET)
+      gd_set_bool(F_REQ_RESET_GIMMICK, false);
+  }
+  assert(phase == L_IDLE);
+
+  /* Verify PreActor dead/disable flags were reset before ResetGimmick */
+  assert(preactor_update_calls == 1);
+  /* Verify NPC moved & rotated via physics setter (pass 1 moves; pass 2 sees matching transform and skips) */
+  assert(sim_actors[0].force_pos_calls == 1);
+  assert(bytes_equal(sim_actors[0].actor + A_POS, pos_npc, 12));
+  assert(bytes_equal(sim_actors[0].actor + A_ROT, rot_a, 36));
+  /* Verify mismatched-name door sharing Mido's ID was NOT touched */
+  assert(sim_actors[11].force_pos_calls == 0);
+  assert(bytes_equal(sim_actors[11].actor + A_POS, def_pos, 12));
+  /* Verify Enemy moved, rotated, and HP restored from 18 -> 5 */
+  assert(sim_actors[1].force_pos_calls == 1);
+  assert(bytes_equal(sim_actors[1].actor + A_POS, pos_enemy, 12));
+  assert(*(int32_t *)(sim_actors[1].param_cur + APARAM_VAL) == 5);
+  /* Verify non-physics Obj moved via fallback (A_FORCE_POS, flag 0x8000 cleared, A_POS, A_ROT) */
+  assert(sim_actors[2].force_pos_calls == 0);
+  assert(bytes_equal(sim_actors[2].actor + A_FORCE_POS, pos_pot, 12));
+  assert(bytes_equal(sim_actors[2].actor + A_POS, pos_pot, 12));
+  assert((*(uint32_t *)(sim_actors[2].actor + A_FLAGS) & 0x8000u) == 0);
+  /* Verify dying Stalfos deleted, missing nearby Keese deleted, far Keese untouched */
+  assert(sim_actors[3].delete_calls == 1);
+  assert(sim_actors[6].delete_calls == 1);
+  assert(sim_actors[7].delete_calls == 0);
+
+  /* Toggle off: memfile_actors = false leaves respawned actors untouched */
+  memfile_actors = false;
+  setup_sim_actor(&sim_actors[1], "Enemy_Wolfos", 0x1002ULL, 4, def_pos, rot_b, true, true, 18, 18);
+  link_tree_node(&sim_actors[1], 0, 0, 0);
+  root = (uintptr_t)(sim_actors[1].entry + AENTRY_NODE);
+  memcpy(sim_actor_mgr + AMGR_TREE_ROOT, &root, 8);
+  assert(memfile_load(1));
+  complete_mock_load(true);
+  for (int i = 0; i < 60 && phase != L_IDLE; i++) {
+    memfile_frame();
+    if (phase == L_FAST_WAIT_RESET)
+      gd_set_bool(F_REQ_RESET_GIMMICK, false);
+  }
+  assert(phase == L_IDLE);
+  assert(sim_actors[1].force_pos_calls == 0);
+  assert(*(int32_t *)(sim_actors[1].param_cur + APARAM_VAL) == 18);
+  memfile_actors = true;
+
+  sd_clear();
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    free_memfile(&memfiles[i]);
+  puts("PASS: scene actors: capture, .szm round-trip, transform/fallback, HP, dead/missing delete, toggle");
+}
+
 int main(void)
 {
   test_async_save_and_staging();
@@ -1832,5 +2101,6 @@ int main(void)
   test_scene_chains();
   test_szm_versions();
   test_memfile_folders();
+  test_scene_actors();
   return 0;
 }

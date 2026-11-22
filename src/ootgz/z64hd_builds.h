@@ -156,6 +156,12 @@ static const struct z64hd_build z64hd_builds[] = {
     .player_nayru_reset = 0x2E23670, /* from AINB node ResetNayruLove (main+0x28B8C40) */
     .vt_warp_mgr = 0x4B3CFF8, /* built at main+0xE0FE60; slot 6 main+0x465210 */
     .warp_mgr_place = 0x3251430, /* called at main+0x2886F98 */
+    /* ExecuteActorForceSetPos (main+0x661F80) -> PhysicsComponent::forceSetPosAndRot;
+     * OneShotActorHolderRequestDelete (main+0xE63BE0 -> main+0x944AE0) -> ActorBase::requestDelete;
+     * SeqExecuteUpdatePreActorFlag (vt 0x4B43BF8, slot +0xF0) */
+    .actor_force_set_pos = 0x665790,
+    .actor_request_delete = 0xC4FA0,
+    .preactor_update_flags = 0x3266A00,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -256,6 +262,12 @@ static const struct z64hd_build z64hd_builds[] = {
     .vt_warp_mgr = 0x4BA2248, /* slot 6 main+0x57F4F0 */
     .warp_mgr_place = 0x32B0750,
     .challenge_select_saved = 0x32E8D50,
+    /* ExecuteActorForceSetPos (main+0x4C8300) -> PhysicsComponent::forceSetPosAndRot;
+     * OneShotActorHolderRequestDelete (main+0xE91290 -> main+0x945E80) -> ActorBase::requestDelete;
+     * SeqExecuteUpdatePreActorFlag (vt 0x4BA8E48, slot +0xF0) */
+    .actor_force_set_pos = 0x4C6630,
+    .actor_request_delete = 0xA6490,
+    .preactor_update_flags = 0x32C58C0,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

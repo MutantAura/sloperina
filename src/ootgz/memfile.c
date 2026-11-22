@@ -158,6 +158,22 @@ typedef struct {
   char     val[GD_STR_LEN];
 } session_str_t;
 
+#define MEMFILE_ACTORS_MAX   256u
+#define ACTOR_RESTORE_FRAMES 4
+#define ACTOR_DEAD_RADIUS    30.0f
+
+enum { ACTOR_F_LIFE = 1, ACTOR_F_DEAD = 2, ACTOR_F_ENEMY = 4 };
+
+typedef struct {
+  uint64_t instance_id; /* [[actor + 0x3D8] + 0x88]: Banc PreActor InstanceId */
+  uint32_t name_hash;   /* FNV-1a of actor name: guards against colliding/reused IDs */
+  float    pos[3];      /* actor + 0x31C */
+  float    rot[9];      /* actor + 0x328 (row-major 3x3) */
+  int32_t  life, max_life;
+  uint8_t  state, flags;
+  uint8_t  pad[2];
+} memfile_actor_t;
+
 typedef struct {
   bool              used;
   uint8_t          *save_buf;
@@ -166,6 +182,9 @@ typedef struct {
   uint32_t          s_scalar_count;
   session_str_t    *s_strs;
   uint32_t          s_str_count;
+  memfile_actor_t  *actors;
+  uint32_t          actor_count;
+  bool              have_actors, actors_truncated;
   char              map[GD_STR_LEN], start[GD_STR_LEN];
   double            x, y, z, fx, fz;
   bool              have_pos, have_life, have_magic, have_time;
@@ -191,6 +210,7 @@ static uint8_t  *inflight_save_buf; /* never freed while GameDataMgr save worker
 static int       slot;
 bool             memfile_session = true;
 bool             memfile_fast_reload = true;
+bool             memfile_actors = true;
 
 static enum {
   L_IDLE,
@@ -204,6 +224,7 @@ static enum {
   L_WAIT_ARRIVAL,
   L_WAIT_SETTLE,
   L_MOVING,
+  L_ACTORS,
   L_CAMERA,
 } phase;
 
@@ -247,6 +268,7 @@ static void free_memfile(memfile_t *st)
   free(st->save_buf);
   free(st->s_scalars);
   free(st->s_strs);
+  free(st->actors);
   *st = (memfile_t){ 0 };
 }
 
@@ -1208,6 +1230,463 @@ static void patch_main_module(void)
   log_printf("memfiles: Main.module not found: no item wheel after this fast load"); /* not menu text */
 }
 
+/* --- scene actors: transform, HP and dead/alive state (1.0.0 & 1.1.1) -------------------------- */
+
+#define AMGR_TREE_ROOT       0x38u
+#define ANODE_LEFT           0x00u
+#define ANODE_RIGHT          0x08u
+#define AENTRY_NODE          0x08u
+#define AENTRY_ACTOR         0x28u
+#define AENTRY_NEXT          0x38u
+#define AENTRY_SIZE          0x40u
+#define A_NAME               0x20u
+#define A_STATE              0x2Cu
+#define A_COMPONENTS         0x270u
+#define A_POS                0x31Cu
+#define A_ROT                0x328u
+#define A_FORCE_POS          0x358u
+#define A_PREACTOR           0x3D8u
+#define A_FLAGS              0x4A8u
+#define PREACTOR_INSTANCE_ID 0x88u
+#define ACOMP_PHYSICS        0x50u
+#define ACOMP_LIFE           0x2B8u
+#define ALIFE_CUR            0x1C10u
+#define ALIFE_MAX            0x1C18u
+#define APARAM_VAL           0x08u
+#define ATREE_MAX_DEPTH      64
+#define ATREE_MAX_VISITS     4096
+
+typedef bool (*actor_force_pos_t)(uintptr_t physics_comp, const float pos[3], const float rot[9], bool immediate);
+typedef void (*actor_req_del_t)(uintptr_t actor, uint32_t reason);
+typedef void (*preactor_update_t)(void *node);
+
+/* Call SeqExecuteUpdatePreActorFlag's update with all five inputs true: resyncs GameData-backed dead flags from
+ * the restored GameData, clears in-memory PreActor dead flags (so defeated enemies like Beamos respawn on fast
+ * ResetGimmick), and clears DisableUntilUntraverse so nearby actors respawn immediately. */
+static void reset_preactor_flags(void)
+{
+  if (!z64hd_game || !z64hd_game->preactor_update_flags)
+    return;
+  uint8_t yes = 1;
+  uint64_t node[10] = { 0 };
+  node[4] = (uint64_t)(uintptr_t)&yes; /* +0x20: UpdateStaticPreActor */
+  node[5] = (uint64_t)(uintptr_t)&yes; /* +0x28: UpdateDynamicPreActor */
+  node[6] = (uint64_t)(uintptr_t)&yes; /* +0x30: UpdateDeadFlag */
+  node[7] = (uint64_t)(uintptr_t)&yes; /* +0x38: ResetPreActorDeadFlag */
+  node[8] = (uint64_t)(uintptr_t)&yes; /* +0x40: ResetDisableUntilUntraverse */
+  MAIN_FN(preactor_update_t, z64hd_game->preactor_update_flags)(node);
+}
+
+static bool starts_with(const char *s, const char *prefix)
+{
+  for (; *prefix; s++, prefix++)
+    if (*s != *prefix)
+      return false;
+  return true;
+}
+
+static bool finite_vec3(const float v[3])
+{
+  for (int i = 0; i < 3; i++)
+    if (!(v[i] > -100000.0f && v[i] < 100000.0f))
+      return false;
+  return true;
+}
+
+static bool finite_mat33(const float m[9])
+{
+  for (int i = 0; i < 9; i++)
+    if (!(m[i] > -10.0f && m[i] < 10.0f))
+      return false;
+  return true;
+}
+
+static uint32_t fnv1a_str(const char *s)
+{
+  uint32_t h = 2166136261u;
+  for (int i = 0; i < 64 && s[i]; i++)
+    h = (h ^ (uint8_t)s[i]) * 16777619u;
+  return h;
+}
+
+static bool actor_preactor_id(uintptr_t actor, uint64_t *id_out)
+{
+  if (!sys_mapped(actor + A_PREACTOR, 8, SYS_PERM_R))
+    return false;
+  uintptr_t pre = sys_ptr(actor + A_PREACTOR);
+  if (!pre || (pre & 7u) || !sys_mapped(pre + PREACTOR_INSTANCE_ID, 8, SYS_PERM_R))
+    return false;
+  uint64_t id = 0;
+  memcpy(&id, (const void *)(pre + PREACTOR_INSTANCE_ID), sizeof(id));
+  if (!id || id == UINT64_MAX || id == 0xFFFFFFFFull)
+    return false;
+  *id_out = id;
+  return true;
+}
+
+static bool actor_life_ptrs(uintptr_t actor, int32_t **cur_out, int32_t **max_out, bool write)
+{
+  if (!sys_mapped(actor + A_COMPONENTS, 8, SYS_PERM_R))
+    return false;
+  uintptr_t comps = sys_ptr(actor + A_COMPONENTS);
+  if (!comps || (comps & 7u) || !sys_mapped(comps + ACOMP_LIFE, 8, SYS_PERM_R))
+    return false;
+  uintptr_t life = sys_ptr(comps + ACOMP_LIFE);
+  if (!life || (life & 7u) || !sys_mapped(life, ALIFE_MAX + 8, SYS_PERM_R))
+    return false;
+  uintptr_t cur = sys_ptr(life + ALIFE_CUR);
+  uintptr_t top = sys_ptr(life + ALIFE_MAX);
+  uint32_t perm = write ? (SYS_PERM_R | SYS_PERM_W) : SYS_PERM_R;
+  if (!cur || (cur & 7u) || !top || (top & 7u) || !sys_mapped(cur, APARAM_VAL + 4, perm) ||
+      !sys_mapped(top, APARAM_VAL + 4, SYS_PERM_R))
+    return false;
+  uintptr_t vt_cur = sys_ptr(cur), vt_top = sys_ptr(top);
+  if (vt_cur < z64hd_main || vt_cur - z64hd_main >= MAIN_VTABLE_MAX || vt_top < z64hd_main ||
+      vt_top - z64hd_main >= MAIN_VTABLE_MAX)
+    return false;
+  *cur_out = (int32_t *)(cur + APARAM_VAL);
+  *max_out = (int32_t *)(top + APARAM_VAL);
+  return true;
+}
+
+static uintptr_t actor_physics_comp(uintptr_t actor)
+{
+  if (!sys_mapped(actor + A_COMPONENTS, 8, SYS_PERM_R))
+    return 0;
+  uintptr_t comps = sys_ptr(actor + A_COMPONENTS);
+  if (!comps || (comps & 7u) || !sys_mapped(comps + ACOMP_PHYSICS, 8, SYS_PERM_R))
+    return 0;
+  uintptr_t phys = sys_ptr(comps + ACOMP_PHYSICS);
+  return phys && !(phys & 7u) && sys_mapped(phys, 0x40, SYS_PERM_R) ? phys : 0;
+}
+
+/* Priority: 2 = Enemy/Npc (always kept first), 1 = Animal/Horse/Cucco or Life-bearing Obj/DgnObj/Gimmick, 0 = skip.
+ * Never track static Obj_/DgnObj_ merely for having PhysicsComponent (dungeon walls/floors/doors all have one). */
+static int actor_track_priority(const char *name, bool has_life, uint32_t state)
+{
+  if (starts_with(name, "Enemy_") || starts_with(name, "Npc_"))
+    return 2;
+  if (starts_with(name, "Animal_") || starts_with(name, "Horse") || starts_with(name, "Epona") ||
+      starts_with(name, "Cucco"))
+    return 1;
+  if ((starts_with(name, "Obj_") || starts_with(name, "DgnObj_") || starts_with(name, "Gimmick_")) &&
+      (has_life || state >= 7u))
+    return 1;
+  return 0;
+}
+
+typedef void (*actor_visit_fn)(uintptr_t actor, void *ctx);
+
+static void walk_actor_tree(actor_visit_fn fn, void *ctx)
+{
+  if (!z64hd_game || !z64hd_game->actor_mgr_ptr)
+    return;
+  uintptr_t mgr = sys_ptr(MAIN(z64hd_game->actor_mgr_ptr));
+  if (!mgr || (mgr & 7u) || !sys_mapped(mgr + AMGR_TREE_ROOT, 8, SYS_PERM_R))
+    return;
+  uintptr_t stack[ATREE_MAX_DEPTH];
+  int depth = 0, visits = 0;
+  uintptr_t node = sys_ptr(mgr + AMGR_TREE_ROOT);
+  while ((node || depth) && visits < ATREE_MAX_VISITS) {
+    while (node && depth < ATREE_MAX_DEPTH) {
+      if ((node & 7u) || !sys_mapped(node, 16, SYS_PERM_R))
+        return;
+      stack[depth++] = node;
+      node = sys_ptr(node + ANODE_LEFT);
+    }
+    if (node)
+      return;
+    node = stack[--depth];
+    for (uintptr_t entry = node - AENTRY_NODE; entry && visits < ATREE_MAX_VISITS;
+         entry = sys_ptr(entry + AENTRY_NEXT)) {
+      visits++;
+      if ((entry & 7u) || !sys_mapped(entry, AENTRY_SIZE, SYS_PERM_R))
+        break;
+      uintptr_t actor = sys_ptr(entry + AENTRY_ACTOR);
+      if (actor && !(actor & 7u) && sys_mapped(actor, A_PREACTOR + 8, SYS_PERM_R))
+        fn(actor, ctx);
+    }
+    node = sys_ptr(node + ANODE_RIGHT);
+  }
+}
+
+#define SEEN_IDS_MAX 1024u
+
+typedef struct {
+  memfile_t *st;
+  uintptr_t  link, cam_actor;
+  uint8_t    prio[MEMFILE_ACTORS_MAX];
+  uint64_t   seen_id[SEEN_IDS_MAX];
+  uint8_t    seen_dup[SEEN_IDS_MAX];
+  uint32_t   seen_count, dup_count;
+} actor_cap_ctx_t;
+
+/* Track every instance_id in the scene: if two distinct actors share an ID, poison it so neither is saved. */
+static bool mark_id_unique(actor_cap_ctx_t *c, uint64_t id)
+{
+  for (uint32_t i = 0; i < c->seen_count; i++) {
+    if (c->seen_id[i] == id) {
+      if (!c->seen_dup[i]) {
+        c->seen_dup[i] = 1;
+        c->dup_count++;
+        /* remove any already-captured entry with this colliding ID */
+        for (uint32_t k = 0; k < c->st->actor_count; k++) {
+          if (c->st->actors[k].instance_id == id) {
+            uint32_t last = --c->st->actor_count;
+            c->st->actors[k] = c->st->actors[last];
+            c->prio[k] = c->prio[last];
+            break;
+          }
+        }
+      }
+      return false;
+    }
+  }
+  if (c->seen_count < SEEN_IDS_MAX) {
+    c->seen_id[c->seen_count] = id;
+    c->seen_dup[c->seen_count] = 0;
+    c->seen_count++;
+  }
+  return true;
+}
+
+static void capture_actor_cb(uintptr_t actor, void *vctx)
+{
+  actor_cap_ctx_t *c = (actor_cap_ctx_t *)vctx;
+  if (actor == c->link || actor == c->cam_actor)
+    return;
+  uint64_t id = 0;
+  if (!actor_preactor_id(actor, &id))
+    return;
+  if (!mark_id_unique(c, id))
+    return;
+  uintptr_t name_p = sys_ptr(actor + A_NAME);
+  if (!name_p || !sys_mapped(name_p, 16, SYS_PERM_R))
+    return;
+  const char *name = (const char *)name_p;
+  uint32_t state = *(const uint32_t *)(actor + A_STATE);
+  int32_t *cur_hp = 0, *max_hp = 0;
+  bool has_life = actor_life_ptrs(actor, &cur_hp, &max_hp, false);
+  int prio = actor_track_priority(name, has_life, state);
+  if (!prio)
+    return;
+
+  uint32_t dst_idx = c->st->actor_count;
+  if (dst_idx >= MEMFILE_ACTORS_MAX) {
+    c->st->actors_truncated = true;
+    if (prio < 2)
+      return;
+    uint32_t victim = MEMFILE_ACTORS_MAX;
+    for (uint32_t i = 0; i < MEMFILE_ACTORS_MAX; i++)
+      if (c->prio[i] < 2) {
+        victim = i;
+        break;
+      }
+    if (victim >= MEMFILE_ACTORS_MAX)
+      return;
+    dst_idx = victim;
+  } else {
+    c->st->actor_count++;
+  }
+
+  memfile_actor_t *e = &c->st->actors[dst_idx];
+  *e = (memfile_actor_t){ 0 };
+  e->instance_id = id;
+  e->name_hash = fnv1a_str(name);
+  memcpy(e->pos, (const void *)(actor + A_POS), sizeof(e->pos));
+  memcpy(e->rot, (const void *)(actor + A_ROT), sizeof(e->rot));
+  e->state = (uint8_t)(state > 255u ? 255u : state);
+  e->flags = (uint8_t)((has_life ? ACTOR_F_LIFE : 0) | (state >= 7u ? ACTOR_F_DEAD : 0) |
+                       (starts_with(name, "Enemy_") ? ACTOR_F_ENEMY : 0));
+  if (has_life) {
+    e->life = *cur_hp;
+    e->max_life = *max_hp;
+  }
+  c->prio[dst_idx] = (uint8_t)prio;
+}
+
+static bool capture_actors(memfile_t *st)
+{
+  if (!z64hd_game || !z64hd_game->actor_mgr_ptr)
+    return true;
+  uintptr_t mgr = sys_ptr(MAIN(z64hd_game->actor_mgr_ptr));
+  if (!mgr || (mgr & 7u) || !sys_mapped(mgr + AMGR_TREE_ROOT, 8, SYS_PERM_R))
+    return true;
+  st->actors = alloc16(MEMFILE_ACTORS_MAX * sizeof(memfile_actor_t));
+  if (!st->actors)
+    return false;
+  uintptr_t cam_actor = 0;
+  resolve_camera(&cam_actor);
+  actor_cap_ctx_t *ctx = alloc16(sizeof(*ctx));
+  if (!ctx) {
+    free(st->actors);
+    st->actors = 0;
+    return false;
+  }
+  *ctx = (actor_cap_ctx_t){ st, link_actor(), cam_actor, { 0 }, { 0 }, { 0 }, 0, 0 };
+  walk_actor_tree(capture_actor_cb, ctx);
+  if (ctx->dup_count)
+    log_printf("memfiles: skipped %u colliding actor ID(s) during capture", (unsigned)ctx->dup_count); /* not menu text */
+  free(ctx);
+  st->have_actors = true;
+  if (st->actor_count < MEMFILE_ACTORS_MAX) {
+    uint32_t keep = st->actor_count ? st->actor_count : 1u;
+    memfile_actor_t *shrunk = alloc16((size_t)keep * sizeof(memfile_actor_t));
+    if (shrunk) {
+      if (st->actor_count)
+        memcpy(shrunk, st->actors, (size_t)st->actor_count * sizeof(memfile_actor_t));
+      free(st->actors);
+      st->actors = shrunk;
+    }
+  }
+  return true;
+}
+
+typedef struct {
+  const memfile_t *st;
+  uintptr_t        link, cam_actor;
+  bool             delete_missing;
+  uint8_t          used[MEMFILE_ACTORS_MAX];
+  uint32_t         moved, hp_set, deleted, missing_del;
+} actor_rest_ctx_t;
+
+static bool transform_differs(uintptr_t actor, const float pos[3], const float rot[9])
+{
+  const float *cp = (const float *)(actor + A_POS);
+  for (int i = 0; i < 3; i++) {
+    float d = cp[i] - pos[i];
+    if (d > 0.01f || d < -0.01f)
+      return true;
+  }
+  const float *cr = (const float *)(actor + A_ROT);
+  for (int i = 0; i < 9; i++) {
+    float d = cr[i] - rot[i];
+    if (d > 0.001f || d < -0.001f)
+      return true;
+  }
+  return false;
+}
+
+static void actor_apply_transform(uintptr_t actor, const float pos[3], const float rot[9])
+{
+  if (!finite_vec3(pos))
+    return;
+  bool ok_rot = finite_mat33(rot);
+  uintptr_t phys = actor_physics_comp(actor);
+  if (phys && z64hd_game->actor_force_set_pos) {
+    float nan_rot = 0;
+    uint32_t qnan = 0x7FC00000u;
+    memcpy(&nan_rot, &qnan, 4);
+    if (MAIN_FN(actor_force_pos_t, z64hd_game->actor_force_set_pos)(phys, pos, ok_rot ? rot : &nan_rot, true))
+      return;
+  }
+  if (sys_mapped(actor + A_FORCE_POS, 12, SYS_PERM_R | SYS_PERM_W))
+    memcpy((void *)(actor + A_FORCE_POS), pos, 12);
+  if (sys_mapped(actor + A_FLAGS, 4, SYS_PERM_R | SYS_PERM_W))
+    *(volatile uint32_t *)(actor + A_FLAGS) &= ~0x8000u;
+  if (sys_mapped(actor + A_POS, 12, SYS_PERM_R | SYS_PERM_W))
+    memcpy((void *)(actor + A_POS), pos, 12);
+  if (ok_rot && sys_mapped(actor + A_ROT, 36, SYS_PERM_R | SYS_PERM_W))
+    memcpy((void *)(actor + A_ROT), rot, 36);
+}
+
+static void restore_actor_cb(uintptr_t actor, void *vctx)
+{
+  actor_rest_ctx_t *c = (actor_rest_ctx_t *)vctx;
+  if (actor == c->link || actor == c->cam_actor)
+    return;
+  uint64_t id = 0;
+  if (!actor_preactor_id(actor, &id))
+    return;
+  uintptr_t name_p = sys_ptr(actor + A_NAME);
+  if (!name_p || !sys_mapped(name_p, 16, SYS_PERM_R))
+    return;
+  const char *name = (const char *)name_p;
+  uint32_t state = *(const uint32_t *)(actor + A_STATE);
+  uint32_t nhash = fnv1a_str(name);
+
+  int match_idx = -1;
+  for (uint32_t i = 0; i < c->st->actor_count; i++) {
+    if (c->st->actors[i].instance_id == id &&
+        (!c->st->actors[i].name_hash || c->st->actors[i].name_hash == nhash)) {
+      match_idx = (int)i;
+      break;
+    }
+  }
+
+  if (match_idx >= 0) {
+    if (c->used[match_idx])
+      return; /* 1-to-1 guard: never restore two live actors from one saved entry */
+    int32_t *cur_hp = 0, *max_hp = 0;
+    bool has_life = actor_life_ptrs(actor, &cur_hp, &max_hp, false);
+    if (!actor_track_priority(name, has_life, state))
+      return;
+    c->used[match_idx] = 1;
+    const memfile_actor_t *match = &c->st->actors[match_idx];
+    if (match->flags & ACTOR_F_DEAD) {
+      if (state < 7u && z64hd_game->actor_request_delete) {
+        MAIN_FN(actor_req_del_t, z64hd_game->actor_request_delete)(actor, 0);
+        c->deleted++;
+      }
+      return;
+    }
+    if (state >= 7u)
+      return;
+    if (transform_differs(actor, match->pos, match->rot)) {
+      actor_apply_transform(actor, match->pos, match->rot);
+      c->moved++;
+    }
+    if (match->flags & ACTOR_F_LIFE) {
+      if (actor_life_ptrs(actor, &cur_hp, &max_hp, true)) {
+        int32_t want = match->life;
+        if (want < 0)
+          want = 0;
+        if (*max_hp > 0 && want > *max_hp)
+          want = *max_hp;
+        if (*cur_hp != want) {
+          *cur_hp = want;
+          c->hp_set++;
+        }
+      }
+    }
+    return;
+  }
+
+  /* Not in saved list: if it's a nearby Banc enemy (state 4..6) and our snapshot wasn't truncated, it was dead. */
+  if (!c->delete_missing || c->st->actors_truncated || !c->st->have_pos || !z64hd_game->actor_request_delete)
+    return;
+  if (state < 4u || state > 6u || !starts_with(name, "Enemy_"))
+    return;
+  const float *pos = (const float *)(actor + A_POS);
+  float dx = pos[0] - (float)c->st->x, dy = pos[1] - (float)c->st->y, dz = pos[2] - (float)c->st->z;
+  if (dx * dx + dy * dy + dz * dz <= ACTOR_DEAD_RADIUS * ACTOR_DEAD_RADIUS) {
+    MAIN_FN(actor_req_del_t, z64hd_game->actor_request_delete)(actor, 0);
+    c->missing_del++;
+  }
+}
+
+static uint32_t actor_tot_moved, actor_tot_hp, actor_tot_dead, actor_tot_missing;
+
+static void restore_actors_pass(const memfile_t *st, bool first, bool last)
+{
+  if (!memfile_actors || !st->have_actors)
+    return;
+  if (first)
+    actor_tot_moved = actor_tot_hp = actor_tot_dead = actor_tot_missing = 0;
+  uintptr_t cam_actor = 0;
+  resolve_camera(&cam_actor);
+  actor_rest_ctx_t ctx = { st, link_actor(), cam_actor, true, { 0 }, 0, 0, 0, 0 };
+  walk_actor_tree(restore_actor_cb, &ctx);
+  actor_tot_moved += ctx.moved;
+  actor_tot_hp += ctx.hp_set;
+  actor_tot_dead += ctx.deleted;
+  actor_tot_missing += ctx.missing_del;
+  if (last)
+    log_printf("memfile %d load: actors restored (%u moved, %u hp, %u dead, %u missing enemies removed)", /* not menu text */
+               active_slot + 1, (unsigned)actor_tot_moved, (unsigned)actor_tot_hp, (unsigned)actor_tot_dead,
+               (unsigned)actor_tot_missing);
+}
+
 static void finish_load(void)
 {
   if (fast_load) {
@@ -1216,6 +1695,18 @@ static void finish_load(void)
   gfx_notice("memfile loaded");
   status[0] = 0;
   set_phase(L_IDLE);
+}
+
+static void begin_actors_or_camera(const memfile_t *st)
+{
+  if (memfile_actors && st->have_actors && z64hd_game && z64hd_game->actor_mgr_ptr) {
+    set_phase(L_ACTORS);
+  } else if (st->have_camera) {
+    camera_frames = camera_guard = 0;
+    set_phase(L_CAMERA);
+  } else {
+    finish_load();
+  }
 }
 
 static void begin_move_or_camera(const memfile_t *st)
@@ -1227,12 +1718,10 @@ static void begin_move_or_camera(const memfile_t *st)
     gfx_notice("memfile loaded, but Link couldn't be moved to its position");
     status[0] = 0;
     set_phase(L_IDLE);
-  } else if (st->have_camera) {
-    camera_frames = camera_guard = 0;
-    set_phase(L_CAMERA);
   } else {
-    log_printf("memfile %d loaded (no position)", active_slot + 1); /* not menu text */
-    finish_load();
+    if (!st->have_camera && !(memfile_actors && st->have_actors))
+      log_printf("memfile %d loaded (no position)", active_slot + 1); /* not menu text */
+    begin_actors_or_camera(st);
   }
 }
 
@@ -1270,10 +1759,11 @@ static void finish_save(const uint8_t *desc0)
   set_phase(L_IDLE);
   const memfile_t *st = &memfiles[active_slot];
   log_printf("memfile %d saved: %s at \"%s\", %.2f %.2f %.2f facing %.3f,%.3f, life %d, magic %d, time %02u:%02u, "
-             "%u bytes binary, %u scalars + %u strings session", /* not menu text */
+             "%u bytes binary, %u scalars + %u strings session, %u actors%s", /* not menu text */
              active_slot + 1, st->map, st->start, st->x, st->y, st->z, st->fx, st->fz, (int)st->life, (int)st->magic,
              st->have_time ? (unsigned)(st->time / 3600) : 99u, st->have_time ? (unsigned)(st->time / 60 % 60) : 99u,
-             (unsigned)st->save_size, (unsigned)st->s_scalar_count, (unsigned)st->s_str_count);
+             (unsigned)st->save_size, (unsigned)st->s_scalar_count, (unsigned)st->s_str_count,
+             (unsigned)st->actor_count, st->actors_truncated ? " (capped)" : "");
   gfx_logf("memfile %d saved", active_slot + 1);
 }
 
@@ -1336,7 +1826,7 @@ bool memfile_save(int s)
   free_memfile(&staging);
   staging.save_buf = alloc16(buf_size);
   staging.save_cap = buf_size;
-  if (!staging.save_buf || !capture_session(&staging)) {
+  if (!staging.save_buf || !capture_session(&staging) || !capture_actors(&staging)) {
     free_memfile(&staging);
     gfx_notice("can't save a memfile: out of memory");
     return false;
@@ -1499,6 +1989,17 @@ static void step_saving(uint8_t *mgr, uint8_t *desc0)
     save_fail("can't save a memfile: save timed out");
 }
 
+static void trigger_reset_gimmick(void)
+{
+  reset_preactor_flags();
+  gd_poke_int(F_RESET_GIMMICK_OPT, 0);
+  gd_set_int(F_RESET_GIMMICK_OPT, 0);
+  patch_main_module();
+  gd_set_bool(F_REQ_RESET_GIMMICK, true);
+  saw_reset_req = false;
+  set_phase(L_FAST_WAIT_RESET);
+}
+
 static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
 {
   switch (phase) {
@@ -1525,22 +2026,12 @@ static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
         snprintf(status, sizeof(status), TF("loading memfile %d: placing Link"), active_slot + 1);
         set_phase(L_FAST_MOVE_PRE);
       } else {
-        gd_poke_int(F_RESET_GIMMICK_OPT, 0);
-        gd_set_int(F_RESET_GIMMICK_OPT, 0);
-        patch_main_module();
-        gd_set_bool(F_REQ_RESET_GIMMICK, true);
-        saw_reset_req = false;
-        set_phase(L_FAST_WAIT_RESET);
+        trigger_reset_gimmick();
       }
       break;
     case L_FAST_MOVE_PRE:
       if (link_at(st, phase_frames) || phase_frames >= FAST_MOVE_TIMEOUT) {
-        gd_poke_int(F_RESET_GIMMICK_OPT, 0);
-        gd_set_int(F_RESET_GIMMICK_OPT, 0);
-        patch_main_module();
-        gd_set_bool(F_REQ_RESET_GIMMICK, true);
-        saw_reset_req = false;
-        set_phase(L_FAST_WAIT_RESET);
+        trigger_reset_gimmick();
       } else if (phase_frames % FAST_MOVE_RETRY == 0) {
         move_link(st);
       }
@@ -1658,16 +2149,24 @@ static void step_post_move(const memfile_t *st)
       link_facing(&fx, &fz);
       log_printf("memfile %d loaded (Link placed after %d frames, facing %.3f,%.3f, saved %.3f,%.3f)",
                  active_slot + 1, phase_frames, fx, fz, st->fx, st->fz); /* not menu text */
+      begin_actors_or_camera(st);
+    } else if (phase_frames > MOVE_TIMEOUT) {
+      fail("memfile loaded, but Link couldn't be moved to its position");
+    } else if (phase_frames % MOVE_RETRY_EVERY == 0) {
+      move_link(st);
+    }
+    return;
+  }
+
+  if (phase == L_ACTORS) {
+    restore_actors_pass(st, phase_frames == 1, phase_frames >= ACTOR_RESTORE_FRAMES);
+    if (phase_frames >= ACTOR_RESTORE_FRAMES) {
       if (st->have_camera) {
         camera_frames = camera_guard = 0;
         set_phase(L_CAMERA);
       } else {
         finish_load();
       }
-    } else if (phase_frames > MOVE_TIMEOUT) {
-      fail("memfile loaded, but Link couldn't be moved to its position");
-    } else if (phase_frames % MOVE_RETRY_EVERY == 0) {
-      move_link(st);
     }
     return;
   }
@@ -1805,8 +2304,10 @@ void memfile_frame(void)
 #define SZM_STRINGS     SZM_TAG('S', 'S', 'T', 'R') /* session strings: { u32 hash, char val[64] } */
 #define SZM_STATE       SZM_TAG('S', 'T', 'A', 'T') /* start point, Link, vitals, clock, age */
 #define SZM_CAMERA      SZM_TAG('C', 'A', 'M', 'R') /* the player camera and its AI action nodes */
+#define SZM_ACTORS      SZM_TAG('A', 'C', 'T', 'R') /* scene actors: { u8 flags, u32 record_size, records } */
 #define SZM_SCALAR_SIZE 18u /* format 2's records; a file's own are at least this */
 #define SZM_STRING_SIZE (4u + GD_STR_LEN)
+#define SZM_ACTOR_SIZE  70u /* u64 id, f32 pos[3], f32 rot[9], s32 life, s32 max_life, u8 state, u8 flags, u32 name_hash */
 #define SZM_FILE_MAX    (GD_MAX_SAVE_BUF + (1u << 20))
 #define SZM_SLACK       0x10000u /* room for every section but the snapshot and the session fields */
 #define SZM_DIR         SD_DIR "/" MEMFILE_DIR_NAME
@@ -1814,6 +2315,7 @@ void memfile_frame(void)
 
 enum { STATE_POS = 1, STATE_LIFE = 2, STATE_MAGIC = 4, STATE_TIME = 8, STATE_NAYRU = 16 };
 enum { CAM_STATE = 1, CAM_COMPONENT = 2 };
+enum { ACTORS_TRUNCATED = 1 };
 
 typedef struct {
   char     magic[4];
@@ -1903,7 +2405,8 @@ static void out_blob(szm_out_t *o, const void *b, uint32_t n)
 static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size_out)
 {
   uint32_t cap = (uint32_t)sizeof(szm_header_t) + st->save_size + st->s_scalar_count * SZM_SCALAR_SIZE +
-                 st->s_str_count * SZM_STRING_SIZE + CAMERA_ACTIONS * (16u + ACTION_BYTES) + SZM_SLACK;
+                 st->s_str_count * SZM_STRING_SIZE + st->actor_count * SZM_ACTOR_SIZE +
+                 CAMERA_ACTIONS * (16u + ACTION_BYTES) + SZM_SLACK;
   szm_out_t o = { alloc16(cap), (uint32_t)sizeof(szm_header_t), cap, true };
   if (!o.p)
     return 0;
@@ -1970,6 +2473,26 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
     out_sized_end(&o, entry);
   }
   out_end(&o, at);
+
+  if (st->have_actors) {
+    at = out_begin(&o, SZM_ACTORS);
+    uint8_t aflags = st->actors_truncated ? ACTORS_TRUNCATED : 0;
+    record = SZM_ACTOR_SIZE;
+    OUT(&o, aflags);
+    OUT(&o, record);
+    for (uint32_t i = 0; i < st->actor_count; i++) {
+      const memfile_actor_t *e = &st->actors[i];
+      OUT(&o, e->instance_id);
+      OUT(&o, e->pos);
+      OUT(&o, e->rot);
+      OUT(&o, e->life);
+      OUT(&o, e->max_life);
+      OUT(&o, e->state);
+      OUT(&o, e->flags);
+      OUT(&o, e->name_hash);
+    }
+    out_end(&o, at);
+  }
 
   if (!o.ok) {
     free(o.p);
@@ -2103,6 +2626,40 @@ static bool szm_strings(const uint8_t *p, uint32_t size, memfile_t *st)
   return true;
 }
 
+static bool szm_actors(const uint8_t *p, uint32_t size, memfile_t *st)
+{
+  if (size < 5u)
+    return true;
+  uint8_t aflags = p[0];
+  p++;
+  size--;
+  uint32_t record = 0, count = in_records(&p, size, 66u, &record);
+  if (count > MEMFILE_ACTORS_MAX) {
+    count = MEMFILE_ACTORS_MAX;
+    aflags |= ACTORS_TRUNCATED;
+  }
+  st->actors = alloc16((size_t)(count ? count : 1u) * sizeof(memfile_actor_t));
+  if (!st->actors)
+    return false;
+  for (uint32_t i = 0; i < count; i++, p += record) {
+    memfile_actor_t e = { 0 };
+    memcpy(&e.instance_id, p, 8);
+    memcpy(e.pos, p + 8, 12);
+    memcpy(e.rot, p + 20, 36);
+    memcpy(&e.life, p + 56, 4);
+    memcpy(&e.max_life, p + 60, 4);
+    e.state = p[64];
+    e.flags = p[65];
+    if (record >= 70u)
+      memcpy(&e.name_hash, p + 66, 4);
+    if (e.instance_id && e.instance_id != UINT64_MAX && e.instance_id != 0xFFFFFFFFull)
+      st->actors[st->actor_count++] = e;
+  }
+  st->have_actors = true;
+  st->actors_truncated = (aflags & ACTORS_TRUNCATED) != 0;
+  return true;
+}
+
 /* read a .szm file's bytes into st (zeroed; free_memfile it either way): 0, or why it can't be used */
 static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
 {
@@ -2154,6 +2711,9 @@ static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
       have_state = szm_state(&in, st);
     } else if (tag == SZM_CAMERA) {
       szm_camera(&in, st);
+    } else if (tag == SZM_ACTORS && !st->actors) {
+      if (!szm_actors(body, size, st))
+        return "not enough memory for that memfile";
     }
   }
   if (!st->save_buf || !have_state)

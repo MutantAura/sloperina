@@ -2432,6 +2432,8 @@ static bool get_memfile_fast(menu_item_t *it) { return memfile_fast_reload; }
 static void set_memfile_fast(menu_item_t *it, bool on) { memfile_fast_reload = on; }
 static bool get_memfile_session(menu_item_t *it) { return memfile_session; }
 static void set_memfile_session(menu_item_t *it, bool on) { memfile_session = on; }
+static bool get_memfile_actors(menu_item_t *it) { return memfile_actors; }
+static void set_memfile_actors(menu_item_t *it, bool on) { memfile_actors = on; }
 
 static void act_save_memfile(menu_item_t *it)
 {
@@ -2798,7 +2800,7 @@ static void build_memfiles(void)
     yes->hint = "L: delete the folder and everything in it from the SD card";
     yes->log_label = "";
   }
-  menu_init(&m_memfiles, "memfiles", 8 + MEMFILE_SLOTS);
+  menu_init(&m_memfiles, "memfiles", 9 + MEMFILE_SLOTS);
   menu_item_t *slot = menu_add_option(&m_memfiles, "slot", MEMFILE_SLOTS, memfile_slot_names, get_memfile_slot,
                                       set_memfile_slot, 0);
   if (slot) {
@@ -2825,6 +2827,11 @@ static void build_memfiles(void)
   if (session) {
     session->hint = "loads also restore what the game doesn't save: npc talks, minigames, things broken in a map";
     session->log_label = "memfile session flags:";
+  }
+  menu_item_t *actors = menu_add_check(&m_memfiles, "restore actors", get_memfile_actors, set_memfile_actors, 0);
+  if (actors) {
+    actors->hint = "loads also restore scene actors' positions, rotations, HP and dead/alive state";
+    actors->log_label = "memfile restore actors:";
   }
   menu_add_return(&m_memfiles);
   for (int i = 0; i < MEMFILE_SLOTS; i++)

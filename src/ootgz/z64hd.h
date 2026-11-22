@@ -167,6 +167,13 @@ struct z64hd_build {
   /* SetSavedSelectedChallenge's work (node): selects the quest GameData names (UInt 0x2029D3D8) in the manager, or
    * none; it only marks node+0x18 done besides. A save load runs it (FINDINGS 9.19). 0: not known for this build */
   uint32_t challenge_select_saved;
+  /* Scene actor restore (memfile.c): forceSetPosAndRot(physics_comp, pos, rot_mat33, immediate) called by
+   * ExecuteActorForceSetPos on [[actor+0x270]+0x50]; requestDelete(actor, reason) called by
+   * OneShotActorHolderRequestDelete; preactor_update_flags(node) is SeqExecuteUpdatePreActorFlag's update
+   * (clears PreActor dead/disable flags and resyncs GameData-backed dead flags before ResetGimmick). 0: unknown */
+  uint32_t actor_force_set_pos;
+  uint32_t actor_request_delete;
+  uint32_t preactor_update_flags;
   struct z64hd_link_path link_paths[5];
 };
 

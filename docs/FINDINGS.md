@@ -579,7 +579,7 @@ Objects:
   opened on 1.0.0. A host-side read/write test used the different String64 indices from each build.
   Full in-game warping after the String64 fix still needs a play test.
 
-### 5.21 Locking Link's X, Y and Z (1.1.1 only)
+### 5.21 Locking Link's X, Y and Z
 - **Cause:** the game's collision resolver and its body-position stores move Link after the module writes him, so
   a written position doesn't hold through address writes. The stores are: collision `main+0x18D2C18`, `+0x18D2C20`; body `main+0x180EA24` (`stp d0, d1,
   [x23, #0x10]`, X and Y together) and `main+0x180EA2C` (`str d0, [x23, #0x20]`, Z). Link's body centre is the
@@ -593,7 +593,10 @@ Objects:
 - **Checked:** `mkips` writes the stubs and branches for `1.1.1`; the words were compared with clang's assembly
   (`stp`/`ldp`, `adrp`/`ldr` of the slot, the `tbnz` bit numbers, the original stores) and every branch resolves to
   its intended address. The module files compile for aarch64.
-- **Not verified:** `1.0.0` has no store offsets, so locks there only show a notice that it will not work.
+- **1.0.0** (22nd November 2026): the same stores at `main+0x17C8D24` (X+Y), `+0x17C8D2C` (Z), `+0x188D3B8` and
+  `+0x188D3C0` (collision), each matched on all 65 masked words round it in a memory dump; the lock word is
+  `main+0x4E2A078`, after the hook slot as in 1.1.1 (MOD0's bss ends at `0x4E2A068`). Patch version 5.
+- **Not verified in game on 1.0.0.**
 
 ### 5.22 Loading zones don't fire while Link's collision is off
 - **Symptom:** floating into a loading zone with levitate's **through walls** on did nothing; the exit fired as
@@ -1075,7 +1078,8 @@ point.
   - Guess (not verified): that point was slightly below the nearby floor, inside collision. That would fail the
     near candidates, while rays and sweeps that start inside geometry pass through the wall behind it.
 - **Not known:** what `main+0xA47390` checks. GameSafetyMgr (`main+0x32857B0`, component 28) handles the story's
-  NoEscape areas (`StartPos_` anchors; 28 entries in RSDB `GameSafetySetting.Product.111`); not looked at further.
+  NoEscape areas (`StartPos_` anchors; 28 entries in RSDB `GameSafetySetting.Product.111`); what it keeps is in
+  §9.14.
 
 **The mod's preview** (`savepos.c`, scene > save position):
 - AutoSaveMgr is found among the current scene's components by its update (`main+0x32762B0`) in its vtable; slots A
@@ -1092,6 +1096,15 @@ point.
   most every few frames while it moves) and refreshed now and then while Link stands on it.
 - In Ghidra `thunk_FUN_03c41c50` is marked no-return, so decompiles stop after it (FUN_00945220, FUN_00375BA0):
   read the disassembly (`tools/re64.py dump/v131072 func <offset>`).
+- **1.0.0 (v0; found 22nd November 2026):** `main` was dumped from Lichii's memory (its exefs `main` is `ZBIC`
+  compressed): MOD0 at `main+0x3BE705C`, main at `0x80FC1000` that run (the base that puts the most vtable entries
+  on `pacibsp`). AutoSaveMgr's update is `main+0x3217250` (v131072's `0x32762B0` matched by masked signature; same
+  code but for its global loads), its vtable `main+0x4B3B5F8` (v131072's `0x4BA0848`, all six matchable slots the
+  same). The safety search is `main+0x9444A0`, identical but for its GOT load; both callers match (`0x9443B0`,
+  `0x26691F0`). The scene manager `[main+0x4E271E8]` and event state `[main+0x4E243E0]` are 0x70460 below v131072's,
+  as the other bss slots are (§9.5). In game: the scene's entry 12 was AutoSaveMgr with slot B set and `EvtWait`
+  at `+0x1DC`, and the event state is the event manager object (`[[main+0x4C183E8]]`). Player fields
+  (`+0x13D0`, `+0x1948`, the actor's `+0x31C` / `+0x330` / `+0x348`) are used by as many instructions in both builds.
 
 ### 9.8 Where Link voids out: the ground map, its two probes and the void areas (v131072; from the disassembly, the view checked in game 14th November 2026)
 Link can void on ground that looks solid and walk on thin air without voiding, because the void check doesn't use
@@ -1162,6 +1175,10 @@ the probes' workings, what switches the flags off, and the void areas' shapes.
     perspective matrix (x and y by the half fov's tangents, w the distance ahead, z scaled so z / w is the game's
     depth) draws a quad whose element matrix puts it in the world (`gpuui_world`, `gpuui_face`), and the scene's
     depth hides it. Worked as written.
+
+- **1.0.0** (22nd November 2026, from a memory dump): the ground map's slot is `main+0x4C18258` (v131072's 40 loads
+  of `0x4C7DF00` map to it) and the record formats `main+0x3E89420` (the same 7 x 0x74 bytes). In game its manager
+  (`+0xC0`, `+0x170`) held a loaded area with 18 chunks. Not yet checked in game with the view on.
 
 ### 9.9 Ragdolling Link on demand (v131072; from the disassembly, not yet checked in game)
 The game ragdolls Link in events with the AI node `ExecuteEventPlayerImmediateRagdollDown` (vtable: name getter
@@ -1437,3 +1454,142 @@ reads every slot's caption once, at boot, and keeps it.
 - **Levitating with through walls off** also gives storage, without a hit: levitate holds Link still with
   collision on, the physics reports him standing on something (`[[actor+0x270]+0x358]+0x13D0` bit 0) but not
   grounded (bit 2), so items work in the air and a hookshot shot is cancelled on its first frame.
+### 9.12 Direct pointer paths replacing memory walks (1.0.0 and 1.1.1)
+
+Disassembly of both `1.0.0` (`v65536`) and `1.1.1` (`v131072`) `main` binaries mapped every remaining
+heap/struct/vtable walk in `sloperinaGZ` to O(1) direct paths (shared struct layouts in both builds):
+
+1. **Link's Havok physics record (`cct.c`, `levitate.c`):**
+   - `phive_mgr_ptr`: `main+0x4C18258` (`1.0.0`), `main+0x4C7DF00` (`1.1.1`): the same slot as `voxel_mgr_ptr`
+     (the ground map hangs off the same manager, at `+0xC0` / `+0x170`).
+   - From Link's controller body `cct_body = [[[[[[link_actor()+0x270]+0x50]+0x20]+0x10]+8]+0x20]`:
+     - `world_idx = (*(u64 *)(cct_body + 0x70) >> 5) & 1`
+     - `body_id = (u32)(*(u64 *)(*(uintptr_t *)(cct_body + 0x78) + 8))`, `body_idx = body_id & 0xFFFFFF`
+     - `hknpWorld = [[[*(*(main+phive_mgr_ptr) + 0xC0) + 0xC8 + world_idx * 8] + 0xE0]`
+     - `hknpBody = [hknpWorld + 0x48][body_idx / 42] + (body_idx % 42) * 0xC0` (`+0xB8 == cct_body`)
+     - `motion_id = *(u32 *)(hknpBody + 0x80)` (`< *(u32 *)(hknpWorld + 0x798)`)
+     - `hknpMotion = [hknpWorld + 0x708][motion_id >> 6] + (motion_id & 0x3F) * 0x80` (`*(u32 *)(hknpMotion + 0x60) == body_id`)
+   - The physics record is `hknpMotion + 0x10` (position doubles followed by 48-byte motion state; `+0x50` is
+     `hknpMotion + 0x60`/`+0x64`, which holds `body_id` above `0x5F7F3DCD`).
+2. **Magic meter (`cheats.c`):**
+   - Inline inside Link's player component at `[[link_actor() + 0x270] + 0x358] + 0x1B78` (`1.0.0`: `0x421030`
+     called by `0x6DD260`/`0x6DDB68`; `1.1.1`: `0x1639B0` called by `0x608CD0`/`0x6095D8`). Value at `+0x44`,
+     hashes at `+0x38`.
+3. **Link's equipment owner and component (`link.c`):**
+   - Callers of `equip_all_fn` (`1.0.0`: `0xEE0840`, `1.1.1`: `0xF201B0`) pass `owner = *(*(main + pouch_mgr_ptr))`
+     (`1.0.0`: `0x4C18428`, `1.1.1`: `0x4C7E0D0`; vtable `vt_equip_owner`), and `equip_all_fn` reads
+     `component = *(owner + 0x470)` (vtable `vt_equip`, `+0x18 == link_actor()`).
+4. **GameData type entries (`gamedata.c`):**
+   - Verified in the `GameDataMgr` constructor (`1.0.0`: `0x11BCDC0`, `1.1.1`: `0x11FD010`): `GD_BOOL` `+0x08`,
+     `GD_INT` `+0xC8`, `GD_FLOAT` `+0x188`, `GD_ENUM` `+0x248`, `String64` `+0x608`.
+5. **AutoSaveMgr (`savepos.c`):**
+   - Verified in restart-point handoff (`1.0.0`: `0x6DC870..0x6DC8B0`, `1.1.1`: `0x6082C4..0x608304`):
+     `AutoSaveMgr` is `scene->components[12]` (`[scene+0x58] + 12 * 8`), checked against `vt_autosave`
+     (`1.0.0`: `0x4B3B5F8`, `1.1.1`: `0x4BA0848`).
+- **1.0.0, again** (22nd November 2026): a memory dump of the running game, mapped independently (globals through
+  the code that loads them, functions by masked signature, vtables slot by slot), gave the same seven addresses, and
+  `caption_update` `0x4E9760` (what `0x33A95D0`, v131072's `0x340A460` matched whole, calls), so every caption
+  offset is filled on both builds.
+
+### 9.13 Quest stages: the ChallengeMgr (v131072; from the disassembly, checked in game 19th November 2026)
+A quest's stage is a GameData Enum (`Step_<name>`, the **story** menu's values), but the game's **ChallengeMgr**
+keeps every quest's stage itself and reads GameData back only after a save load (leo's finding in #practicerom).
+Writing the Enum alone changes what reads GameData (dialogue choices, expression flags) and not what asks the
+manager: NPC schedules (`AISchedule`) and the stage's own events.
+- **The instance:** `*[main+0x4E29950]` (`SeqOneShotChallengeSyncToGameData`'s work, `main+0xD8D000`, loads it
+  through GOT `main+0x4C7F9F0`). Its quests are in three lists of 352-byte entries, count (s32) and array at
+  `+0x40`/`+0x48`, `+0x50`/`+0x58`, `+0x60`/`+0x68`. In an entry: `+0x08` the quest's key, murmur3 of its name
+  without `Step_` (`Meet_DekuTree` 0x4DBCA27F); `+0x10` the stage (murmur3 of its name); `+0x16` flags (u16; 0x400
+  a new stage is queued); `+0xA0` the GameData field (murmur3 of `Step_<name>`); `+0xA4` the queued stage.
+- **Setting a stage:** `main+0x2CF54A0` (mgr, quest key, stage, flag, reset, force), what
+  `OneShotChallengeSetStep` (`main+0x28BE1A0`) calls. It finds the entry by key, refuses (returns false) when the
+  quest is at NotReady or Complete unless `force`, and otherwise queues the stage (`+0xA4`, flags 0x400; `flag`
+  clears 0x8 instead of setting it; `reset` marks the stage's sub-entries); the manager's update
+  (`main+0x2CF3E6C`) makes the change and writes GameData. `TriggerChallengeSetStep`'s path calls it with 0, 0, 0.
+- **Re-reading GameData:** `mgr+0x72 = 1` (what `SeqOneShotChallengeSyncToGameData` does, unless `mgr+0x75` bit 0)
+  makes the next update read every quest's field and queue the stages that differ, then clear the byte.
+
+The story menu sets a stage through `main+0x2CF54A0` (with force) where the build's addresses are known, else it
+writes GameData. Checked in Lichii on 1.1.1, Kokiri Forest save: the manager held the new stage two frames after
+the menu set it, and the game wrote GameData itself; with **deku tree** set to complete and the map reloaded, the
+game played its own "Deku Tree completed" scene (`KokiriForest_Get_StoneOfForest_Completed_Event`, which clears
+`KokiriForest_Npc_Kokiri_Mido_Child_Blocker`), and after one more reload Mido no longer stood on the path to the Deku
+Tree. Writing the Enum alone, as before, left the manager at Ready: no scene, and Mido still blocked.
+- **1.0.0** (22nd November 2026, from a memory dump): the instance `*[main+0x4DB9998]`, through GOT `main+0x4C19D48`
+  (v131072's loads of its GOT slot matched, 10 of 10 agreeing); the set-step `main+0x2CA16F0` (v131072's matched by
+  masked signature, unique over 64 words; leo gives the same address, and #43 found both separately). The set-step's
+  code is the same, so the manager's fields it uses are at the same offsets.
+
+### 9.14 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game; 1.0.0 checked in game)
+What a minigame, a boss fight or a story section turns off (saving, warping, ...) is one **GameSafetySetting**: a row
+of RSDB `GameSafetySetting.Product.111` (28 rows), named by a Challenge (`GameSafetySetting`, or a step's
+`ReplaceGameSafetySetting`). GameSafetyMgr, the scene's component 28 (§9.3), holds the one applied. The **safety**
+and **safety flags** watches read it (`safety.c`).
+- **The manager:** vtable `main+0x4BA1058`. Slot 8 (`main+0x3286630`) is its name getter (`adrp x0; add x0; ret`,
+  giving `GameSafetyMgr`; the only function in main that returns that string), slot 6 is `main+0x32857B0`. The mod
+  finds the component by this vtable (`vt_safety_mgr`), entry 28 first, as it finds AutoSaveMgr (§9.7).
+- **`+0x54` (u32): the applied setting's `NameHash`**, MurmurHash3_32 (seed 0) of the row's name: the file name of
+  `Work/Game/GameSafetySetting/<name>.game__GameSafetySetting.gyml`, not the whole path. All 28 names are in
+  `safety.c`; the test (`tests/safety.c`) hashes each one.
+- **`+0x50` (u16): that setting's switches, packed** by `main+0x3285B50`..`0x3285C40`, which looks the row up by the
+  hash. Bit 0: a Challenge entered an `IsMiniGame: true` step (`main+0x2CF1160` sets it and writes the hash). Bit 3:
+  a safety section is active. Then the row's fields: bit 5 `IsCheckSafetyArea`, 6 `IsDisableSave`, 7 `IsDisableWarp`,
+  8 `IsDisableAutoPlacement`, 9 `IsDisableOpenTreasureBox`, 10 `IsDisableGrab`, 11 `IsDisableBoot`,
+  12 `IsDisableTimeProgress`, 13 `DoSaveWhenEnd`, 14 `IsDisableLoadingPause`, 15 `IsNoDispErrorForTemporarySave`.
+- **A field left out of a row has its default, and several defaults are true.** `IsDisableSave` is (read at
+  `main+0x5A2288`), which is why only `Common_DisableWarp` writes `IsDisableSave: false`.
+- **In game (1.1.1):** with a `MiniGame_TimeStop` challenge running, `+0x54` read `0xFAE899F0` (that name's hash)
+  and `+0x50` read `0x14C8`: bits 3, 6, 7, 10 and 12. The row sets `IsDisableTimeProgress: true` and
+  `DoSaveWhenEnd`, `IsCheckSafetyArea` and `IsDisableBoot` to false and leaves the rest out, so `IsDisableWarp` and
+  `IsDisableGrab` default to true as well. The manager's first word was `main+0x4BA1058`.
+- **Not known:** bits 1, 2 and 4; why bit 0 was clear in that read (the step may not have been an `IsMiniGame` one);
+  what the two values hold when no section is active.
+- **1.0.0** (22nd November 2026, from a memory dump): the vtable is `main+0x4B3BE08` (v131072's matched: its entries
+  are v131072's 0x5F080 lower, and slot 8 returns `GameSafetyMgr`). The packing (`0x3226AD0`) and the minigame bit's
+  setter (`0x2C9D3B0`) match v131072's whole but for relocated addresses and another object's fields, so `+0x50` and
+  `+0x54` are the same. In Lichii (22nd November 2026, read from memory) the title scene's 41 components had
+  AutoSaveMgr at entry 12 and GameSafetyMgr, with this vtable, at entry 28, both values 0.
+- **Checked in game on 1.0.0** (22nd November 2026): the mod found GameSafetyMgr at scene entry 28 by this vtable,
+  and the watches followed the slingshot minigame. Outside any section, after it, the manager held flags `0x0040`
+  (save) and name hash 0.
+
+### 9.15 The ocarina breath T-pose (v131072 and 1.0.0, checked in game)
+- **Symptom:** after holding one ocarina note for 3-5 s, Link's arms T-pose whenever he runs holding a bomb. Not
+  standing still. Idle fidgets, attacks, a boots change or reloading clear it.
+- **Link's AS** (`romfs/AS/Player_Child.root.asb`, `Player_Adult`; version 0x41B, string pool at the header's word
+  14) blends 9 layers (slots, header words 8/9, 0x10 bytes each: name, default bone group): Lower, Upper, RightArm,
+  LeftArm, Face, Finger, Mouth, MaskChange, MaskEquip. 16 bone groups (header words 21/22, 0xC bytes: entries'
+  offset, name, count; each entry a bone name and u16 0 in / 1 out, children included). Commands are 0x30 bytes
+  from 0x80 (name first, node index last); nodes 0x24 bytes from 0x58D0 (u16 type, body offset at +8); type 3 plays
+  an animation, type 27 is the node the breath's clip sits under (its label: "ocarina performance (includes Face and
+  Spine) [for breathing]").
+- **Cause:** a held note plays the command `DemoOcarinaBreath` in the Face layer (the player component P keeps the
+  layer's index at P`+0xFEC` = 4; `main+0xA2CD98` compares the playing command's name with it). That switches
+  the Face layer's bone mask from `Face_NoMouth` (Root out, Face_Root in, Mouth_Root out) to `OcarinaBreath` (Root
+  out, Spine_2 in, Weapon_L/R and the ten finger roots out): the whole upper body. It happens on every breath, not
+  only when the ocarina is cancelled during one. Nothing on the way out of the ocarina sets it back. Only Face
+  animations that name their own group do: idle fidgets (`VoiceServic*`), `CutS1`, `BootsChange`, events.
+  Until then the Face layer drives Link's chest and arms, and while he runs with a bomb, his arms are in bind pose.
+- **Where the mask is:** slots S = `[[[[actor+0x270]+0x40]+0x18]+0x18]` (count S`+0x18`, entries S`+0x20` of 0x48
+  bytes; the first qword is the slot's object O, `[O+0x10]` the playing command's name). Each O has a mask
+  table T = `[O+0x17198]` (= O`+0x17238`), which holds the mask of the *next* layer (entry 3 holds Face's). I =
+  `[T+8]` (vtable `main+0x4C12FD8`; T's is `main+0x4B48D68`, a generic wrapper): I`+8` capacity, `[I+0x10]` one
+  byte per entry (0x80 in, 0x83 out), I`+0x1C` a count, `[I+0x28]` u32 entries with the skeleton bone index in
+  the top 16 bits. Bone indices are the bfres skeleton's order (`romfs/Model/Player_Adult.Player_Adult.bfres`,
+  FSKL: bone array at +0x10, 0x58 bytes a bone, name first): adult Root 0, Spine_2 0x06, Weapon_L 0x12, Weapon_R
+  0x42, Face_Root 0x6B, Mouth_Root 0x89; child Spine_2 0x0B, Weapon_L 0x17, Face_Root 0x6B, Mouth_Root 0x8D.
+  The same slot walk is in 1.0.0 (`main+0x5754D4`, same offsets).
+- **Fix / feature:** `tpose.c` (link > bomb t-pose) writes entry 1 of the Face table as Spine_2 every frame (the
+  game rebuilds the table on its next mask change; a single write lasted about a second). Unticking writes
+  Face_Root back. It finds the table by its contents (entry 0 Root out, entry 1 Face_Root or Spine_2 in), so the
+  slot it sits in doesn't matter. Face_Root is 0x6B in both skeletons, so the age comes from `age_current`.
+  `Face_NoMouth` uses only 2 entries (I`+0x1C` = 2): the Mouth_Root seen in entry 2 is left over past the count,
+  and the game doesn't rewrite it. The first build matched on entries 1 and 2 together. After the game put entry 1
+  back and left entry 2 at Weapon_L, nothing matched, so it stopped writing ("tpose: no Face mask table found").
+- **1.0.0** (22nd November 2026, read from memory in Lichii, adult Link): 9 slots, every slot object's `+0x17198`
+  pointing at its own `+0x17238` (MaskEquip's elsewhere), and the Face table in slot 3 (before FaceDefault's slot 4)
+  with entry 1 Face_Root (0x6B), 2 entries in use: the same as v131072, so the offset is fixed for both builds and
+  the mod no longer searches the slot objects for it.
+- **Not checked:** child Link (indices from the child bfres, assumed to match as they do for adult), and which Face
+  animation leaves the arms in bind pose while running. The T-pose itself was checked on 1.0.0 (adult) after the
+  offset was fixed.

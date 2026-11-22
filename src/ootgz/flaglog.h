@@ -13,7 +13,7 @@
  *   date        the console's local date and time, "13/11/2026 15:47:02"
  *   time        seconds since this session's recording started
  *   source      game (changed since the last frame) or sloperinaGZ (changed by this frame's menu or cheats)
- *   link_state  what AutoSaveMgr says Link is doing ("Move", "EvtTalk", ...; 1.1.1 only)
+ *   link_state  what AutoSaveMgr says Link is doing ("Move", "EvtTalk", ...)
  *   type        Bool, Int, Enum, Float or String (the text); area: Link entered a map (old -> new; the note has the
  *               entrance, arrival event and starter); start, bulk, reload and muted rows describe the recording
  *   name        the field's name; Enum values are choice names where known, else hashes

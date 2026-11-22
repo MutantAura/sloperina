@@ -1,5 +1,5 @@
 /* The scene's actors: the enemies and their life, for enemyhp.c. Read from the game's disassembly
- * (FINDINGS §9.5), v131072 only so far.
+ * (FINDINGS §9.5).
  *
  * The actor manager *(main+actor_mgr_ptr) keeps the live actors in an intrusive red-black tree at
  * [mgr+0x38]: node N has left at +0x00, right at +0x08; each node sits at +8 in an entry E, which holds

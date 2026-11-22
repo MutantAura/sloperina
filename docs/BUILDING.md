@@ -41,6 +41,13 @@ one-shot reset, lock/unlock, read-only/unavailable targets, exact four-byte writ
 It also draws a real menu and checks that invisible panel-sizing markers do not become lock icons.
 The game and SD filesystem are mocked; this does not verify the game's setter/check ordering.
 
+### Safety watch host tests
+
+`python tests/run_safety.py --cc C:/msys64/mingw64/bin/gcc.exe` runs `safety.c` over a mocked main,
+scene and GameSafetyMgr. It checks that each of the 28 setting names hashes to its table entry, the
+flag words, finding the manager by its vtable at entry 28 and elsewhere, scene changes, and
+that missing, unmapped or implausible chains give N/A. It does not read the game.
+
 ### Levitation host tests
 
 `python tests/run_levitate.py --cc C:/msys64/mingw64/bin/gcc.exe` runs the real levitation step/frame
@@ -107,7 +114,7 @@ What changed from the Python version:
 | one mailbox request per frame, polled by a worker thread | direct calls; `job.c` keeps one step per frame |
 | XInput/keyboard on Windows | `nn::hid::detail::GetNpadStates` from the game's sdk |
 | Tk overlay window | `gfx.h`: log backend now, on-screen backend next |
-| equipment component / magic meter: heap scan | same idea, in-process (`mem_find_u64`), after a cheap search near Link |
+| equipment component / magic meter: heap scan | direct pointers: owner `[*[main+pouch_mgr_ptr]]` (`+0x470` component); magic `[[link+0x270]+0x358]+0x1B78` |
 
 ## Verified in Lichii (2026-11-09)
 

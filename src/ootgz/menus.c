@@ -474,9 +474,11 @@ static void build_link(void)
   menu_item_t *tpose = menu_add_check(&m_link, "bomb t-pose", get_tpose, set_tpose, 0);
   if (tpose)
     tpose->hint = "the ocarina breath glitch: Link t-poses running with a bomb; untick also clears the real one";
-  menu_item_t *hs_force = menu_add_check(&m_link, "force hookshot storage", get_hs_force, set_hs_force, 0);
-  if (hs_force)
-    hs_force->hint = "a bomb's medium hit the moment a hookshot shot starts (1.0.0 only)";
+  if (hsstore_force_available()) { /* 1.0.0 only: hidden where the trick doesn't work */
+    menu_item_t *hs_force = menu_add_check(&m_link, "force hookshot storage", get_hs_force, set_hs_force, 0);
+    if (hs_force)
+      hs_force->hint = "a bomb's medium hit the moment a hookshot shot starts";
+  }
   menu_item_t *hs_shown = menu_add_check(&m_link, "show hookshot hook", get_hs_shown, set_hs_shown, 0);
   if (hs_shown)
     hs_shown->hint = "gold box: the hook out; grey cross: where a hook was put away; red: the shot's aim";

@@ -10,6 +10,8 @@ extern bool hsstore_shown; /* draw the hooks and the shot's aim in the world */
 
 /* -1: no hookshot record (not in game, no hookshot yet); 0: no storage; 1: storage */
 int hsstore_have(void);
+/* whether this build can force it (z64hd hs_hit_vt): the menu leaves the option out where it can't */
+bool hsstore_force_available(void);
 bool hsstore_force_enabled(void);
 void hsstore_force_set(bool on);
 /* game thread, once a frame, before ragdoll_frame */

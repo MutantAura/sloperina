@@ -1591,7 +1591,7 @@ and **safety flags** watches read it (`safety.c`).
     behind the wall. Hookshot targets have no climb, so they don't clip.
 - **1.1.1:** while pulling, it checks every frame that a real object is hooked and ends the shot cleanly if not.
   So a stored shot should just let go there (from the code, not tried in game). The mod's forcing is 1.0.0 only
-  (`hs_hit_vt`, listed in 1.1.1's `absent`); telling storage and drawing the hook only read, on both.
+  (`hs_hit_vt`, listed in 1.1.1's `absent`; the menu leaves the option out there); telling storage and drawing the hook only read, on both.
 - **The hit's vtable** (the pointer the recorded `DamageM` left at `H+0x108`, `+0x148`, `+0x338`): 1.0.0
   `main+0x4910168`; 1.1.1 `main+0x4974A90` (its slot 3 names the same parameters, `TargetActor`, `MinRadius`,
   `Fovy`, `IsReferenceTargetPosOnce`, ..., and refers to the table 0x90 after it, as 1.0.0's does). The rest of the

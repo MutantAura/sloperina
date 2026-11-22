@@ -138,18 +138,14 @@ bool hsstore_force_enabled(void)
   return force_on;
 }
 
-static bool force_known(void)
+bool hsstore_force_available(void)
 {
   return z64hd_game && z64hd_game->hs_hit_vt;
 }
 
 void hsstore_force_set(bool on)
 {
-  if (on && !force_known()) {
-    gfx_notice("forcing hookshot storage isn't available on this game version");
-    return;
-  }
-  force_on = on;
+  force_on = on && hsstore_force_available();
 }
 
 /* (x, z) turned by the complex number (cr, ci) */
@@ -225,7 +221,7 @@ static void weapon_frame(unsigned i)
 
   if (active && !w->last_active) { /* a shot starts */
     w->shot_on = true, w->shot_used = w->stored, w->shot_forced = false, w->shot_states = 0, w->shot_frames = 0;
-    if (force_on && force_known() && !w->stored && state == 0) {
+    if (force_on && !w->stored && state == 0) {
       w->shot_forced = medium_hit();
       if (!w->shot_forced)
         log_printf("hs storage: couldn't write the hit (no hit component)");

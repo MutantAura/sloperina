@@ -135,7 +135,7 @@ static uint32_t *gd_lookup(const gd_type_t *type, uint32_t hash)
 gd_type_t *gd_type_at(uint32_t offset)
 {
   uint8_t *mgr = gd_manager();
-  if (!mgr || offset > Z64HD_GD_TYPES_SCAN)
+  if (!mgr || offset > 0x1000u)
     return 0;
   gd_type_t *t = (gd_type_t *)(mgr + offset);
   return type_plausible(t) ? t : 0;

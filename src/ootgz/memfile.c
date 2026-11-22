@@ -83,6 +83,7 @@ float atan2f(float y, float x);                  /* from sdk */
 #define FAST_MOVE_TIMEOUT  15
 #define FAST_MOVE_RETRY    3
 #define RESET_TIMEOUT      180
+#define EVENT_CANCEL_TIMEOUT (5 * GAME_FPS)
 #define LOAD_START_TIMEOUT (10 * GAME_FPS)
 #define ARRIVAL_TIMEOUT    (60 * GAME_FPS)
 #define SETTLE_TIMEOUT     (2 * GAME_FPS)
@@ -197,12 +198,13 @@ typedef struct {
   int32_t           life, magic;
   bool              have_nayru;
   float             nayru_left, nayru_total; /* Nayru's Love: frames left and its length; 0 when off */
-  bool              have_vel, have_fall, have_savepos, have_restart;
+  bool              have_vel, have_fall, have_savepos, have_restart, have_rng;
   vec3f_t           vel;                     /* Link's CCT linear velocity (body +0xE0) */
   float             fall[6];                 /* player +0x18D4/+0x18E0/+0x18E8/+0x190C, base +0x1898/+0x189C */
   uint8_t           savepos_a[SAVEPOS_SLOT_BYTES];
   uint8_t           savepos_b[SAVEPOS_SLOT_BYTES];
   uint8_t           player_restart[PLAYER_RESTART_BYTES];
+  uint32_t          rng[4];                  /* sead::GlobalRandom xorshift128 state */
   uint32_t          time;
   int               child;
   bool              have_camera, have_component;
@@ -228,6 +230,7 @@ static enum {
   L_IDLE,
   L_SAVING_REQ,
   L_SAVING_WAIT,
+  L_CANCEL_EVENT,
   L_FAST_WAIT_GD,
   L_FAST_MOVE_PRE,
   L_FAST_WAIT_RESET,
@@ -1142,6 +1145,8 @@ static const uint8_t main_ainb_reset_plug[12] = { 0x0f, 0, 0, 0, 0x07, 0, 0, 0, 
 #define SCENE_COUNT      0x50  /* u32 */
 #define SCENE_COMPONENTS 0x58  /* pointer to the components' pointers */
 #define SCENE_AUTOSAVE   12
+#define SCENE_MINIGAME   18
+#define SCENE_TIMER      19
 #define SCENE_WARP_MGR   22
 #define AUTOSAVE_SLOT_B  0x178u
 #define AUTOSAVE_SLOT_A  0x198u
@@ -1185,6 +1190,47 @@ static bool player_and_base_components(uintptr_t *player_out, uintptr_t *base_ou
   return true;
 }
 
+typedef void (*gd_changed_t)(uintptr_t component, const void *change_bits);
+
+static uintptr_t global_random(void)
+{
+  if (!z64hd_game || !z64hd_game->global_random_ptr)
+    return 0;
+  uintptr_t holder = sys_ptr(MAIN(z64hd_game->global_random_ptr));
+  uintptr_t rng = holder ? sys_ptr(holder) : 0;
+  return rng && !(rng & 3u) && sys_mapped(rng, 16, SYS_PERM_R | SYS_PERM_W) ? rng : 0;
+}
+
+static void resync_scene_gd_component(uint32_t idx, uint32_t vt_off, const char *label)
+{
+  if (!vt_off || !z64hd_game || !z64hd_game->scene_mgr_ptr)
+    return;
+  uintptr_t scene_mgr = sys_ptr(MAIN(z64hd_game->scene_mgr_ptr));
+  uintptr_t scene = scene_mgr ? sys_ptr(scene_mgr + SCENE_CURRENT) : 0;
+  uint32_t count = 0;
+  if (!scene || !sys_read32(scene + SCENE_COUNT, &count) || count <= idx)
+    return;
+  uintptr_t components = sys_ptr(scene + SCENE_COMPONENTS);
+  uintptr_t m = components ? sys_ptr(components + idx * sizeof(uintptr_t)) : 0;
+  uintptr_t vt = MAIN(vt_off);
+  if (!m || (m & 7u) || !sys_mapped(m, 8, SYS_PERM_R) || sys_ptr(m) != vt)
+    return;
+  uintptr_t slot6 = sys_ptr(vt + 6 * 8);
+  if (slot6 < MAIN(0) || slot6 >= MAIN(MAIN_CODE_SIZE))
+    return;
+  static const uint8_t everything[0x20];
+  ((gd_changed_t)slot6)(m, everything);
+  log_printf("memfiles: %s resynced from GameData", label); /* not menu text */
+}
+
+static void resync_scene_mgrs(void)
+{
+  if (!z64hd_game)
+    return;
+  resync_scene_gd_component(SCENE_TIMER, z64hd_game->vt_timer_mgr, "TimerMgr");
+  resync_scene_gd_component(SCENE_MINIGAME, z64hd_game->vt_minigame_mgr, "MinigameMgr");
+}
+
 static void capture_link_extra(memfile_t *st)
 {
   uintptr_t link = link_actor();
@@ -1206,6 +1252,11 @@ static void capture_link_extra(memfile_t *st)
     memcpy(st->savepos_a, (const void *)(autosave + AUTOSAVE_SLOT_A), SAVEPOS_SLOT_BYTES);
     memcpy(st->savepos_b, (const void *)(autosave + AUTOSAVE_SLOT_B), SAVEPOS_SLOT_BYTES);
     st->have_savepos = true;
+  }
+  uintptr_t rng = global_random();
+  if (rng) {
+    memcpy(st->rng, (const void *)rng, sizeof(st->rng));
+    st->have_rng = (st->rng[0] | st->rng[1] | st->rng[2] | st->rng[3]) != 0;
   }
 }
 
@@ -1231,6 +1282,11 @@ static void restore_link_extra(const memfile_t *st)
     memcpy((void *)(autosave + AUTOSAVE_SLOT_A), st->savepos_a, SAVEPOS_SLOT_BYTES);
     memcpy((void *)(autosave + AUTOSAVE_SLOT_B), st->savepos_b, SAVEPOS_SLOT_BYTES);
   }
+  if (st->have_rng && (st->rng[0] | st->rng[1] | st->rng[2] | st->rng[3])) {
+    uintptr_t rng = global_random();
+    if (rng)
+      memcpy((void *)rng, st->rng, sizeof(st->rng));
+  }
   if (st->have_vel && link)
     cct_set_velocity(link, &st->vel);
 }
@@ -1244,7 +1300,6 @@ static bool is_warp_mgr(uintptr_t m, uintptr_t vt)
   return listener >= MAIN(0) && listener < MAIN(0x5000000);
 }
 
-typedef void (*gd_changed_t)(uintptr_t component, const void *change_bits);
 typedef void (*warp_place_t)(uintptr_t mgr, float x, float y, float z);
 
 #define F_FW_BANC 0xB09FBD99u /* WarpPoint_FaroreWind.BancName */
@@ -2152,42 +2207,9 @@ static bool can_fast_reload(const memfile_t *st)
   return !game_over && alive && gd_get_bool(F_REQ_RESET_GIMMICK, &req);
 }
 
-bool memfile_load(int s)
+static bool start_load_now(int s, uint8_t *mgr)
 {
-  if (s < 0 || s >= MEMFILE_SLOTS)
-    return false;
   memfile_t *st = &memfiles[s];
-  if (!st->used || !st->save_buf) {
-    gfx_notice("that memfile is empty");
-    return false;
-  }
-  end_camera_guard();
-  if (phase != L_IDLE) {
-    gfx_notice("memfile is busy");
-    return false;
-  }
-  bool loading = false;
-  gd_get_bool(F_IS_LOADING_BANC, &loading);
-  if (loading || warp_pending()) {
-    gfx_notice("a map is already loading");
-    return false;
-  }
-  if (in_cutscene()) {
-    gfx_notice("can't load a memfile during a cutscene");
-    return false;
-  }
-  if (pause_menu_up()) {
-    gfx_notice("can't load a memfile while the game is paused");
-    return false;
-  }
-  uint8_t *mgr = 0;
-  uint32_t buf_size = 0;
-  if (!gd_ready() || !gd_file0_desc(&mgr, &buf_size) || !z64hd_game->gd_request_load ||
-      buf_size < st->save_size) {
-    gfx_notice("can't load that memfile: game data not found");
-    return false;
-  }
-
   active_slot = s;
   if (can_fast_reload(st)) {
     if (!MAIN_FN(gd_req_load_t, z64hd_game->gd_request_load)(mgr, st->save_buf, 0)) {
@@ -2214,6 +2236,51 @@ bool memfile_load(int s)
   snprintf(status, sizeof(status), TF("loading memfile %d"), s + 1);
   set_phase(L_WAIT_LOADING);
   return true;
+}
+
+bool memfile_load(int s)
+{
+  if (s < 0 || s >= MEMFILE_SLOTS)
+    return false;
+  memfile_t *st = &memfiles[s];
+  if (!st->used || !st->save_buf) {
+    gfx_notice("that memfile is empty");
+    return false;
+  }
+  end_camera_guard();
+  if (phase != L_IDLE) {
+    gfx_notice("memfile is busy");
+    return false;
+  }
+  bool loading = false;
+  gd_get_bool(F_IS_LOADING_BANC, &loading);
+  if (loading || warp_pending()) {
+    gfx_notice("a map is already loading");
+    return false;
+  }
+  if (pause_menu_up()) {
+    gfx_notice("can't load a memfile while the game is paused");
+    return false;
+  }
+  uint8_t *mgr = 0;
+  uint32_t buf_size = 0;
+  if (!gd_ready() || !gd_file0_desc(&mgr, &buf_size) || !z64hd_game->gd_request_load ||
+      buf_size < st->save_size) {
+    gfx_notice("can't load that memfile: game data not found");
+    return false;
+  }
+  if (in_cutscene()) {
+    if (!eventskip_start()) {
+      gfx_notice("can't load a memfile during a cutscene");
+      return false;
+    }
+    log_printf("memfile %d load: ending cutscene before loading", s + 1); /* not menu text */
+    active_slot = s;
+    snprintf(status, sizeof(status), TF("loading memfile %d"), s + 1);
+    set_phase(L_CANCEL_EVENT);
+    return true;
+  }
+  return start_load_now(s, mgr);
 }
 
 /* --- frame state machine ----------------------------------------------------------------------- */
@@ -2279,6 +2346,7 @@ static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
       world_on_load();
       navi_on_load();
       quests_resync();
+      resync_scene_mgrs();
       restore_vitals_and_gear(st);
       if (st->have_pos && move_link(st)) {
         snprintf(status, sizeof(status), TF("loading memfile %d: placing Link"), active_slot + 1);
@@ -2367,6 +2435,7 @@ static void step_full_load(const memfile_t *st, uint8_t *mgr, const uint8_t *des
         set_time_of_day(st->time);
       navi_on_load();
       quests_resync();
+      resync_scene_mgrs();
       set_phase(L_WAIT_ARRIVAL);
       break;
     case L_WAIT_ARRIVAL: {
@@ -2520,6 +2589,17 @@ void memfile_frame(void)
     step_saving(mgr, desc0);
     return;
   }
+  if (phase == L_CANCEL_EVENT) {
+    if (!in_cutscene()) {
+      if (!mgr || !desc0 || !start_load_now(active_slot, mgr)) {
+        status[0] = 0;
+        set_phase(L_IDLE);
+      }
+    } else if (phase_frames > EVENT_CANCEL_TIMEOUT) {
+      fail("can't load a memfile: cutscene didn't end");
+    }
+    return;
+  }
 
   const memfile_t *st = &memfiles[active_slot];
   bool loading = false;
@@ -2574,7 +2654,7 @@ void memfile_frame(void)
 #define SZM_PATH_LEN    (sizeof(SZM_DIR) + MEMFILE_FOLDER_LEN + MEMFILE_NAME_MAX + 8)
 
 enum { STATE_POS = 1, STATE_LIFE = 2, STATE_MAGIC = 4, STATE_TIME = 8, STATE_NAYRU = 16 };
-enum { EXTRA_VEL = 1, EXTRA_FALL = 2, EXTRA_SAVEPOS = 4, EXTRA_RESTART = 8 };
+enum { EXTRA_VEL = 1, EXTRA_FALL = 2, EXTRA_SAVEPOS = 4, EXTRA_RESTART = 8, EXTRA_RNG = 16 };
 enum { CAM_STATE = 1, CAM_COMPONENT = 2 };
 enum { ACTORS_TRUNCATED = 1 };
 
@@ -2763,16 +2843,18 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
     out_end(&o, at);
   }
 
-  if (st->have_vel || st->have_fall || st->have_savepos || st->have_restart) {
+  if (st->have_vel || st->have_fall || st->have_savepos || st->have_restart || st->have_rng) {
     at = out_begin(&o, SZM_EXTRA);
     uint8_t xflags = (st->have_vel ? EXTRA_VEL : 0) | (st->have_fall ? EXTRA_FALL : 0) |
-                     (st->have_savepos ? EXTRA_SAVEPOS : 0) | (st->have_restart ? EXTRA_RESTART : 0);
+                     (st->have_savepos ? EXTRA_SAVEPOS : 0) | (st->have_restart ? EXTRA_RESTART : 0) |
+                     (st->have_rng ? EXTRA_RNG : 0);
     OUT(&o, xflags);
     OUT(&o, st->vel);
     OUT(&o, st->fall);
     out_bytes(&o, st->savepos_a, SAVEPOS_SLOT_BYTES);
     out_bytes(&o, st->savepos_b, SAVEPOS_SLOT_BYTES);
     out_bytes(&o, st->player_restart, PLAYER_RESTART_BYTES);
+    OUT(&o, st->rng);
     out_end(&o, at);
   }
 
@@ -2962,6 +3044,8 @@ static void szm_extra(szm_in_t *in, memfile_t *st)
     st->have_savepos = true;
   if (in_bytes(in, st->player_restart, PLAYER_RESTART_BYTES) && (xflags & EXTRA_RESTART))
     st->have_restart = true;
+  if (IN(in, st->rng) && (xflags & EXTRA_RNG) && (st->rng[0] | st->rng[1] | st->rng[2] | st->rng[3]))
+    st->have_rng = true;
 }
 
 /* read a .szm file's bytes into st (zeroed; free_memfile it either way): 0, or why it can't be used */

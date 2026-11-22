@@ -162,6 +162,10 @@ static const struct z64hd_build z64hd_builds[] = {
     .actor_force_set_pos = 0x665790,
     .actor_request_delete = 0xC4FA0,
     .preactor_update_flags = 0x3266A00,
+    /* sead::GlobalRandom GOT slot (main+0x10BC); TimerMgr #19 (slot 6 0x324EA40) & MinigameMgr #18 (0x10DF7A0) */
+    .global_random_ptr = 0x4C18260,
+    .vt_timer_mgr = 0x4B3CEF8,
+    .vt_minigame_mgr = 0x4B3C268,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -268,6 +272,10 @@ static const struct z64hd_build z64hd_builds[] = {
     .actor_force_set_pos = 0x4C6630,
     .actor_request_delete = 0xA6490,
     .preactor_update_flags = 0x32C58C0,
+    /* sead::GlobalRandom GOT slot (main+0x105C); TimerMgr #19 (slot 6 0x32ADB40) & MinigameMgr #18 (0x1127420) */
+    .global_random_ptr = 0x4C7DF08,
+    .vt_timer_mgr = 0x4BA2148,
+    .vt_minigame_mgr = 0x4BA14B8,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

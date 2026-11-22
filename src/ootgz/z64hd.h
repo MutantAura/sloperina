@@ -174,6 +174,11 @@ struct z64hd_build {
   uint32_t actor_force_set_pos;
   uint32_t actor_request_delete;
   uint32_t preactor_update_flags;
+  /* Phase 3 memfiles: sead::GlobalRandom GOT slot ([[main+this]] -> u32 state[4]), and TimerMgr (scene #19) /
+   * MinigameMgr (scene #18) vtables whose slot 6 is onGameDataChanged(mgr, change_bits). 0: unknown */
+  uint32_t global_random_ptr;
+  uint32_t vt_timer_mgr;
+  uint32_t vt_minigame_mgr;
   struct z64hd_link_path link_paths[5];
 };
 

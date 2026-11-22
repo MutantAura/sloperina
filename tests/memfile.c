@@ -590,8 +590,15 @@ bool age_warp_to_silent(const char *map, const char *start, bool have_pos)
   sim_warp_abandoned = false;
   return true;
 }
+static bool sim_ev_skip_accept = true;
+static int  ev_skip_calls;
 bool eventskip_known(void) { return sim_ev_known; }
 bool eventskip_running(void) { return sim_ev_running; }
+bool eventskip_start(void)
+{
+  ev_skip_calls++;
+  return sim_ev_skip_accept && sim_ev_known && sim_ev_running;
+}
 static bool sim_paused;
 bool gd_game_paused(bool *is_pause, int32_t *pause_requests)
 {
@@ -1218,9 +1225,11 @@ static void test_fast_same_map_reset_gimmick(void)
       if (why == 2) memfile_fast_reload = false;
       if (why == 3) gd_set_bool(F_IS_GAME_OVER, true);
       if (why == 4) sim_hp = 0;
-      if (why == 1)
+      if (why == 1) {
+        sim_ev_skip_accept = false;
         assert(!memfile_load(0) && phase == L_IDLE && warp_silent_calls == 0);
-      else
+        sim_ev_skip_accept = true;
+      } else
         assert(memfile_load(0) && phase == L_WAIT_LOADING && warp_silent_calls == 1);
     }
 
@@ -2268,6 +2277,110 @@ static void test_phase2_bb_vel_savepos(void)
   puts("PASS: phase 2: Link velocity, fall/JS height, AutoSaveMgr SavePos, actor Blackboard + .szm round-trip");
 }
 
+static int timer_resync_calls, minigame_resync_calls;
+static void fake_timer_gd_changed(uintptr_t mgr, const void *bits)
+{
+  (void)mgr;
+  const uint8_t *b = (const uint8_t *)bits;
+  for (int i = 0; i < 0x20; i++)
+    assert(b[i] == 0);
+  timer_resync_calls++;
+}
+static void fake_minigame_gd_changed(uintptr_t mgr, const void *bits)
+{
+  (void)mgr;
+  const uint8_t *b = (const uint8_t *)bits;
+  for (int i = 0; i < 0x20; i++)
+    assert(b[i] == 0);
+  minigame_resync_calls++;
+}
+
+static void test_phase3_rng_mgrs_cutscene(void)
+{
+  init_env(0x5B8);
+  test_build.version = "1.1.1";
+  memfile_fast_reload = true;
+  sim_ev_skip_accept = true;
+  ev_skip_calls = timer_resync_calls = minigame_resync_calls = 0;
+
+  /* GlobalRandom singleton */
+  static uint32_t sim_rng[4] = { 0x11112222u, 0x33334444u, 0x55556666u, 0x77778888u };
+  static uintptr_t rng_ptr, rng_holder;
+  rng_ptr = (uintptr_t)sim_rng;
+  rng_holder = (uintptr_t)&rng_ptr;
+  add_region(sim_rng, sizeof(sim_rng), SYS_PERM_R | SYS_PERM_W);
+  add_region(&rng_ptr, sizeof(rng_ptr), SYS_PERM_R | SYS_PERM_W);
+  add_region(&rng_holder, sizeof(rng_holder), SYS_PERM_R | SYS_PERM_W);
+  test_build.global_random_ptr = (uint32_t)((uintptr_t)&rng_holder - z64hd_main);
+
+  /* TimerMgr (#19) and MinigameMgr (#18) in scene components */
+  static _Alignas(8) uint8_t smgr[0x200], scene[0x80], scomps[24 * 8], tmgr[0xB0], mmgr[0x80];
+  static uintptr_t vt_tmgr[8], vt_mmgr[8], smgr_slot;
+  memset(smgr, 0, sizeof(smgr)); memset(scene, 0, sizeof(scene)); memset(scomps, 0, sizeof(scomps));
+  memset(tmgr, 0, sizeof(tmgr)); memset(mmgr, 0, sizeof(mmgr));
+  memset(vt_tmgr, 0, sizeof(vt_tmgr)); memset(vt_mmgr, 0, sizeof(vt_mmgr));
+  vt_tmgr[6] = (uintptr_t)fake_timer_gd_changed;
+  vt_mmgr[6] = (uintptr_t)fake_minigame_gd_changed;
+  uintptr_t p_vtt = (uintptr_t)vt_tmgr, p_vtm = (uintptr_t)vt_mmgr;
+  memcpy(tmgr, &p_vtt, 8);
+  memcpy(mmgr, &p_vtm, 8);
+  uintptr_t p_sc = (uintptr_t)scene, p_scs = (uintptr_t)scomps, p_tm = (uintptr_t)tmgr, p_mm = (uintptr_t)mmgr;
+  uint32_t sc_cnt = 24;
+  memcpy(smgr + SCENE_CURRENT, &p_sc, 8);
+  memcpy(scene + SCENE_COUNT, &sc_cnt, 4);
+  memcpy(scene + SCENE_COMPONENTS, &p_scs, 8);
+  memcpy(scomps + SCENE_TIMER * 8, &p_tm, 8);
+  memcpy(scomps + SCENE_MINIGAME * 8, &p_mm, 8);
+  smgr_slot = (uintptr_t)smgr;
+  add_region(smgr, sizeof(smgr), SYS_PERM_R | SYS_PERM_W);
+  add_region(scene, sizeof(scene), SYS_PERM_R | SYS_PERM_W);
+  add_region(scomps, sizeof(scomps), SYS_PERM_R | SYS_PERM_W);
+  add_region(tmgr, sizeof(tmgr), SYS_PERM_R | SYS_PERM_W);
+  add_region(mmgr, sizeof(mmgr), SYS_PERM_R | SYS_PERM_W);
+  add_region(vt_tmgr, sizeof(vt_tmgr), SYS_PERM_R);
+  add_region(vt_mmgr, sizeof(vt_mmgr), SYS_PERM_R);
+  add_region(&smgr_slot, sizeof(smgr_slot), SYS_PERM_R | SYS_PERM_W);
+  test_build.scene_mgr_ptr = (uint32_t)((uintptr_t)&smgr_slot - z64hd_main);
+  test_build.vt_timer_mgr = (uint32_t)((uintptr_t)vt_tmgr - z64hd_main);
+  test_build.vt_minigame_mgr = (uint32_t)((uintptr_t)vt_mmgr - z64hd_main);
+
+  /* Save slot 0 and export/import into slot 1 */
+  assert(memfile_save(0));
+  complete_mock_save(GD_SAVE_MAGIC, 256, "phase3");
+  memfile_frame();
+  assert(phase == L_IDLE && memfiles[0].have_rng);
+  sd_clear();
+  assert(memfile_export(0, "phase3_test") && memfile_list_files() == 1 && memfile_import(0, 1));
+  assert(memfiles[1].have_rng && memfiles[1].rng[0] == 0x11112222u && memfiles[1].rng[3] == 0x77778888u);
+
+  /* Scramble RNG and start a cutscene, then load slot 1! */
+  sim_rng[0] = sim_rng[1] = sim_rng[2] = sim_rng[3] = 1u;
+  sim_ev_known = true;
+  sim_ev_running = true;
+  assert(memfile_load(1));
+  assert(phase == L_CANCEL_EVENT && ev_skip_calls == 1);
+  memfile_frame();
+  assert(phase == L_CANCEL_EVENT); /* still waiting while cutscene runs */
+  sim_ev_running = false;          /* cutscene ends */
+  memfile_frame();
+  assert(phase == L_FAST_WAIT_GD);
+  complete_mock_load(true);
+  for (int i = 0; i < 60 && phase != L_IDLE; i++) {
+    memfile_frame();
+    if (phase == L_FAST_WAIT_RESET)
+      gd_set_bool(F_REQ_RESET_GIMMICK, false);
+  }
+  assert(phase == L_IDLE);
+  assert(sim_rng[0] == 0x11112222u && sim_rng[1] == 0x33334444u &&
+         sim_rng[2] == 0x55556666u && sim_rng[3] == 0x77778888u);
+  assert(timer_resync_calls == 1 && minigame_resync_calls == 1);
+
+  sd_clear();
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    free_memfile(&memfiles[i]);
+  puts("PASS: phase 3: GlobalRandom RNG, TimerMgr/MinigameMgr resync, load-during-cutscene auto-cancel");
+}
+
 int main(void)
 {
   test_async_save_and_staging();
@@ -2282,5 +2395,6 @@ int main(void)
   test_memfile_folders();
   test_scene_actors();
   test_phase2_bb_vel_savepos();
+  test_phase3_rng_mgrs_cutscene();
   return 0;
 }

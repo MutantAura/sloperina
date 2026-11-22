@@ -1113,7 +1113,7 @@ static void restore_vitals_and_gear(const memfile_t *st)
  * root). The game keeps the file loaded: before each fast load, find it through the Sequence component and point
  * that transition at node 23 like the map change branch. The file is the same in 1.0.0 and 1.1.1.
  *
- * The chain (the same offsets in both builds; FINDINGS 9.14): the scene's component 0 is Sequence; [+0xE8] lists
+ * The chain (the same offsets in both builds; FINDINGS 9.19): the scene's component 0 is Sequence; [+0xE8] lists
  * its AI controllers' holders (count +0, array +8; the root's setup 1.0.0 main+0x3B60240, 1.1.1 main+0x3BBDE50);
  * a holder's controller is at +0x18; a controller lists the AINB files it loaded (count +0x168, array +0x170;
  * stored at 1.0.0 main+0x7B5E0, 1.1.1 main+0x38480), each a definition holding the file's bytes at +0x10
@@ -1140,7 +1140,7 @@ static const uint8_t main_ainb_reset_plug[12] = { 0x0f, 0, 0, 0, 0x07, 0, 0, 0, 
 /* WarpMgr, the game component behind Farore's Wind's sparkle (actor FaroreWindWarpPoint), places the sparkle only
  * when told GameData changed (its vtable slot 6, with change bits; none set means all), which the deserializer
  * doesn't do, and ResetGimmick keeps the sparkle: so it's told after a fast load. It's the current scene's component
- * 22, as the game's own getter reads it (1.0.0 main+0x27C2AD0, 1.1.1 main+0x28147E0; FINDINGS 9.16). */
+ * 22, as the game's own getter reads it (1.0.0 main+0x27C2AD0, 1.1.1 main+0x28147E0; FINDINGS 9.21). */
 #define SCENE_CURRENT    0x1F0 /* [scene manager +this]: the current scene */
 #define SCENE_COUNT      0x50  /* u32 */
 #define SCENE_COMPONENTS 0x58  /* pointer to the components' pointers */

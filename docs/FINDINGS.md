@@ -1685,7 +1685,7 @@ and **safety flags** watches read it (`safety.c`).
     `u32` at `+0x0C` compared against `[unit+0xD0]`). Every attached camera action node has `[node+0x20] == state` and
     its node index (`u16`) at `node+0x1C`.
 
-### 9.14 The game's sequence scripts and the ResetGimmick item wheel bug (both builds; checked in game on 1.0.0 20th November 2026)
+### 9.19 The game's sequence scripts and the ResetGimmick item wheel bug (both builds; checked in game on 1.0.0 20th November 2026)
 - **Where they are:** the game flow runs as AINB graphs in `romfs/Sequence/*.ainb` (version `0x408`), read here with the
   `ainb` package (PyPI) after `tools/gamefiles.py read`. `Main.module.ainb` (11395 bytes) is the same in 1.0.0 and 1.1.1.
 - **Main.module:** its root (node 23) is an `Element_Simultaneous` running `UpdateShortCutOpenHoldFrameCounter.module`
@@ -1721,7 +1721,7 @@ and **safety flags** watches read it (`safety.c`).
 - `Sequence/ResetGimmick.module` (used from `Event.module` when `Sequence_ControlInEvent` = ResetGimmick) runs the same
   `ResetGimmickImpl` inside an event, then sets the control back to Idle.
 
-### 9.15 Nayru's Love (1.0.0; 1.1.1 in brackets; checked in game on 1.0.0)
+### 9.20 Nayru's Love (1.0.0; 1.1.1 in brackets; checked in game on 1.0.0)
 - The player component `[[actor+0x270]+0x358]` (getter `main+0x943FE0` [`0x944E50`]) holds the time left (float,
   frames) at `+0x1634`, its length at `+0x1638`, and `-1.0` at `+0x163C` whenever it's set or reset.
 - Active = time left `> 1.19e-7` (`main+0x2E23590` [`0x2E77F70`]; feeds the blackboard `IsUsingNayruLove`). A frame
@@ -1734,7 +1734,7 @@ and **safety flags** watches read it (`safety.c`).
 - The time is mirrored to a GameData float in `PlayerStatus` (member hash `0xD59B0D24`), read only when the component
   is built (a map load) and written from the component every frame, so a GameData restore alone doesn't bring it back.
 
-### 9.16 Farore's Wind: WarpMgr and the sparkle (1.0.0; 1.1.1 in brackets; checked in game on 1.0.0)
+### 9.21 Farore's Wind: WarpMgr and the sparkle (1.0.0; 1.1.1 in brackets; checked in game on 1.0.0)
 - The point is GameData struct `WarpPoint_FaroreWind` (`0x66CED69E`, 9 members, saved): flat keys `BancName`
   `0xB09FBD99` (String64), `LocationName` `0xEA129426`, `Pos` `0xBEB37B31` (Vector3, Link's feet when cast). Setting it
   (AINB node, `main+0x28E2D70`) writes all members at once; casting and arrival read them live.
@@ -1755,7 +1755,7 @@ and **safety flags** watches read it (`safety.c`).
   the map load is rebuilt from GameData), so after a fast load it stays where it was last cast. memfile.c finds WarpMgr
   through that chain (checking its vtable) and calls `place` with the restored point.
 
-### 9.17 Link's actions: the BSA component and climbing (1.0.0; 1.1.1 in brackets; climbing not solved)
+### 9.22 Link's actions: the BSA component and climbing (1.0.0; 1.1.1 in brackets; climbing not solved)
 - The player AI asks for actions by **verb** through the BSA component `[[actor+0x270]+0x188]` (same offset in both
   builds); the current verb is the `u32` at `+0x54`: Wait 40, Walk 1, Fall 33, Swim 84, Climb (vines, walls) 70,
   ClimbLadder 71 (checked in game; after letting go it reads 32 then 0).
@@ -1773,14 +1773,14 @@ and **safety flags** watches read it (`safety.c`).
   `+0x150C`/`+0x1514`. Events can start Link climbing (event setting `IsPlayerEventStartWithClimb`, parsed at
   `main+0x60E8F4` into byte `+0xBB`): a lead.
 
-### 9.18 Finding objects with no static pointer: a heap walk over frames (replaced)
+### 9.23 Finding objects with no static pointer: a heap walk over frames (replaced)
 - Heap regions are `svcQueryMemory` type 5, read-write (about 9.4 GB under the emulator). Reading all of them in one
   frame took ~3.3 s; 8 MB a frame from when Link first exists finished in ~17–26 s but was felt as lower performance
   after boot, and 1 ms a frame took about a minute. memfile.c used such a walk to find the `Main.module` file
   (16-aligned) and WarpMgr (8-aligned; a pass that stepped 16 bytes missed it).
-- Both are now reached through the scene's components instead (§9.14, §9.16): no walk, nothing to wait for after boot.
+- Both are now reached through the scene's components instead (§9.19, §9.21): no walk, nothing to wait for after boot.
   levitate.c's search for Link's physics record (§5.19) is still a walk.
-### 9.19 ChallengeMgr on save loads and memfiles (both builds; 1.0.0 addresses, 1.1.1 in brackets)
+### 9.24 ChallengeMgr on save loads and memfiles (both builds; 1.0.0 addresses, 1.1.1 in brackets)
 - 1.0.0: the instance `*[main+0x4DB9998]` (GOT `main+0x4C19D48`), set-step `main+0x2CA16F0` (1.1.1's matched over 40
   instructions), update `main+0x2CA00BC`; every offset below is the same in both builds.
 - The update (vtable slot `+0x10`, `main+0x2CA00B0` [`0x2CF3E60`]) does nothing until `+0x70` is 1 (set once by the

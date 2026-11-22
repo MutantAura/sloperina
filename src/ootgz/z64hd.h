@@ -165,7 +165,7 @@ struct z64hd_build {
    * does (AINB node OneShotFaroreWindSetActorPos) */
   uint32_t warp_mgr_place;
   /* SetSavedSelectedChallenge's work (node): selects the quest GameData names (UInt 0x2029D3D8) in the manager, or
-   * none; it only marks node+0x18 done besides. A save load runs it (FINDINGS 9.19). 0: not known for this build */
+   * none; it only marks node+0x18 done besides. A save load runs it (FINDINGS 9.24). 0: not known for this build */
   uint32_t challenge_select_saved;
   /* Scene actor restore (memfile.c): forceSetPosAndRot(physics_comp, pos, rot_mat33, immediate) called by
    * ExecuteActorForceSetPos on [[actor+0x270]+0x50]; requestDelete(actor, reason) called by

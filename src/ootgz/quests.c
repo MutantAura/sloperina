@@ -29,7 +29,7 @@ static void *challenge_mgr(void)
   return *(void *volatile *)MAIN(z64hd_game->challenge_mgr_ptr);
 }
 
-/* the manager's flags (FINDINGS 9.19) */
+/* the manager's flags (FINDINGS 9.24) */
 #define MGR_READY        0x70 /* u8: 1 once it's set up; its update does nothing before */
 #define MGR_RESYNC       0x72 /* u8: 1: the next update re-reads every quest's stage from GameData, then clears it */
 #define MGR_SAVE_LOADING 0x73 /* u8: stage changes are made quietly; cleared with MGR_RESYNC */

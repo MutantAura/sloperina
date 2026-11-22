@@ -1489,7 +1489,40 @@ Tree. Writing the Enum alone, as before, left the manager at Ready: no scene, an
   masked signature, unique over 64 words; leo gives the same address, and #43 found both separately). The set-step's
   code is the same, so the manager's fields it uses are at the same offsets.
 
-### 9.15 The ocarina breath T-pose (v131072, checked in game)
+### 9.14 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game; 1.0.0 checked in game)
+What a minigame, a boss fight or a story section turns off (saving, warping, ...) is one **GameSafetySetting**: a row
+of RSDB `GameSafetySetting.Product.111` (28 rows), named by a Challenge (`GameSafetySetting`, or a step's
+`ReplaceGameSafetySetting`). GameSafetyMgr, the scene's component 28 (§9.3), holds the one applied. The **safety**
+and **safety flags** watches read it (`safety.c`).
+- **The manager:** vtable `main+0x4BA1058`. Slot 8 (`main+0x3286630`) is its name getter (`adrp x0; add x0; ret`,
+  giving `GameSafetyMgr`; the only function in main that returns that string), slot 6 is `main+0x32857B0`. The mod
+  finds the component by this vtable (`vt_safety_mgr`), entry 28 first, as it finds AutoSaveMgr (§9.7).
+- **`+0x54` (u32): the applied setting's `NameHash`**, MurmurHash3_32 (seed 0) of the row's name: the file name of
+  `Work/Game/GameSafetySetting/<name>.game__GameSafetySetting.gyml`, not the whole path. All 28 names are in
+  `safety.c`; the test (`tests/safety.c`) hashes each one.
+- **`+0x50` (u16): that setting's switches, packed** by `main+0x3285B50`..`0x3285C40`, which looks the row up by the
+  hash. Bit 0: a Challenge entered an `IsMiniGame: true` step (`main+0x2CF1160` sets it and writes the hash). Bit 3:
+  a safety section is active. Then the row's fields: bit 5 `IsCheckSafetyArea`, 6 `IsDisableSave`, 7 `IsDisableWarp`,
+  8 `IsDisableAutoPlacement`, 9 `IsDisableOpenTreasureBox`, 10 `IsDisableGrab`, 11 `IsDisableBoot`,
+  12 `IsDisableTimeProgress`, 13 `DoSaveWhenEnd`, 14 `IsDisableLoadingPause`, 15 `IsNoDispErrorForTemporarySave`.
+- **A field left out of a row has its default, and several defaults are true.** `IsDisableSave` is (read at
+  `main+0x5A2288`), which is why only `Common_DisableWarp` writes `IsDisableSave: false`.
+- **In game (1.1.1):** with a `MiniGame_TimeStop` challenge running, `+0x54` read `0xFAE899F0` (that name's hash)
+  and `+0x50` read `0x14C8`: bits 3, 6, 7, 10 and 12. The row sets `IsDisableTimeProgress: true` and
+  `DoSaveWhenEnd`, `IsCheckSafetyArea` and `IsDisableBoot` to false and leaves the rest out, so `IsDisableWarp` and
+  `IsDisableGrab` default to true as well. The manager's first word was `main+0x4BA1058`.
+- **Not known:** bits 1, 2 and 4; why bit 0 was clear in that read (the step may not have been an `IsMiniGame` one);
+  what the two values hold when no section is active.
+- **1.0.0** (22nd November 2026, from a memory dump): the vtable is `main+0x4B3BE08` (v131072's matched: its entries
+  are v131072's 0x5F080 lower, and slot 8 returns `GameSafetyMgr`). The packing (`0x3226AD0`) and the minigame bit's
+  setter (`0x2C9D3B0`) match v131072's whole but for relocated addresses and another object's fields, so `+0x50` and
+  `+0x54` are the same. In Lichii (22nd November 2026, read from memory) the title scene's 41 components had
+  AutoSaveMgr at entry 12 and GameSafetyMgr, with this vtable, at entry 28, both values 0.
+- **Checked in game on 1.0.0** (22nd November 2026): the mod found GameSafetyMgr at scene entry 28 by this vtable,
+  and the watches followed the slingshot minigame. Outside any section, after it, the manager held flags `0x0040`
+  (save) and name hash 0.
+
+### 9.15 The ocarina breath T-pose (v131072 and 1.0.0, checked in game)
 - **Symptom:** after holding one ocarina note for 3-5 s, Link's arms T-pose whenever he runs holding a bomb. Not
   standing still. Idle fidgets, attacks, a boots change or reloading clear it.
 - **Link's AS** (`romfs/AS/Player_Child.root.asb`, `Player_Adult`; version 0x41B, string pool at the header's word
@@ -1526,39 +1559,6 @@ Tree. Writing the Enum alone, as before, left the manager at Ready: no scene, an
   pointing at its own `+0x17238` (MaskEquip's elsewhere), and the Face table in slot 3 (before FaceDefault's slot 4)
   with entry 1 Face_Root (0x6B), 2 entries in use: the same as v131072, so the offset is fixed for both builds and
   the mod no longer searches the slot objects for it.
-- **Not checked:** child Link (indices from the child bfres, assumed to match as they do for adult), the T-pose itself
-  on 1.0.0, and which Face animation leaves the arms in bind pose while running.
-### 9.14 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game; 1.0.0 mapped, not yet checked in game)
-What a minigame, a boss fight or a story section turns off (saving, warping, ...) is one **GameSafetySetting**: a row
-of RSDB `GameSafetySetting.Product.111` (28 rows), named by a Challenge (`GameSafetySetting`, or a step's
-`ReplaceGameSafetySetting`). GameSafetyMgr, the scene's component 28 (§9.3), holds the one applied. The **safety**
-and **safety flags** watches read it (`safety.c`).
-- **The manager:** vtable `main+0x4BA1058`. Slot 8 (`main+0x3286630`) is its name getter (`adrp x0; add x0; ret`,
-  giving `GameSafetyMgr`; the only function in main that returns that string), slot 6 is `main+0x32857B0`. The mod
-  finds the component by this vtable (`vt_safety_mgr`), entry 28 first, as it finds AutoSaveMgr (§9.7).
-- **`+0x54` (u32): the applied setting's `NameHash`**, MurmurHash3_32 (seed 0) of the row's name: the file name of
-  `Work/Game/GameSafetySetting/<name>.game__GameSafetySetting.gyml`, not the whole path. All 28 names are in
-  `safety.c`; the test (`tests/safety.c`) hashes each one.
-- **`+0x50` (u16): that setting's switches, packed** by `main+0x3285B50`..`0x3285C40`, which looks the row up by the
-  hash. Bit 0: a Challenge entered an `IsMiniGame: true` step (`main+0x2CF1160` sets it and writes the hash). Bit 3:
-  a safety section is active. Then the row's fields: bit 5 `IsCheckSafetyArea`, 6 `IsDisableSave`, 7 `IsDisableWarp`,
-  8 `IsDisableAutoPlacement`, 9 `IsDisableOpenTreasureBox`, 10 `IsDisableGrab`, 11 `IsDisableBoot`,
-  12 `IsDisableTimeProgress`, 13 `DoSaveWhenEnd`, 14 `IsDisableLoadingPause`, 15 `IsNoDispErrorForTemporarySave`.
-- **A field left out of a row has its default, and several defaults are true.** `IsDisableSave` is (read at
-  `main+0x5A2288`), which is why only `Common_DisableWarp` writes `IsDisableSave: false`.
-- **In game (1.1.1):** with a `MiniGame_TimeStop` challenge running, `+0x54` read `0xFAE899F0` (that name's hash)
-  and `+0x50` read `0x14C8`: bits 3, 6, 7, 10 and 12. The row sets `IsDisableTimeProgress: true` and
-  `DoSaveWhenEnd`, `IsCheckSafetyArea` and `IsDisableBoot` to false and leaves the rest out, so `IsDisableWarp` and
-  `IsDisableGrab` default to true as well. The manager's first word was `main+0x4BA1058`.
-- **Not known:** bits 1, 2 and 4; why bit 0 was clear in that read (the step may not have been an `IsMiniGame` one);
-  what the two values hold when no section is active.
-- **1.0.0** (22nd November 2026, from a memory dump): the vtable is `main+0x4B3BE08` (v131072's matched: its entries
-  are v131072's 0x5F080 lower, and slot 8 returns `GameSafetyMgr`). The packing (`0x3226AD0`) and the minigame bit's
-  setter (`0x2C9D3B0`) match v131072's whole but for relocated addresses and another object's fields, so `+0x50` and
-  `+0x54` are the same. In Lichii (22nd November 2026, read from memory) the title scene's 41 components had
-  AutoSaveMgr at entry 12 and GameSafetyMgr, with this vtable, at entry 28, both values 0.
-- **Still to check in game, on both versions:** with a save loaded and the **safety** and **safety flags** watches on,
-  their values somewhere ordinary, then in a minigame (Lost Woods' Skull Kid ocarina game, the shooting gallery,
-  bombchu bowling) or a boss room, where **safety** should name a setting (`MiniGame`, ...) and the flags change
-  (the **flags** display type shows them as words). Reading the manager from memory at the same moment confirms
-  the watches show what it holds. This also answers what the two values are when no section is active.
+- **Not checked:** child Link (indices from the child bfres, assumed to match as they do for adult), and which Face
+  animation leaves the arms in bind pose while running. The T-pose itself was checked on 1.0.0 (adult) after the
+  offset was fixed.

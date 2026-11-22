@@ -33,7 +33,7 @@ typedef struct { const char *label; uint32_t hash; } number_t;
 
 typedef struct { field_t own; uint32_t available, contents; } bottle_t;
 
-/* hash: the stage's GameData field (Step_<name>); key: the quest's name in the ChallengeMgr (<name>, FINDINGS 9.12) */
+/* hash: the stage's GameData field (Step_<name>); key: the quest's name in the ChallengeMgr (<name>, FINDINGS 9.13) */
 typedef struct { const char *label; uint32_t hash, key; uint8_t n_stages; const char *const *stages; } quest_t;
 
 /* warps */

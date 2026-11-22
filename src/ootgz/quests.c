@@ -5,7 +5,7 @@
 #include "sys.h"
 #include "z64hd.h"
 
-/* The ChallengeMgr's set-step, the one the game's OneShotChallengeSetStep calls (FINDINGS 9.12):
+/* The ChallengeMgr's set-step, the one the game's OneShotChallengeSetStep calls (FINDINGS 9.13):
  *   mgr    the manager, *[main+challenge_mgr_ptr]
  *   quest  the quest's key in the manager (quest_t.key: murmur3 of its name without "Step_")
  *   stage  the new stage's hash

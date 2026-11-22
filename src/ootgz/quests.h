@@ -1,4 +1,4 @@
-/* Setting a quest's stage (the story menu; FINDINGS 9.12).
+/* Setting a quest's stage (the story menu; FINDINGS 9.13).
  *
  * A stage lives in two places: the GameData Enum Step_<name>, and the game's ChallengeMgr, which keeps its own
  * copy and reads GameData back only after a save load. Writing the Enum alone reaches only what reads GameData

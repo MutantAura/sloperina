@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 
+#include "binds.h"
 #include "gfx.h"
 #include "sys.h"
 #include "z64hd.h"
@@ -189,6 +190,8 @@ bool eventskip_start(void)
 
 void eventskip_frame(void)
 {
+  if (cmd_pressed(CMD_END_CUTSCENE)) /* unbound unless given buttons (settings > rebind commands) */
+    eventskip_start();
   if (!waiting)
     return;
   uintptr_t m = manager();

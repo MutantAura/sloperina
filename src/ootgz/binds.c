@@ -26,6 +26,8 @@ const command_info_t command_info[CMD_COUNT] = {
   [CMD_RISE] = { "levitate up", CMD_GROUP_LINK, false },
   [CMD_SINK] = { "levitate down", CMD_GROUP_LINK, false },
   [CMD_HOVER] = { "levitate hold height", CMD_GROUP_LINK, false },
+  [CMD_RELOAD_MAP] = { "reload map", CMD_GROUP_SCENE, false },
+  [CMD_END_CUTSCENE] = { "end cutscene", CMD_GROUP_SCENE, false },
   [CMD_WATCHES] = { "show/hide watches", CMD_GROUP_WATCHES, false },
   [CMD_TIMER] = { "start/stop timer", CMD_GROUP_WATCHES, false },
   [CMD_RESET_TIMER] = { "reset timer", CMD_GROUP_WATCHES, false },
@@ -52,6 +54,8 @@ const char *const command_keys[CMD_COUNT] = {
   [CMD_RISE] = "rise", /* not menu text */
   [CMD_SINK] = "sink", /* not menu text */
   [CMD_HOVER] = "hover", /* not menu text */
+  [CMD_RELOAD_MAP] = "reload_map", /* not menu text */
+  [CMD_END_CUTSCENE] = "end_cutscene", /* not menu text */
   [CMD_WATCHES] = "watches", /* not menu text */
   [CMD_TIMER] = "timer", /* not menu text */
   [CMD_RESET_TIMER] = "reset_timer", /* not menu text */
@@ -59,7 +63,7 @@ const char *const command_keys[CMD_COUNT] = {
   [CMD_RESET_JS] = "reset_jump", /* not menu text */
 };
 
-const char *const command_group_names[CMD_GROUPS] = { "menu", "frame advance", "link", "watches and timer" };
+const char *const command_group_names[CMD_GROUPS] = { "menu", "frame advance", "link", "scene", "watches and timer" };
 
 /* input.h's bit numbers */
 enum {
@@ -88,6 +92,7 @@ static const uint32_t defaults[CMD_COUNT] = {
   [CMD_ADVANCE] = B1(B_L), [CMD_RUN] = B2(B_L, B_L3),
   [CMD_SAVEPOS] = B2(B_R, B_DUP), [CMD_LOADPOS] = B2(B_R, B_DDOWN), [CMD_RAGDOLL] = B1(B_R3),
   [CMD_LEVITATE] = B1(B_L3), [CMD_RISE] = B1(B_X), [CMD_SINK] = B1(B_B), [CMD_HOVER] = B1(B_R3),
+  [CMD_RELOAD_MAP] = BIND_NONE, [CMD_END_CUTSCENE] = BIND_NONE, /* no buttons of their own: for whoever wants them */
   [CMD_WATCHES] = B2(B_R, B_DRIGHT), [CMD_TIMER] = B3(B_R, B_A, B_DLEFT), [CMD_RESET_TIMER] = B3(B_R, B_B, B_DLEFT),
   [CMD_RESET_LAG] = B3(B_R, B_B, B_DRIGHT), [CMD_RESET_JS] = B3(B_R, B_A, B_DRIGHT),
 };

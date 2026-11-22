@@ -257,6 +257,28 @@ int main(void)
   name_is(binds[CMD_LOADPOS], "R + d-down");
   assert(binds_enabled);
 
+  /* reload map and end cutscene have no buttons of their own: unbound, so nothing pressed is ever them, until
+   * they're given some (settings > rebind commands, or bind_reload_map= in the settings file) */
+  binds_reset();
+  name_is(binds[CMD_RELOAD_MAP], "unbound");
+  name_is(binds[CMD_END_CUTSCENE], "unbound");
+  frame(0);
+  frame(0xFFFF); /* every button at once */
+  assert(!cmd_pressed(CMD_RELOAD_MAP) && !cmd_active(CMD_END_CUTSCENE) && !cmd_held(CMD_RELOAD_MAP));
+  frame(0);
+  assert(bind_parse("ZL + d-left", &binds[CMD_RELOAD_MAP]) && bind_parse("ZL + d-right", &binds[CMD_END_CUTSCENE]));
+  frame(BTN_ZL);
+  frame(BTN_ZL | BTN_DLEFT);
+  assert(cmd_pressed(CMD_RELOAD_MAP) && !cmd_pressed(CMD_END_CUTSCENE));
+  frame(0); /* d-left cancelled end cutscene's ZL: it starts again */
+  frame(BTN_ZL);
+  frame(BTN_ZL | BTN_DRIGHT);
+  assert(cmd_pressed(CMD_END_CUTSCENE) && !cmd_active(CMD_RELOAD_MAP));
+  frame(0);
+  expands("{reload_map} / {end_cutscene}", "ZL + d-left / ZL + d-right");
+  binds_reset();
+  name_is(binds[CMD_END_CUTSCENE], "unbound");
+
   puts("binds: all passed");
   return 0;
 }

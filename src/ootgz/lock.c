@@ -1,4 +1,4 @@
-/* Locks (1.1.1). The patch redirects the game's stores to Link's position (z64hd.h) to stubs that skip or
+/* Locks. The patch redirects the game's stores to Link's position (z64hd.h) to stubs that skip or
  * change a store. Setting a bit holds that axis where the game would move it.
  * The module still writes Link itself (save / load position, levitate)
  * so a locked Link stays where the lock was put.

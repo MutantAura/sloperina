@@ -1388,9 +1388,40 @@ reads every slot's caption once, at boot, and keeps it.
   `+0x2C0` 1 when idle; the Enum after B; `main+0x3773490` empties the rows and slot 98 alone brings them back
   (before trying it with a reload), with the cursor where it was and A loading that row; a breakpoint at
   `main+0x33CC800` is hit for each visible row after the refresh with the getter returning true.
-- **1.0.0** (22nd November 2026, from a memory dump; not yet checked in game): CaptionMgr `[main+0x4E08A40]` (not
-  on the 0x70460 shift: found through the 12 loads of v131072's slot), `caption_empty` `0x963FA0` (as v131072's but
-  it also clears `+0x91`), `caption_empty_entry` `0x963EA0`, `caption_request` `0xF41000`, `caption_update`
-  `0x4E9760` (called by `0x33A95D0`, v131072's `0x340A460` matched whole), the Load list's vtable `0x4B89340`, its
-  hide-rows `0x3710A70`, "Load this save?" `0x4B89FE0`. The fields the module uses (`+0x08`/`+0x10`, `+0x48`/`+0x50`,
-  `+0x8C`, `+0x8E`) are the ones both builds' functions use.
+- **1.0.0 support (19 November 2026):** the extracted base executable was compared directly with v131072.
+  Its `SeqOneshotRequestLoadAndSerializeCaption` work function at `0xF40FC0` calls `0xF41000` and
+  loads the CaptionMgr through GOT `0x4C1B9B0`, whose stored address is `0x4E08A40`.
+  The request, entry reset, row-hide and both UI refresh functions match the corresponding complete
+  instruction ranges after masking relocated addresses. The UI vtables were recovered from their
+  unique refresh-function pointers at slot 98, rather than assuming a fixed version-to-version delta.
+
+  | Role | 1.0.0 | 1.1.1 |
+  | --- | --- | --- |
+  | CaptionMgr pointer | `0x4E08A40` | `0x4E78E38` |
+  | Empty manager | `0x963FA0` | `0xBB0010` |
+  | Request reload | `0xF41000` | `0xF6DA40` |
+  | Empty one entry | `0x963EA0` | `0xBAFF10` |
+  | Load-list vtable | `0x4B89340` | `0x4BEEBA0` |
+  | Hide list rows | `0x3710A70` | `0x3773490` |
+  | Save/load confirmation vtable | `0x4B89FE0` | `0x4BEF840` |
+
+  The reset routine has one relevant semantic difference: base clears `mgr+0x91` (Master Quest
+  list selection), whereas the update preserves it. `start_reading` now saves and restores that byte
+  around a full reset so refreshing captions does not switch the displayed save family. The partial
+  entry reset already preserves it. The game's existing per-frame update performs the reads; no extra
+  update calls were enabled. Both versions retain their separate Build-ID-selected address tables.
+
+  Validation: `tests/run_save_caption_reload.py` extracts the actual reload controller and tests full
+  and partial reloads, both native reset behaviors, normal/MQ modes, hide-before-free timing, busy and
+  confirmation waits, and failure cleanup. Local execution of both native manager reset bodies with
+  stubbed entry cleanup confirmed the 12 entry callbacks, shared fields and different MQ behavior.
+  The local native probe skips PAC entry/exit; it does not validate real textures, save I/O or gameplay.
+  On a physical console running 1.0.0, two archive restores refreshed six changed slots in 38 frames
+  and one changed slot in 8 frames; the user confirmed the restored save loaded without restarting.
+  These runs used the console fork with the same reload-controller changes and address mappings.
+  Master Quest was covered by the host/native-reset checks, not a confirmed console run.
+  No new Lichii or 1.1.1 runtime test is claimed.
+- **1.0.0, again** (22nd November 2026): a memory dump of the running game, mapped independently (globals through
+  the code that loads them, functions by masked signature, vtables slot by slot), gave the same seven addresses, and
+  `caption_update` `0x4E9760` (what `0x33A95D0`, v131072's `0x340A460` matched whole, calls), so every caption
+  offset is filled on both builds.

@@ -115,7 +115,7 @@ static const struct z64hd_build z64hd_builds[] = {
      * each, all agreeing), functions by masked signature, vtables slot by slot. The ground map's record formats are
      * byte for byte v131072's; in game its manager chain led to a loaded area's chunks. The captions' functions
      * use the same fields (caption_empty also clears +0x91); caption_update is what the matched caller
-     * (0x33A95D0, v131072's 0x340A460) calls. */
+     * (0x33A95D0, v131072's 0x340A460) calls. The captions' values agree with #38's, found separately. */
     .voxel_mgr_ptr = 0x4C18258,
     .voxel_formats = 0x3E89420,
     .caption_mgr_ptr = 0x4E08A40,

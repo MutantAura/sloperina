@@ -28,7 +28,6 @@
 #define MAX_WRITES 4    /* written again every RETRY_EVERY frames until Link is there */
 #define RETRY_EVERY 3
 #define NEAR 1.0        /* units per axis: Link counts as there */
-#define FACE_SPEED 0.06 /* the velocity that turns him to face the saved way (above levitate's "none") */
 
 static bool saved;
 static double sx, sy, sz, sfx, sfz; /* drawn position; facing as a unit (x, z) */
@@ -109,13 +108,30 @@ void position_load(void)
 static bool write_saved(void)
 {
   writes++;
-  return link_record_move(sx, sy, sz, (float)(sfx * FACE_SPEED), (float)(sfz * FACE_SPEED), SETTLE + 2);
+  return link_record_move(sx, sy, sz, 0, 0, SETTLE + 2);
 }
 
 static bool link_there(void)
 {
   vec3f_t d;
   return link_drawn_pos(&d) && absd(d.x - sx) < NEAR && absd(d.y - sy) < NEAR && absd(d.z - sz) < NEAR;
+}
+
+float atan2f(float y, float x); /* from sdk */
+
+/* Link is on the spot: turn him the rest of the way to the saved facing, in one step */
+static void face_saved(void)
+{
+  double fx, fz;
+  if ((sfx == 0 && sfz == 0) || !link_facing(&fx, &fz))
+    return;
+  double turn = atan2f((float)sfx, (float)sfz) - atan2f((float)fx, (float)fz);
+  const double pi = 3.14159265358979;
+  if (turn > pi)
+    turn -= 2 * pi;
+  else if (turn < -pi)
+    turn += 2 * pi;
+  link_record_turn(turn);
 }
 
 /* the load is over one way or another: the game's stores can move Link again */
@@ -134,6 +150,7 @@ static void settle_step(void)
     return;
   }
   if (link_there()) {
+    face_saved();
     log_printf("position loaded (%d write%s)", writes, writes == 1 ? "" : "s");
     gfx_notice("position loaded");
     settle_done();

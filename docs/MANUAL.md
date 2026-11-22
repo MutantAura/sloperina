@@ -80,6 +80,9 @@ With the menu closed (the defaults; **settings > rebind commands** changes them)
 | **L** | Frame advance (if enabled, [2.11.3](#2113-frame-advance)) |
 | **L + L3** (either order) | Frame advance: run again |
 
+**reload map** and **end cutscene** can be given buttons too (**settings > rebind commands**, under **scene**); they
+have none at first.
+
 ## 2 Menus
 
 ### 2.1 Link
@@ -524,7 +527,8 @@ stay the game's. Settings from before the commands with frame advance on **R** b
 #### 2.11.4 Rebind commands
 
 gz's **commands** menu, here **rebind commands**: each of sloperinaGZ's controls and the buttons it's bound to, under **menu**, **frame
-advance**, **link** and **watches and timer**. A bind is up to four buttons pressed in that order (**R**, then
+advance**, **link**, **scene** and **watches and timer**. The **scene** commands, **reload map** ([2.1](#21-link)) and **end
+cutscene** ([2.3](#23-scene)), start out unbound. A bind is up to four buttons pressed in that order (**R**, then
 **right stick down**); letting go of one ends it, and pressing another button partway through cancels it. When one
 bind is part of another that's also held (**R + D-pad left** holds **D-pad left**), only the bigger one counts, so
 **R + A + D-pad right** resets jump height without also hiding the watches. **run again** takes its buttons in any

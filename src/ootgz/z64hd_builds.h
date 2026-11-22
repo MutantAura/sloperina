@@ -19,16 +19,37 @@ static const struct z64hd_store stores_1_1_1[] = {
   { 0x180EA2C, 0xFD0012E0, LOCK_BIT_Z },       /* str d0, [x23, #0x20] */
 };
 
+/* 1.0.0's: the same instructions at the same places in v131072's functions (65 of 65 masked words round each
+ * matched, nowhere else), so the variants and bits are the same */
+static const struct z64hd_pair pair_1_0_0 = {
+  0x17C8D24, 0x6D0106E0, /* stp d0, d1, [x23, #0x10] */
+  0xFD000EE1,
+  0xFD000AE0,
+};
+
+static const struct z64hd_store stores_1_0_0[] = {
+  { 0x188D3B8, 0xA9002688, LOCK_BIT_COLLISION },
+  { 0x188D3C0, 0xA9002668, LOCK_BIT_COLLISION },
+  { 0x17C8D2C, 0xFD0012E0, LOCK_BIT_Z },       /* str d0, [x23, #0x20] */
+};
+
 static const struct z64hd_build z64hd_builds[] = {
   {
     .version = "1.0.0",
     .build_id = "33FA6C2C23848282A77E8B88A0A93F4887C55920",
     .revision = 65536,
+    /* the base game's item event returns from AddPouch without the separate notification */
+    .absent = "pouch_notify pouch_notify_ptr",
     .nnmain = 0x11C1FB0,
     .mod0 = 0x3BE705C,
     .cave_start = 0x3BE6A00,
     .cave_end = 0x3BE7000,
     .hook_slot = 0x4E2A070,
+    /* the word after the hook slot, as v131072's: past MOD0's bss end (0x4E2A068), nothing refers to it, 0 in game */
+    .lock_slot = 0x4E2A078,
+    .pair = &pair_1_0_0,
+    .stores = stores_1_0_0,
+    .store_count = sizeof(stores_1_0_0) / sizeof(stores_1_0_0[0]),
     .frame_site = 0x3AF2A6C,
     .gd_unlock = 0x3BE2B20,
     .gd_mgr_ptr = 0x4C184D8,
@@ -40,9 +61,6 @@ static const struct z64hd_build z64hd_builds[] = {
     .vt_enum_type = 0x4BB98F8,
     .pouch_mgr_ptr = 0x4C18428,
     .pouch_add = 0x11378F0,
-    /* The base game's item event returns from AddPouch without the separate notification. */
-    .pouch_notify = 0,
-    .pouch_notify_ptr = 0,
     .pouch_remove = 0x33456F0,
     .equip_slot_fn = 0x2DA26F0,
     .equip_all_fn = 0xEE0840,
@@ -66,6 +84,8 @@ static const struct z64hd_build z64hd_builds[] = {
     /* made at 0xCCE6B0 (0x490 bytes; constructor 0xCCE730: a mutex at +0x00, +0x28 / +0x40 zeroed, the
      * actor tree's root at +0x38 null), as v131072's; the actors' life and position fields are the same */
     .actor_mgr_ptr = 0x4E20930,
+    /* v131072's vtable 0x4B4C460 matched slot by slot (15 of 15 matchable) */
+    .vt_life = 0x4AE7458,
     /* v131072's cct functions matched by masked signature (identical code but for ADRP/BL) and confirmed
      * by their callers: ForceNoHit's executor (0x290CD80) calls 0x1A9C00, the gravity reducer (0x2738FE0)
      * calls 0x1ED800. The property vtable is the one with SetPosition at +0xE8 and 0x6D74E0 at +0x250;
@@ -82,18 +102,33 @@ static const struct z64hd_build z64hd_builds[] = {
      * the holder chain, the hit component and level, the controller's reaction / state and the player's
      * fields that ragdoll.c reads are at the same offsets as v131072's */
     .ragdoll_controller = 0x587460,
-    /* CaptionMgr / Load UI mapped from v131072; see FINDINGS 9.11.
-     * Refresh stays in the running game. No extra CaptionMgr updates needed. */
+    /* save position (FINDINGS 9.7), from a memory dump of 1.0.0 (main at 0x80fc1000 in Lichii): AutoSaveMgr's
+     * update matched v131072's 0x32762B0 by masked signature, and its vtable (0x4B3B5F8) has v131072's slots in
+     * the same places; the safety search is v131072's 0x945310 but for its GOT load (both callers matched too).
+     * The scene manager and event state slots are 0x70460 below v131072's like the other bss slots: in game the
+     * scene's entry 12 was AutoSaveMgr with slot B set, and the event state is the event manager, as in v131072. */
+    .scene_mgr_ptr = 0x4E271E8,
+    .autosave_update = 0x3217250,
+    .safety_search = 0x9444A0,
+    .event_state_ptr = 0x4E243E0,
+    /* Found the same way (FINDINGS 9.8, 9.11): data through the code that loads it (v131072's loads matched, 9 to 12
+     * each, all agreeing), functions by masked signature, vtables slot by slot. The ground map's record formats are
+     * byte for byte v131072's; in game its manager chain led to a loaded area's chunks. The captions' functions
+     * use the same fields (caption_empty also clears +0x91); caption_update is what the matched caller
+     * (0x33A95D0, v131072's 0x340A460) calls. The captions' values agree with #38's, found separately. */
+    .voxel_mgr_ptr = 0x4C18258,
+    .voxel_formats = 0x3E89420,
     .caption_mgr_ptr = 0x4E08A40,
     .caption_empty = 0x963FA0,
     .caption_request = 0xF41000,
+    .caption_update = 0x4E9760,
     .caption_empty_entry = 0x963EA0,
     .vt_load_list = 0x4B89340,
     .load_list_hide_rows = 0x3710A70,
     .vt_save_load_confirm = 0x4B89FE0,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
-      { 0x4E24400, 0x328 },
+      { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
     },
   },
   {

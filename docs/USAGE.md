@@ -109,7 +109,7 @@ to add it. Or open **debug > memory**, find the value, edit the row (**L**) and 
 **scene > environment > show**. Cyan walls stop Link; red ones are walls he's inside.
 
 **...see where I'd void out?**
-**scene > void out > show** (1.1.1). Red columns void Link at once; off the ground map Link voids on leaving the
+**scene > void out > show**. Red columns void Link at once; off the ground map Link voids on leaving the
 orange fence; purple areas void whatever enters them.
 
 **...float around?**

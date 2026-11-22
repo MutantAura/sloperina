@@ -579,7 +579,7 @@ Objects:
   opened on 1.0.0. A host-side read/write test used the different String64 indices from each build.
   Full in-game warping after the String64 fix still needs a play test.
 
-### 5.21 Locking Link's X, Y and Z (1.1.1 only)
+### 5.21 Locking Link's X, Y and Z
 - **Cause:** the game's collision resolver and its body-position stores move Link after the module writes him, so
   a written position doesn't hold through address writes. The stores are: collision `main+0x18D2C18`, `+0x18D2C20`; body `main+0x180EA24` (`stp d0, d1,
   [x23, #0x10]`, X and Y together) and `main+0x180EA2C` (`str d0, [x23, #0x20]`, Z). Link's body centre is the
@@ -593,7 +593,10 @@ Objects:
 - **Checked:** `mkips` writes the stubs and branches for `1.1.1`; the words were compared with clang's assembly
   (`stp`/`ldp`, `adrp`/`ldr` of the slot, the `tbnz` bit numbers, the original stores) and every branch resolves to
   its intended address. The module files compile for aarch64.
-- **Not verified:** `1.0.0` has no store offsets, so locks there only show a notice that it will not work.
+- **1.0.0** (22nd November 2026): the same stores at `main+0x17C8D24` (X+Y), `+0x17C8D2C` (Z), `+0x188D3B8` and
+  `+0x188D3C0` (collision), each matched on all 65 masked words round it in a memory dump; the lock word is
+  `main+0x4E2A078`, after the hook slot as in 1.1.1 (MOD0's bss ends at `0x4E2A068`). Patch version 5.
+- **Not verified in game on 1.0.0.**
 
 ### 5.22 Loading zones don't fire while Link's collision is off
 - **Symptom:** floating into a loading zone with levitate's **through walls** on did nothing; the exit fired as
@@ -1092,6 +1095,15 @@ point.
   most every few frames while it moves) and refreshed now and then while Link stands on it.
 - In Ghidra `thunk_FUN_03c41c50` is marked no-return, so decompiles stop after it (FUN_00945220, FUN_00375BA0):
   read the disassembly (`tools/re64.py dump/v131072 func <offset>`).
+- **1.0.0 (v0; found 22nd November 2026):** `main` was dumped from Lichii's memory (its exefs `main` is `ZBIC`
+  compressed): MOD0 at `main+0x3BE705C`, main at `0x80FC1000` that run (the base that puts the most vtable entries
+  on `pacibsp`). AutoSaveMgr's update is `main+0x3217250` (v131072's `0x32762B0` matched by masked signature; same
+  code but for its global loads), its vtable `main+0x4B3B5F8` (v131072's `0x4BA0848`, all six matchable slots the
+  same). The safety search is `main+0x9444A0`, identical but for its GOT load; both callers match (`0x9443B0`,
+  `0x26691F0`). The scene manager `[main+0x4E271E8]` and event state `[main+0x4E243E0]` are 0x70460 below v131072's,
+  as the other bss slots are (§9.5). In game: the scene's entry 12 was AutoSaveMgr with slot B set and `EvtWait`
+  at `+0x1DC`, and the event state is the event manager object (`[[main+0x4C183E8]]`). Player fields
+  (`+0x13D0`, `+0x1948`, the actor's `+0x31C` / `+0x330` / `+0x348`) are used by as many instructions in both builds.
 
 ### 9.8 Where Link voids out: the ground map, its two probes and the void areas (v131072; from the disassembly, the view checked in game 14th November 2026)
 Link can void on ground that looks solid and walk on thin air without voiding, because the void check doesn't use
@@ -1162,6 +1174,10 @@ the probes' workings, what switches the flags off, and the void areas' shapes.
     perspective matrix (x and y by the half fov's tangents, w the distance ahead, z scaled so z / w is the game's
     depth) draws a quad whose element matrix puts it in the world (`gpuui_world`, `gpuui_face`), and the scene's
     depth hides it. Worked as written.
+
+- **1.0.0** (22nd November 2026, from a memory dump): the ground map's slot is `main+0x4C18258` (v131072's 40 loads
+  of `0x4C7DF00` map to it) and the record formats `main+0x3E89420` (the same 7 x 0x74 bytes). In game its manager
+  (`+0xC0`, `+0x170`) held a loaded area with 18 chunks. Not yet checked in game with the view on.
 
 ### 9.9 Ragdolling Link on demand (v131072; from the disassembly, not yet checked in game)
 The game ragdolls Link in events with the AI node `ExecuteEventPlayerImmediateRagdollDown` (vtable: name getter
@@ -1405,3 +1421,7 @@ reads every slot's caption once, at boot, and keeps it.
   These runs used the console fork with the same reload-controller changes and address mappings.
   Master Quest was covered by the host/native-reset checks, not a confirmed console run.
   No new Lichii or 1.1.1 runtime test is claimed.
+- **1.0.0, again** (22nd November 2026): a memory dump of the running game, mapped independently (globals through
+  the code that loads them, functions by masked signature, vtables slot by slot), gave the same seven addresses, and
+  `caption_update` `0x4E9760` (what `0x33A95D0`, v131072's `0x340A460` matched whole, calls), so every caption
+  offset is filled on both builds.

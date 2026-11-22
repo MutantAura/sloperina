@@ -1489,7 +1489,7 @@ Tree. Writing the Enum alone, as before, left the manager at Ready: no scene, an
   masked signature, unique over 64 words; leo gives the same address, and #43 found both separately). The set-step's
   code is the same, so the manager's fields it uses are at the same offsets.
 
-### 9.14 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game)
+### 9.14 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game; 1.0.0 mapped, not yet checked in game)
 What a minigame, a boss fight or a story section turns off (saving, warping, ...) is one **GameSafetySetting**: a row
 of RSDB `GameSafetySetting.Product.111` (28 rows), named by a Challenge (`GameSafetySetting`, or a step's
 `ReplaceGameSafetySetting`). GameSafetyMgr, the scene's component 28 (§9.3), holds the one applied. The **safety**
@@ -1516,4 +1516,10 @@ and **safety flags** watches read it (`safety.c`).
 - **1.0.0** (22nd November 2026, from a memory dump): the vtable is `main+0x4B3BE08` (v131072's matched: its entries
   are v131072's 0x5F080 lower, and slot 8 returns `GameSafetyMgr`). The packing (`0x3226AD0`) and the minigame bit's
   setter (`0x2C9D3B0`) match v131072's whole but for relocated addresses and another object's fields, so `+0x50` and
-  `+0x54` are the same.
+  `+0x54` are the same. In Lichii (22nd November 2026, read from memory) the title scene's 41 components had
+  AutoSaveMgr at entry 12 and GameSafetyMgr, with this vtable, at entry 28, both values 0.
+- **Still to check in game, on both versions:** with a save loaded and the **safety** and **safety flags** watches on,
+  their values somewhere ordinary, then in a minigame (Lost Woods' Skull Kid ocarina game, the shooting gallery,
+  bombchu bowling) or a boss room, where **safety** should name a setting (`MiniGame`, ...) and the flags change
+  (the **flags** display type shows them as words). Reading the manager from memory at the same moment confirms
+  the watches show what it holds. This also answers what the two values are when no section is active.

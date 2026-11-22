@@ -100,6 +100,9 @@ static const struct z64hd_build z64hd_builds[] = {
     .cct_set_velocity = 0x1ED800,
     .phive_mgr_ptr = 0x4C18258,
     .vt_autosave = 0x4B3B5F8,
+    /* v131072's vtable matched (its entries 0x5F080 below v131072's, slot 8 returning "GameSafetyMgr"); the code
+     * that packs its flags (0x3226AD0) and sets the minigame bit (0x2C9D3B0) matched whole, with +0x50 / +0x54 */
+    .vt_safety_mgr = 0x4B3BE08,
     /* v131072's 0x5F88C0, found through ExecuteEventPlayerImmediateRagdollDown's enter (identical in both);
      * the holder chain, the hit component and level, the controller's reaction / state and the player's
      * fields that ragdoll.c reads are at the same offsets as v131072's */
@@ -194,6 +197,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .phive_mgr_ptr = 0x4C7DF00,
     .scene_mgr_ptr = 0x4E97648,
     .vt_autosave = 0x4BA0848,
+    .vt_safety_mgr = 0x4BA1058,
     .safety_search = 0x945310,
     .voxel_mgr_ptr = 0x4C7DF00,
     .voxel_formats = 0x3EE8840,

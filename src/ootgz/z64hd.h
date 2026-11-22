@@ -95,6 +95,8 @@ struct z64hd_build {
    * (scene component 12, savepos.c, FINDINGS 9.7); 0: not known for this build */
   uint32_t scene_mgr_ptr;
   uint32_t vt_autosave;
+  /* GameSafetyMgr's vtable (safety.c, FINDINGS 9.14): the scene component holding the applied safety setting */
+  uint32_t vt_safety_mgr;
   /* bool (actor, const float pos[3], float out[3], const void *riding, bool, int): the load's search for a safe
    * place round SavePos (FINDINGS 9.7); 0: not known for this build */
   uint32_t safety_search;

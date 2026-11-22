@@ -95,7 +95,7 @@ have none at first.
 | **age** | **child** or **adult**: what the next **reload map** gives you. |
 | **reload map** | Reloads the map you're in, at the age chosen above. Changing age loads the other age's version of the map and swaps sword and shield with the ones from the other age (adult-only tunics and boots come off a child). |
 
-| **save position (R + d-up)** | Remembers where Link is, which way he faces and the map (gz's save position). The first save in an area only finds Link's position in memory ("Locating Link's starting position, please try again"; he's lifted a little while it's tested, as with levitate, and it's quicker while he's moving): press it again once it says it's found him. |
+| **save position (R + d-up)** | Remembers where Link is, which way he faces and the map (gz's save position). Works at the first press, anywhere. |
 | **load position (R + d-down)** | Puts Link back there, facing the same way. Only in the same map. With nothing saved: "No position saved yet". |
 | **ragdoll (R3)** | Knocks Link over and tumbles him backwards: the game's own reaction to a bomb, so he can't attack and doesn't sink while it lasts. He gets up by himself and it unticks then; it can't be cut short. When the game wouldn't take a hit (a map's arrival, an event) it says so and does nothing. On 1.1.1 the game caps the tumble's speed; 1.0 has no cap. |
 
@@ -145,7 +145,7 @@ Link stays in front of them.
 
 #### 2.3.2 Save position
 
-Where a save puts Link when it's loaded (1.1.1 only). A save doesn't keep where Link stands: it keeps a
+Where a save puts Link when it's loaded. A save doesn't keep where Link stands: it keeps a
 restart point, which follows him while the game finds his spot safe and stays behind when it doesn't (in the
 air, on a moving block or platform, in deep water, during some actions). The game keeps it in two slots and a
 save takes **A** if it's set, else **B**. On loading, the game also searches round that point for a safe place,
@@ -158,12 +158,12 @@ up to 5 m away, so Link can still appear somewhere else.
 | **show slots**: dark green slot | Where Link stands, the game won't move the restart point (slot B) to him, so a save keeps the green slot B. Out of bounds that's ground more than about 5 m from ground the game counts as valid, or ground marked not to keep it. Putting the ocarina away does move it there once. Dark green and pale yellow show what you'd get then, as green and yellow show what you have now: slot B at Link's feet in **dark green** (ring, arrow, a lower pole) and, with **where a load puts link**, where a load would put him from it in **pale yellow** (ring, tall pole). The pale yellow marker is only drawn while slot A isn't set, since a save keeps A otherwise. The menu's **here** line says why the game won't keep the point, or that it does. Not shown where something else would hold the point anyway (jumping, a moving object, an event). |
 
 The lines under the menu give each slot's x, y, z and the way Link will face (degrees), with a **\*** on
-the one a save would keep, or **not set**, or **not found** (the title screen, loading, 1.0.0); and where a load
+the one a save would keep, or **not set**, or **not found** (the title screen, loading); and where a load
 would put Link and how far that is from the slot, or **stays**.
 
 #### 2.3.3 Void out
 
-Where Link voids (1.1.1 only), drawn over the game from the game's own ground map. The void check doesn't use
+Where Link voids, drawn over the game from the game's own ground map. The void check doesn't use
 the collision: each frame the game looks straight down from Link into a map of one-unit cells that mark
 walkable ground, and keeps the nearest such cell it has found round Link. Link voids when the cell underneath
 is a deadly one, or when nothing is underneath and that nearest cell is 8 units or more away to the side.
@@ -333,13 +333,13 @@ file as `archive_folder=`.
 
 A restore first copies the save folder as it is to `save-backups/` (kind **before restore**), so a restore can be
 undone by restoring that one. Then it copies the archive over the save folder, every slot and the account file but
-not the options, and the notice **save restored: load it from the game's Load screen** shows. On 1.1.1 the game's
+not the options, and the notice **save restored: load it from the game's Load screen** shows. The game's
 Load list is then read again from the restored files: only the slots whose save the restore changed, about a tenth
 of a second each (all 12, about a second, if that can't be told; none if nothing changed), and **the game's Load list
 now shows the restored save** says when it's done. Restored with the pause screen's **Load** list open, the list
 updates where it is: its rows disappear for about a second (the game doesn't take the controller meanwhile) and
 come back with the restored saves. Under the game's Save list, a save, game over or **Load this save?** it waits
-until that has closed. On 1.0.0 the list shows the restored saves after the game is restarted. The game keeps running what
+until that has closed. The game keeps running what
 it loaded until then: open the pause screen's **System > Load** and load the slot. Do that before an autosave (a
 loading zone or an event), which would write the old game over its slot. The pre-restore copy isn't trimmed straight
 away, so the archive being restored is never deleted to make room for it.
@@ -405,7 +405,7 @@ when a flag changes, at most once a second ("3 event flags written to CSV" when 
 change is also kept in the log menu: choose **event flags** as its filter (2.10.5).
 
 Each row has the date and time (the console's clock, e.g. `13/11/2026 15:47:02`), the seconds since this session's recording
-started, the frame, the map, Link's position, what Link was doing (`EvtTalk` while he talks; 1.1.1 only), the
+started, the frame, the map, Link's position, what Link was doing (`EvtTalk` while he talks), the
 flag's type, hash and name, its old and new values, and who changed it: `game`, or `sloperinaGZ` for the menu and
 cheats. Other kinds of row:
 - **`area`:** Link entered a map. It gives the old and new map, and in the note the entrance, the arrival event
@@ -445,7 +445,7 @@ Under **log history**: the last 128 messages sloperinaGZ wrote, newest first, fi
 their own, so other messages don't push them out. Flags without a known name show their hash.
 
 Everything is also written to **`sloperinaGZ/log.txt`** on the SD card (on an emulator, its virtual SD card;
-Lichii build 150+: `%APPDATA%\lichii\sdmc\sloperinaGZ\log.txt`; Fritchii v5.8+: `%APPDATA%\fritchii\sdmc\sloperinaGZ\log.txt`; Eden and older Lichii / Fritchii: `%APPDATA%\eden\sdmc\sloperinaGZ\log.txt`), with the time since the game started, about once a
+Lichii build 150+: `%APPDATA%\lichii\sdmc\sloperinaGZ\log.txt`; Fritchii v5.8+: `%APPDATA%\fritchii\sdmc\sloperinaGZ\log.txt`; Eden and older Lichii / Fritchii: `%APPDATA%\eden\sdmc\sloperinaGZ\log.txt`), with the time since the game started and the game's frame counter (`[   12.345 f742] ...`: the **frame** watch's number, to match a line to a frame), about once a
 second. It starts fresh each time the game starts. Send it along when you report a problem.
 
 ### 2.11 Settings

@@ -21,7 +21,7 @@ typedef struct {
   bool valid;
 } savepos_slot_t;
 
-/* game thread: the slots now; false where AutoSaveMgr can't be found (1.0.0, the title screen, loading) */
+/* game thread: the slots now; false where AutoSaveMgr can't be found (the title screen, loading) */
 bool savepos_slots(savepos_slot_t slots[SAVEPOS_SLOTS]);
 
 /* game thread: AutoSaveMgr's name for what Link is doing ("Move", "Wait", "EvtTalk", ...), FINDINGS §9.3;

@@ -103,6 +103,7 @@ static const struct z64hd_build z64hd_builds[] = {
     /* v131072's vtable matched (its entries 0x5F080 below v131072's, slot 8 returning "GameSafetyMgr"); the code
      * that packs its flags (0x3226AD0) and sets the minigame bit (0x2C9D3B0) matched whole, with +0x50 / +0x54 */
     .vt_safety_mgr = 0x4B3BE08,
+    .hs_hit_vt = 0x4910168, /* from a bomb's DamageM, recorded live (FINDINGS 9.16) */
     /* v131072's 0x5F88C0, found through ExecuteEventPlayerImmediateRagdollDown's enter (identical in both);
      * the holder chain, the hit component and level, the controller's reaction / state and the player's
      * fields that ragdoll.c reads are at the same offsets as v131072's */
@@ -144,6 +145,9 @@ static const struct z64hd_build z64hd_builds[] = {
     .version = "1.1.1",
     .build_id = "E0F3CCFAF50065AE4EA01EB5AEB13B1A45DA3348",
     .revision = 131072,
+    /* hookshot storage: the pull lets go when nothing is hooked, and the recorded hit's layout isn't checked here.
+     * The vtable itself is 0x4974A90 (FINDINGS 9.16) */
+    .absent = "hs_hit_vt",
     .nnmain = 0x1202CD0,
     .mod0 = 0x3C4705C,
     .cave_start = 0x3C46400,

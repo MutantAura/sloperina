@@ -22,8 +22,9 @@
  * numbers made current, the bomb put in front of Link and his own pointers. The level alone (H+0x2D1 = 2; 4 is
  * the huge hit ragdoll.c uses) isn't enough for a medium hit: the reaction selector also reads the hit's contact
  * records (the lists at H+0x210 and H+0x1338). Written from outside the game this way it gave DamageM from
- * standing every time, and storage on 2 to 3 shots of 12 (the write's timing was luck there). 1.0 only: the
- * record's vtable is a 1.0 offset, and storage doesn't work on 1.1.1 anyway. */
+ * standing every time, and storage on 2 to 3 shots of 12 (the write's timing was luck there). Forcing it is 1.0 only
+ * (z64hd hs_hit_vt, absent on 1.1.1): storage doesn't work on 1.1.1 anyway, and the hit's words were recorded on
+ * 1.0. Telling storage and the hook's drawing only read, and work on both. */
 #include "hsstore.h"
 
 #include "airwall.h"
@@ -54,16 +55,15 @@ static const struct { uint32_t key; const char *name; } weapons[] = {
 #define REC_TARGET 0xAC
 #define H_SIZE 0x1D20
 #define ACTOR_POSITION 0x31C
-#define HIT_REVISION 65536 /* the build the record was taken from */
 
 /* The medium hit, as a bomb left it in H (1.0) */
-enum { W_RAW, W_FRAME, W_MAIN64, W_H64, W_POS, W_DIR };
+enum { W_RAW, W_FRAME, W_VT, W_H64, W_POS, W_DIR }; /* W_VT: main + z64hd hs_hit_vt */
 static const struct { uint16_t off; uint8_t kind; uint32_t value; } hit_words[] = {
   { 0x0A0, W_RAW, 0xE7 },        { 0x0B8, W_RAW, 0xE7 },        { 0x0DC, W_RAW, 0x100 },
   { 0x0E0, W_RAW, 0x10 },        { 0x0E4, W_RAW, 0x1080000 },   { 0x0E8, W_FRAME, 0 },
-  { 0x0EC, W_RAW, 2 },           { 0x108, W_MAIN64, 0x4910168 }, { 0x118, W_RAW, 0xE7 },
+  { 0x0EC, W_RAW, 2 },           { 0x108, W_VT, 0 }, { 0x118, W_RAW, 0xE7 },
   { 0x128, W_POS, 0 },           /* Link's own position */
-  { 0x134, W_RAW, 0x3F7D8D7E },  { 0x148, W_MAIN64, 0x4910168 }, { 0x164, W_FRAME, 0 },
+  { 0x134, W_RAW, 0x3F7D8D7E },  { 0x148, W_VT, 0 }, { 0x164, W_FRAME, 0 },
   { 0x184, W_RAW, 0xBF365606 },  { 0x198, W_RAW, 1 },           { 0x200, W_FRAME, 0 },
   { 0x224, W_RAW, 8 },           { 0x228, W_RAW, 1 },           { 0x248, W_RAW, 0xE7 },
   { 0x250, W_RAW, 0x10 },        { 0x254, W_RAW, 0x1080000 },   { 0x27C, W_POS, 0 },
@@ -73,7 +73,7 @@ static const struct { uint16_t off; uint8_t kind; uint32_t value; } hit_words[] 
   { 0x2D0, W_RAW, 0x10207 },     /* byte 0x2D1: level 2, medium */
   { 0x2D8, W_H64, 0x2F8 },       { 0x2E0, W_H64, 0x400 },       { 0x2F0, W_RAW, 1 },
   { 0x2F8, W_RAW, 0 },           { 0x2FC, W_RAW, 0 },           { 0x31C, W_FRAME, 0 },
-  { 0x338, W_MAIN64, 0x4910168 }, { 0x348, W_RAW, 0xE7 },       { 0x350, W_POS, 0 },
+  { 0x338, W_VT, 0 }, { 0x348, W_RAW, 0xE7 },       { 0x350, W_POS, 0 },
   { 0x35C, W_DIR, 0 },           { 0x3C8, W_POS, 0 },           { 0x3D4, W_DIR, 0 },
 };
 /* where the recording had Link, the contact point and its vectors (x, y, z); the direction 0x288 points from
@@ -140,13 +140,13 @@ bool hsstore_force_enabled(void)
 
 static bool force_known(void)
 {
-  return z64hd_game && z64hd_game->revision == HIT_REVISION;
+  return z64hd_game && z64hd_game->hs_hit_vt;
 }
 
 void hsstore_force_set(bool on)
 {
   if (on && !force_known()) {
-    gfx_notice("forcing hookshot storage needs the 1.0 game");
+    gfx_notice("forcing hookshot storage isn't available on this game version");
     return;
   }
   force_on = on;
@@ -187,7 +187,7 @@ static bool medium_hit(void)
     switch (hit_words[i].kind) {
     case W_RAW: *(volatile uint32_t *)at = hit_words[i].value; break;
     case W_FRAME: *(volatile uint32_t *)at = frame; break;
-    case W_MAIN64: *(volatile uint64_t *)at = MAIN(hit_words[i].value); break;
+    case W_VT: *(volatile uint64_t *)at = MAIN(z64hd_game->hs_hit_vt); break;
     case W_H64: *(volatile uint64_t *)at = h + hit_words[i].value; break;
     case W_POS: {
       const float *src = hit_words[i].off == 0x128 ? pos : contact;

@@ -520,7 +520,8 @@ static bool fake_gd_req_load(void *mgr, const void *buf, int file_idx)
 /* Mock Link state */
 static uintptr_t sim_link_actor;
 static int32_t   sim_hp, sim_max_hp;
-static vec3f_t   sim_pos;
+static vec3f_t   sim_pos, sim_vel, last_set_vel;
+static int       set_vel_calls;
 static double    sim_fx, sim_fz;
 static bool      sim_teleport_ok = true;
 static int       teleport_calls;
@@ -528,6 +529,22 @@ static int       teleport_calls;
 uintptr_t link_actor(void) { return sim_link_actor; }
 bool link_drawn_pos(vec3f_t *out) { *out = sim_pos; return sim_link_actor != 0; }
 bool link_facing(double *fx, double *fz) { *fx = sim_fx; *fz = sim_fz; return sim_link_actor != 0; }
+bool cct_velocity(uintptr_t actor, vec3f_t *out)
+{
+  if (!actor || actor != sim_link_actor)
+    return false;
+  *out = sim_vel;
+  return true;
+}
+bool cct_set_velocity(uintptr_t actor, const vec3f_t *v)
+{
+  if (!actor || actor != sim_link_actor || !v)
+    return false;
+  last_set_vel = *v;
+  sim_vel = *v;
+  set_vel_calls++;
+  return true;
+}
 bool link_health(int32_t **cur, int32_t **max)
 {
   if (!sim_link_actor)
@@ -2089,6 +2106,168 @@ static void test_scene_actors(void)
   puts("PASS: scene actors: capture, .szm round-trip, transform/fallback, HP, dead/missing delete, toggle");
 }
 
+static void test_phase2_bb_vel_savepos(void)
+{
+  init_env(0x5B8);
+  test_build.version = "1.1.1";
+  memfile_actors = true;
+  memfile_fast_reload = true;
+  memset(sim_actor_mgr, 0, sizeof(sim_actor_mgr));
+  add_region(sim_actor_mgr, sizeof(sim_actor_mgr), SYS_PERM_R | SYS_PERM_W);
+  main_slots.actor_mgr_ptr = (uintptr_t)sim_actor_mgr;
+  test_build.actor_mgr_ptr = (uint32_t)((uintptr_t)&main_slots.actor_mgr_ptr - z64hd_main);
+  test_build.actor_force_set_pos = OFF_ACTOR_FORCE_POS;
+  test_build.actor_request_delete = OFF_ACTOR_REQ_DELETE;
+  test_build.preactor_update_flags = OFF_PREACTOR_UPDATE;
+
+  /* Link actor + player/base components for fall history, JS height, restart point */
+  static _Alignas(8) uint8_t link_mem[0x400], link_comps[0x400], player_comp[0x1920], base_comp[0x18B0];
+  memset(link_mem, 0, sizeof(link_mem));
+  memset(link_comps, 0, sizeof(link_comps));
+  memset(player_comp, 0, sizeof(player_comp));
+  memset(base_comp, 0, sizeof(base_comp));
+  uintptr_t lp = (uintptr_t)link_mem, lcp = (uintptr_t)link_comps, pcp = (uintptr_t)player_comp, bcp = (uintptr_t)base_comp;
+  memcpy(link_mem + 0x270, &lcp, 8);
+  memcpy(link_comps + PLAYER_COMPONENT, &pcp, 8);
+  memcpy(link_comps + 0x2B8, &bcp, 8);
+  memcpy(player_comp + 0x18, &lp, 8);
+  memcpy(base_comp + 0x1340, &lp, 8);
+  add_region(link_mem, sizeof(link_mem), SYS_PERM_R | SYS_PERM_W);
+  add_region(link_comps, sizeof(link_comps), SYS_PERM_R | SYS_PERM_W);
+  add_region(player_comp, sizeof(player_comp), SYS_PERM_R | SYS_PERM_W);
+  add_region(base_comp, sizeof(base_comp), SYS_PERM_R | SYS_PERM_W);
+  sim_link_actor = lp;
+
+  /* AutoSaveMgr at scene component 12 */
+  static _Alignas(8) uint8_t smgr[0x200], scene[0x80], scomps[24 * 8], autosave[0x200];
+  memset(smgr, 0, sizeof(smgr)); memset(scene, 0, sizeof(scene));
+  memset(scomps, 0, sizeof(scomps)); memset(autosave, 0, sizeof(autosave));
+  uintptr_t sc_p = (uintptr_t)scene, scs_p = (uintptr_t)scomps, as_p = (uintptr_t)autosave;
+  uint32_t sc_cnt = 24;
+  memcpy(smgr + SCENE_CURRENT, &sc_p, 8);
+  memcpy(scene + SCENE_COUNT, &sc_cnt, 4);
+  memcpy(scene + SCENE_COMPONENTS, &scs_p, 8);
+  memcpy(scomps + SCENE_AUTOSAVE * 8, &as_p, 8);
+  uintptr_t vt_as = z64hd_main + 0x2200u;
+  memcpy(autosave, &vt_as, 8);
+  add_region(smgr, sizeof(smgr), SYS_PERM_R | SYS_PERM_W);
+  add_region(scene, sizeof(scene), SYS_PERM_R | SYS_PERM_W);
+  add_region(scomps, sizeof(scomps), SYS_PERM_R | SYS_PERM_W);
+  add_region(autosave, sizeof(autosave), SYS_PERM_R | SYS_PERM_W);
+  static uintptr_t smgr_slot;
+  smgr_slot = (uintptr_t)smgr;
+  add_region(&smgr_slot, sizeof(smgr_slot), SYS_PERM_R | SYS_PERM_W);
+  test_build.scene_mgr_ptr = (uint32_t)((uintptr_t)&smgr_slot - z64hd_main);
+  test_build.vt_autosave = 0x2200u;
+
+  /* Actor 0 with AIControllerBase -> Blackboard (S32, F32, Bool, Vec3f, U32) */
+  const float pos0[3] = { 5.0f, 1.0f, 2.0f }, rot0[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+  setup_sim_actor(&sim_actors[0], "Enemy_Boss", 0x2001ULL, 4, pos0, rot0, true, true, 12, 20);
+  static _Alignas(8) uint8_t aic[0x40], cset[0x20], centries[8], centry[0x20], cbase[0x210], bb[0x5A0];
+  static int32_t bb_s32[2] = { 42, -7 };
+  static float bb_f32[2] = { 3.5f, 1.25f };
+  static uint8_t bb_bool[3] = { 1, 0, 1 };
+  static float bb_vec3[3] = { 9.0f, 8.0f, 7.0f };
+  static uint32_t bb_u32[1] = { 0xCAFEBABEu };
+  memset(aic, 0, sizeof(aic)); memset(cset, 0, sizeof(cset)); memset(centry, 0, sizeof(centry));
+  memset(cbase, 0, sizeof(cbase)); memset(bb, 0, sizeof(bb));
+  uintptr_t p_aic = (uintptr_t)aic, p_cset = (uintptr_t)cset, p_carr = (uintptr_t)centries;
+  uintptr_t p_ce = (uintptr_t)centry, p_cb = (uintptr_t)cbase, p_bb = (uintptr_t)bb, p_act = (uintptr_t)sim_actors[0].actor;
+  uint32_t one = 1, two = 2, three = 3;
+  memcpy(sim_actors[0].comps + 0x48, &p_aic, 8);
+  memcpy(aic + 0x28, &p_cset, 8);
+  memcpy(cset, &one, 4); memcpy(cset + 8, &p_carr, 8);
+  memcpy(centries, &p_ce, 8); memcpy(centry + 0x18, &p_cb, 8);
+  memcpy(cbase + 0x1F0, &p_act, 8); memcpy(cbase + 0x1F8, &p_bb, 8);
+  uintptr_t ps32 = (uintptr_t)bb_s32, pf32 = (uintptr_t)bb_f32, pbool = (uintptr_t)bb_bool;
+  uintptr_t pvec3 = (uintptr_t)bb_vec3, pu32 = (uintptr_t)bb_u32;
+  memcpy(bb + 0x0A8, &two, 4);   memcpy(bb + 0x0B0, &ps32, 8);
+  memcpy(bb + 0x120, &two, 4);   memcpy(bb + 0x128, &pf32, 8);
+  memcpy(bb + 0x198, &three, 4); memcpy(bb + 0x1A0, &pbool, 8);
+  memcpy(bb + 0x210, &one, 4);   memcpy(bb + 0x218, &pvec3, 8);
+  memcpy(bb + 0x558, &one, 4);   memcpy(bb + 0x560, &pu32, 8);
+  add_region(aic, sizeof(aic), SYS_PERM_R | SYS_PERM_W);
+  add_region(cset, sizeof(cset), SYS_PERM_R | SYS_PERM_W);
+  add_region(centries, sizeof(centries), SYS_PERM_R | SYS_PERM_W);
+  add_region(centry, sizeof(centry), SYS_PERM_R | SYS_PERM_W);
+  add_region(cbase, sizeof(cbase), SYS_PERM_R | SYS_PERM_W);
+  add_region(bb, sizeof(bb), SYS_PERM_R | SYS_PERM_W);
+  add_region(bb_s32, sizeof(bb_s32), SYS_PERM_R | SYS_PERM_W);
+  add_region(bb_f32, sizeof(bb_f32), SYS_PERM_R | SYS_PERM_W);
+  add_region(bb_bool, sizeof(bb_bool), SYS_PERM_R | SYS_PERM_W);
+  add_region(bb_vec3, sizeof(bb_vec3), SYS_PERM_R | SYS_PERM_W);
+  add_region(bb_u32, sizeof(bb_u32), SYS_PERM_R | SYS_PERM_W);
+  link_tree_node(&sim_actors[0], 0, 0, 0);
+  uintptr_t root = (uintptr_t)(sim_actors[0].entry + AENTRY_NODE);
+  memcpy(sim_actor_mgr + AMGR_TREE_ROOT, &root, 8);
+
+  /* Set Link velocity, fall/JS state, restart point, and SavePos slots A & B */
+  sim_pos = (vec3f_t){ 10.0f, 5.0f, 3.0f };
+  sim_vel = (vec3f_t){ 4.5f, -12.25f, 6.75f };
+  set_vel_calls = 0;
+  *(float *)(player_comp + PLAYER_FALL_ORIG) = 15.0f;
+  *(float *)(player_comp + PLAYER_FALL_PEAK) = 18.5f;
+  *(float *)(player_comp + PLAYER_JS_HEIGHT) = 2.75f;
+  *(float *)(player_comp + PLAYER_FALL_DIST) = 10.0f;
+  *(float *)(base_comp + BASE_FALL_ORIG) = 15.0f;
+  *(float *)(base_comp + BASE_FALL_DIST) = 10.0f;
+  memset(player_comp + PLAYER_RESTART, 0x5A, PLAYER_RESTART_BYTES);
+  memset(autosave + AUTOSAVE_SLOT_A, 0xA1, SAVEPOS_SLOT_BYTES);
+  memset(autosave + AUTOSAVE_SLOT_B, 0xB2, SAVEPOS_SLOT_BYTES);
+
+  assert(memfile_save(0));
+  complete_mock_save(GD_SAVE_MAGIC, 256, "phase2");
+  memfile_frame();
+  assert(phase == L_IDLE && memfiles[0].have_vel && memfiles[0].have_fall &&
+         memfiles[0].have_savepos && memfiles[0].have_restart && memfiles[0].actor_bb_size > 0);
+
+  /* Round-trip through .szm into slot 1 */
+  sd_clear();
+  assert(memfile_export(0, "phase2_test") && memfile_list_files() == 1 && memfile_import(0, 1));
+  assert(memfiles[1].have_vel && memfiles[1].have_fall && memfiles[1].have_savepos &&
+         memfiles[1].have_restart && memfiles[1].actor_bb_size == memfiles[0].actor_bb_size);
+
+  /* Mutate everything before loading */
+  sim_vel = (vec3f_t){ 0, 0, 0 };
+  *(float *)(player_comp + PLAYER_JS_HEIGHT) = 0.0f;
+  *(float *)(player_comp + PLAYER_FALL_DIST) = 0.0f;
+  memset(player_comp + PLAYER_RESTART, 0, PLAYER_RESTART_BYTES);
+  memset(autosave + AUTOSAVE_SLOT_A, 0, SAVEPOS_SLOT_BYTES);
+  memset(autosave + AUTOSAVE_SLOT_B, 0, SAVEPOS_SLOT_BYTES);
+  bb_s32[0] = 0; bb_s32[1] = 0;
+  bb_f32[0] = 0; bb_f32[1] = 0;
+  bb_bool[0] = 0; bb_bool[1] = 1; bb_bool[2] = 0;
+  bb_vec3[0] = bb_vec3[1] = bb_vec3[2] = 0;
+  bb_u32[0] = 0;
+
+  assert(memfile_load(1));
+  complete_mock_load(true);
+  for (int i = 0; i < 60 && phase != L_IDLE; i++) {
+    memfile_frame();
+    if (phase == L_FAST_WAIT_RESET)
+      gd_set_bool(F_REQ_RESET_GIMMICK, false);
+  }
+  assert(phase == L_IDLE);
+
+  /* Verify Link velocity, fall/JS height, restart point, and SavePos restored */
+  assert(set_vel_calls == 1 && last_set_vel.x == 4.5f && last_set_vel.y == -12.25f && last_set_vel.z == 6.75f);
+  assert(*(float *)(player_comp + PLAYER_JS_HEIGHT) == 2.75f);
+  assert(*(float *)(player_comp + PLAYER_FALL_DIST) == 10.0f);
+  assert(*(float *)(base_comp + BASE_FALL_ORIG) == 15.0f);
+  assert(player_comp[PLAYER_RESTART] == 0x5A && autosave[AUTOSAVE_SLOT_A] == 0xA1 && autosave[AUTOSAVE_SLOT_B] == 0xB2);
+  /* Verify Actor Blackboard primitives restored */
+  assert(bb_s32[0] == 42 && bb_s32[1] == -7);
+  assert(bb_f32[0] == 3.5f && bb_f32[1] == 1.25f);
+  assert(bb_bool[0] == 1 && bb_bool[1] == 0 && bb_bool[2] == 1);
+  assert(bb_vec3[0] == 9.0f && bb_vec3[1] == 8.0f && bb_vec3[2] == 7.0f);
+  assert(bb_u32[0] == 0xCAFEBABEu);
+
+  sd_clear();
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    free_memfile(&memfiles[i]);
+  puts("PASS: phase 2: Link velocity, fall/JS height, AutoSaveMgr SavePos, actor Blackboard + .szm round-trip");
+}
+
 int main(void)
 {
   test_async_save_and_staging();
@@ -2102,5 +2281,6 @@ int main(void)
   test_szm_versions();
   test_memfile_folders();
   test_scene_actors();
+  test_phase2_bb_vel_savepos();
   return 0;
 }

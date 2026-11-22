@@ -161,6 +161,17 @@ bool cct_velocity(uintptr_t expected_actor, vec3f_t *out)
   return true;
 }
 
+bool cct_set_velocity(uintptr_t expected_actor, const vec3f_t *v)
+{
+  controller_t current;
+  if (!expected_actor || !v || !resolve(&current) || current.actor != expected_actor)
+    return false;
+  if (!(v->x > -10000 && v->x < 10000 && v->y > -10000 && v->y < 10000 && v->z > -10000 && v->z < 10000))
+    return false;
+  MAIN_FN(void (*)(uintptr_t, const vec3f_t *), Z64HD_CCT_SET_VELOCITY)(current.body, v);
+  return true;
+}
+
 bool cct_set_vertical_velocity(uintptr_t expected_actor, float y)
 {
   controller_t current;

@@ -17,6 +17,7 @@ bool cct_noclip_active(void);
 bool cct_teleport(const vec3f_t *position, const float *rotation);
 bool cct_reset_vertical_velocity(uintptr_t expected_actor);
 bool cct_set_vertical_velocity(uintptr_t expected_actor, float y);
+bool cct_set_velocity(uintptr_t expected_actor, const vec3f_t *v);
 bool cct_velocity(uintptr_t expected_actor, vec3f_t *out); /* the body's applied velocity (units/s) */
 /* Any physics body of the controller body's type (a ragdoll bone's too): add dy to its velocity through the
  * game's setter; *before (if given) gets the velocity it had (the queued one if a change is pending). */

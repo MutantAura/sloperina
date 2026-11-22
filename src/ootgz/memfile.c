@@ -159,10 +159,13 @@ typedef struct {
 } session_str_t;
 
 #define MEMFILE_ACTORS_MAX   256u
+#define MEMFILE_BB_POOL_MAX  (128u << 10) /* 128 KiB cap for per-actor Blackboard primitive pool per slot */
 #define ACTOR_RESTORE_FRAMES 4
 #define ACTOR_DEAD_RADIUS    30.0f
+#define SAVEPOS_SLOT_BYTES   0x14u /* AutoSaveMgr slot A (+0x198) and slot B (+0x178) */
+#define PLAYER_RESTART_BYTES 0x2Cu /* Player component +0x18A4..+0x18CF restart point & cooldown */
 
-enum { ACTOR_F_LIFE = 1, ACTOR_F_DEAD = 2, ACTOR_F_ENEMY = 4 };
+enum { ACTOR_F_LIFE = 1, ACTOR_F_DEAD = 2, ACTOR_F_ENEMY = 4, ACTOR_F_BB = 8 };
 
 typedef struct {
   uint64_t instance_id; /* [[actor + 0x3D8] + 0x88]: Banc PreActor InstanceId */
@@ -172,6 +175,7 @@ typedef struct {
   int32_t  life, max_life;
   uint8_t  state, flags;
   uint8_t  pad[2];
+  uint32_t bb_off, bb_len; /* slice inside memfile_t.actor_bb */
 } memfile_actor_t;
 
 typedef struct {
@@ -184,6 +188,8 @@ typedef struct {
   uint32_t          s_str_count;
   memfile_actor_t  *actors;
   uint32_t          actor_count;
+  uint8_t          *actor_bb;
+  uint32_t          actor_bb_size;
   bool              have_actors, actors_truncated;
   char              map[GD_STR_LEN], start[GD_STR_LEN];
   double            x, y, z, fx, fz;
@@ -191,6 +197,12 @@ typedef struct {
   int32_t           life, magic;
   bool              have_nayru;
   float             nayru_left, nayru_total; /* Nayru's Love: frames left and its length; 0 when off */
+  bool              have_vel, have_fall, have_savepos, have_restart;
+  vec3f_t           vel;                     /* Link's CCT linear velocity (body +0xE0) */
+  float             fall[6];                 /* player +0x18D4/+0x18E0/+0x18E8/+0x190C, base +0x1898/+0x189C */
+  uint8_t           savepos_a[SAVEPOS_SLOT_BYTES];
+  uint8_t           savepos_b[SAVEPOS_SLOT_BYTES];
+  uint8_t           player_restart[PLAYER_RESTART_BYTES];
   uint32_t          time;
   int               child;
   bool              have_camera, have_component;
@@ -269,6 +281,7 @@ static void free_memfile(memfile_t *st)
   free(st->s_scalars);
   free(st->s_strs);
   free(st->actors);
+  free(st->actor_bb);
   *st = (memfile_t){ 0 };
 }
 
@@ -1128,7 +1141,99 @@ static const uint8_t main_ainb_reset_plug[12] = { 0x0f, 0, 0, 0, 0x07, 0, 0, 0, 
 #define SCENE_CURRENT    0x1F0 /* [scene manager +this]: the current scene */
 #define SCENE_COUNT      0x50  /* u32 */
 #define SCENE_COMPONENTS 0x58  /* pointer to the components' pointers */
+#define SCENE_AUTOSAVE   12
 #define SCENE_WARP_MGR   22
+#define AUTOSAVE_SLOT_B  0x178u
+#define AUTOSAVE_SLOT_A  0x198u
+#define PLAYER_RESTART   0x18A4u
+#define PLAYER_FALL_ORIG 0x18D4u
+#define PLAYER_FALL_PEAK 0x18E0u
+#define PLAYER_JS_HEIGHT 0x18E8u
+#define PLAYER_FALL_DIST 0x190Cu
+#define BASE_FALL_ORIG   0x1898u
+#define BASE_FALL_DIST   0x189Cu
+
+static uintptr_t find_autosave_mgr(void)
+{
+  if (!z64hd_game || !z64hd_game->vt_autosave || !z64hd_game->scene_mgr_ptr)
+    return 0;
+  uintptr_t scene_mgr = sys_ptr(MAIN(z64hd_game->scene_mgr_ptr));
+  uintptr_t scene = scene_mgr ? sys_ptr(scene_mgr + SCENE_CURRENT) : 0;
+  uint32_t count = 0;
+  if (!scene || !sys_read32(scene + SCENE_COUNT, &count) || count <= SCENE_AUTOSAVE)
+    return 0;
+  uintptr_t components = sys_ptr(scene + SCENE_COMPONENTS);
+  uintptr_t m = components ? sys_ptr(components + SCENE_AUTOSAVE * sizeof(uintptr_t)) : 0;
+  if (!m || (m & 7u) || !sys_mapped(m, AUTOSAVE_SLOT_A + SAVEPOS_SLOT_BYTES, SYS_PERM_R | SYS_PERM_W))
+    return 0;
+  return sys_ptr(m) == MAIN(z64hd_game->vt_autosave) ? m : 0;
+}
+
+static bool player_and_base_components(uintptr_t *player_out, uintptr_t *base_out)
+{
+  uintptr_t link = link_actor();
+  uintptr_t comps = link ? sys_ptr(link + 0x270) : 0;
+  uintptr_t player = comps ? sys_ptr(comps + PLAYER_COMPONENT) : 0;
+  uintptr_t base = comps ? sys_ptr(comps + 0x2B8) : 0;
+  if (!player || !base || (player & 7u) || (base & 7u) ||
+      !sys_mapped(player, 0x1914, SYS_PERM_R | SYS_PERM_W) ||
+      !sys_mapped(base, 0x18A4, SYS_PERM_R | SYS_PERM_W) ||
+      sys_ptr(player + 0x18) != link || sys_ptr(base + 0x1340) != link)
+    return false;
+  *player_out = player;
+  *base_out = base;
+  return true;
+}
+
+static void capture_link_extra(memfile_t *st)
+{
+  uintptr_t link = link_actor();
+  st->have_vel = link && cct_velocity(link, &st->vel);
+  uintptr_t player = 0, base = 0;
+  if (player_and_base_components(&player, &base)) {
+    st->fall[0] = *(const volatile float *)(player + PLAYER_FALL_ORIG);
+    st->fall[1] = *(const volatile float *)(player + PLAYER_FALL_PEAK);
+    st->fall[2] = *(const volatile float *)(player + PLAYER_JS_HEIGHT);
+    st->fall[3] = *(const volatile float *)(player + PLAYER_FALL_DIST);
+    st->fall[4] = *(const volatile float *)(base + BASE_FALL_ORIG);
+    st->fall[5] = *(const volatile float *)(base + BASE_FALL_DIST);
+    st->have_fall = true;
+    memcpy(st->player_restart, (const void *)(player + PLAYER_RESTART), PLAYER_RESTART_BYTES);
+    st->have_restart = true;
+  }
+  uintptr_t autosave = find_autosave_mgr();
+  if (autosave) {
+    memcpy(st->savepos_a, (const void *)(autosave + AUTOSAVE_SLOT_A), SAVEPOS_SLOT_BYTES);
+    memcpy(st->savepos_b, (const void *)(autosave + AUTOSAVE_SLOT_B), SAVEPOS_SLOT_BYTES);
+    st->have_savepos = true;
+  }
+}
+
+static void restore_link_extra(const memfile_t *st)
+{
+  uintptr_t link = link_actor();
+  uintptr_t player = 0, base = 0;
+  bool have_pb = player_and_base_components(&player, &base);
+  if (st->have_fall && have_pb) {
+    *(volatile float *)(player + PLAYER_FALL_ORIG) = st->fall[0];
+    *(volatile float *)(player + PLAYER_FALL_PEAK) = st->fall[1];
+    *(volatile float *)(player + PLAYER_JS_HEIGHT) = st->fall[2];
+    *(volatile float *)(player + PLAYER_FALL_DIST) = st->fall[3];
+    *(volatile float *)(base + BASE_FALL_ORIG) = st->fall[4];
+    *(volatile float *)(base + BASE_FALL_DIST) = st->fall[5];
+  } else if (link) {
+    cct_clear_fall_distance(link);
+  }
+  if (st->have_restart && have_pb)
+    memcpy((void *)(player + PLAYER_RESTART), st->player_restart, PLAYER_RESTART_BYTES);
+  uintptr_t autosave = st->have_savepos ? find_autosave_mgr() : 0;
+  if (autosave) {
+    memcpy((void *)(autosave + AUTOSAVE_SLOT_A), st->savepos_a, SAVEPOS_SLOT_BYTES);
+    memcpy((void *)(autosave + AUTOSAVE_SLOT_B), st->savepos_b, SAVEPOS_SLOT_BYTES);
+  }
+  if (st->have_vel && link)
+    cct_set_velocity(link, &st->vel);
+}
 
 /* a WarpMgr as its constructor (main+0xE0FE60) leaves it: its vtable, and a listener's vtable at +0xB8 */
 static bool is_warp_mgr(uintptr_t m, uintptr_t vt)
@@ -1230,7 +1335,136 @@ static void patch_main_module(void)
   log_printf("memfiles: Main.module not found: no item wheel after this fast load"); /* not menu text */
 }
 
-/* --- scene actors: transform, HP and dead/alive state (1.0.0 & 1.1.1) -------------------------- */
+/* --- per-actor Blackboard primitive snapshot (1.0.0 & 1.1.1) ----------------------------------- */
+
+#define BB_TABLES_N   5
+#define BB_TABLE_MAX  256u
+#define BB_STRUCT_LEN 0x5A0u
+
+/* Blackboard typed array headers inside [AIControllerBase + 0x1F8] (same offsets in 1.0.0 and 1.1.1). */
+static const struct { uint16_t count_off, ptr_off, elem_size; bool is_float; } bb_tables[BB_TABLES_N] = {
+  { 0x0A8, 0x0B0,  4, false }, /* S32 */
+  { 0x120, 0x128,  4, true  }, /* F32 */
+  { 0x198, 0x1A0,  1, false }, /* Bool */
+  { 0x210, 0x218, 12, true  }, /* Vec3f */
+  { 0x558, 0x560,  4, false }, /* U32 */
+};
+
+static uintptr_t actor_blackboard(uintptr_t actor)
+{
+  if (!sys_mapped(actor + 0x270, 8, SYS_PERM_R))
+    return 0;
+  uintptr_t comps = sys_ptr(actor + 0x270);
+  if (!comps || (comps & 7u) || !sys_mapped(comps + 0x48, 8, SYS_PERM_R))
+    return 0;
+  uintptr_t ai_comp = sys_ptr(comps + 0x48);
+  if (!ai_comp || (ai_comp & 7u) || !sys_mapped(ai_comp + 0x28, 8, SYS_PERM_R))
+    return 0;
+  uintptr_t ctrl_set = sys_ptr(ai_comp + 0x28);
+  uint32_t set_cnt = 0;
+  if (!ctrl_set || (ctrl_set & 7u) || !sys_read32(ctrl_set, &set_cnt) || !set_cnt || set_cnt > 32u)
+    return 0;
+  uintptr_t set_arr = sys_ptr(ctrl_set + 0x08);
+  if (!set_arr || (set_arr & 7u) || !sys_mapped(set_arr, (size_t)set_cnt * 8, SYS_PERM_R))
+    return 0;
+  for (uint32_t i = 0; i < set_cnt; i++) {
+    uintptr_t entry = sys_ptr(set_arr + (size_t)i * 8);
+    uintptr_t ctrl = entry && !(entry & 7u) ? sys_ptr(entry + 0x18) : 0;
+    if (!ctrl || (ctrl & 7u) || !sys_mapped(ctrl, 0x200, SYS_PERM_R) || sys_ptr(ctrl + 0x1F0) != actor)
+      continue;
+    uintptr_t bb = sys_ptr(ctrl + 0x1F8);
+    if (bb && !(bb & 7u) && sys_mapped(bb, BB_STRUCT_LEN, SYS_PERM_R | SYS_PERM_W))
+      return bb;
+  }
+  return 0;
+}
+
+static bool capture_actor_bb(memfile_t *st, memfile_actor_t *e, uintptr_t actor, uint8_t *pool, uint32_t *pool_at)
+{
+  uintptr_t bb = actor_blackboard(actor);
+  if (!bb)
+    return false;
+  uint16_t counts[BB_TABLES_N] = { 0 };
+  uintptr_t ptrs[BB_TABLES_N] = { 0 };
+  uint32_t total = BB_TABLES_N * sizeof(uint16_t);
+  bool any = false;
+  for (int t = 0; t < BB_TABLES_N; t++) {
+    uint32_t cnt = 0;
+    if (!sys_read32(bb + bb_tables[t].count_off, &cnt) || !cnt || cnt > BB_TABLE_MAX)
+      continue;
+    uintptr_t p = sys_ptr(bb + bb_tables[t].ptr_off);
+    size_t bytes = (size_t)cnt * bb_tables[t].elem_size;
+    if (!p || !sys_mapped(p, bytes, SYS_PERM_R))
+      continue;
+    counts[t] = (uint16_t)cnt;
+    ptrs[t] = p;
+    total += (uint32_t)bytes;
+    any = true;
+  }
+  if (!any || *pool_at + total > MEMFILE_BB_POOL_MAX)
+    return false;
+  uint32_t start = *pool_at;
+  memcpy(pool + *pool_at, counts, sizeof(counts));
+  *pool_at += (uint32_t)sizeof(counts);
+  for (int t = 0; t < BB_TABLES_N; t++) {
+    if (!counts[t])
+      continue;
+    uint32_t bytes = (uint32_t)counts[t] * bb_tables[t].elem_size;
+    memcpy(pool + *pool_at, (const void *)ptrs[t], bytes);
+    *pool_at += bytes;
+  }
+  e->bb_off = start;
+  e->bb_len = total;
+  e->flags |= ACTOR_F_BB;
+  (void)st;
+  return true;
+}
+
+static bool restore_actor_bb(const memfile_t *st, const memfile_actor_t *e, uintptr_t actor)
+{
+  if (!(e->flags & ACTOR_F_BB) || !st->actor_bb || e->bb_len < BB_TABLES_N * sizeof(uint16_t) ||
+      e->bb_off > st->actor_bb_size || e->bb_len > st->actor_bb_size - e->bb_off)
+    return false;
+  uintptr_t bb = actor_blackboard(actor);
+  if (!bb)
+    return false;
+  const uint8_t *src = st->actor_bb + e->bb_off;
+  uint16_t counts[BB_TABLES_N];
+  memcpy(counts, src, sizeof(counts));
+  uint32_t at = (uint32_t)sizeof(counts);
+  bool wrote = false;
+  for (int t = 0; t < BB_TABLES_N; t++) {
+    uint32_t bytes = (uint32_t)counts[t] * bb_tables[t].elem_size;
+    if (!counts[t])
+      continue;
+    if (at + bytes > e->bb_len)
+      break;
+    uint32_t live_cnt = 0;
+    if (sys_read32(bb + bb_tables[t].count_off, &live_cnt) && live_cnt == counts[t]) {
+      uintptr_t dst = sys_ptr(bb + bb_tables[t].ptr_off);
+      if (dst && sys_mapped(dst, bytes, SYS_PERM_R | SYS_PERM_W)) {
+        if (bb_tables[t].is_float) {
+          uint32_t nf = bytes / 4u;
+          for (uint32_t k = 0; k < nf; k++) {
+            float v = 0;
+            memcpy(&v, src + at + k * 4u, 4);
+            if (v == v && v > -1e9f && v < 1e9f) {
+              memcpy((uint8_t *)dst + k * 4u, &v, 4);
+              wrote = true;
+            }
+          }
+        } else {
+          memcpy((void *)dst, src + at, bytes);
+          wrote = true;
+        }
+      }
+    }
+    at += bytes;
+  }
+  return wrote;
+}
+
+/* --- scene actors: transform, HP, Blackboard and dead/alive state (1.0.0 & 1.1.1) -------------- */
 
 #define AMGR_TREE_ROOT       0x38u
 #define ANODE_LEFT           0x00u
@@ -1415,6 +1649,8 @@ static void walk_actor_tree(actor_visit_fn fn, void *ctx)
 typedef struct {
   memfile_t *st;
   uintptr_t  link, cam_actor;
+  uint8_t   *bb_pool;
+  uint32_t   bb_at;
   uint8_t    prio[MEMFILE_ACTORS_MAX];
   uint64_t   seen_id[SEEN_IDS_MAX];
   uint8_t    seen_dup[SEEN_IDS_MAX];
@@ -1502,6 +1738,8 @@ static void capture_actor_cb(uintptr_t actor, void *vctx)
     e->life = *cur_hp;
     e->max_life = *max_hp;
   }
+  if (state < 7u && c->bb_pool)
+    capture_actor_bb(c->st, e, actor, c->bb_pool, &c->bb_at);
   c->prio[dst_idx] = (uint8_t)prio;
 }
 
@@ -1513,21 +1751,31 @@ static bool capture_actors(memfile_t *st)
   if (!mgr || (mgr & 7u) || !sys_mapped(mgr + AMGR_TREE_ROOT, 8, SYS_PERM_R))
     return true;
   st->actors = alloc16(MEMFILE_ACTORS_MAX * sizeof(memfile_actor_t));
-  if (!st->actors)
-    return false;
-  uintptr_t cam_actor = 0;
-  resolve_camera(&cam_actor);
+  uint8_t *bb_pool = alloc16(MEMFILE_BB_POOL_MAX);
   actor_cap_ctx_t *ctx = alloc16(sizeof(*ctx));
-  if (!ctx) {
+  if (!st->actors || !bb_pool || !ctx) {
     free(st->actors);
+    free(bb_pool);
+    free(ctx);
     st->actors = 0;
     return false;
   }
-  *ctx = (actor_cap_ctx_t){ st, link_actor(), cam_actor, { 0 }, { 0 }, { 0 }, 0, 0 };
+  uintptr_t cam_actor = 0;
+  resolve_camera(&cam_actor);
+  *ctx = (actor_cap_ctx_t){ st, link_actor(), cam_actor, bb_pool, 0, { 0 }, { 0 }, { 0 }, 0, 0 };
   walk_actor_tree(capture_actor_cb, ctx);
   if (ctx->dup_count)
     log_printf("memfiles: skipped %u colliding actor ID(s) during capture", (unsigned)ctx->dup_count); /* not menu text */
+  uint32_t bb_used = ctx->bb_at;
   free(ctx);
+  if (bb_used) {
+    st->actor_bb = alloc16(bb_used);
+    if (st->actor_bb) {
+      memcpy(st->actor_bb, bb_pool, bb_used);
+      st->actor_bb_size = bb_used;
+    }
+  }
+  free(bb_pool);
   st->have_actors = true;
   if (st->actor_count < MEMFILE_ACTORS_MAX) {
     uint32_t keep = st->actor_count ? st->actor_count : 1u;
@@ -1547,7 +1795,8 @@ typedef struct {
   uintptr_t        link, cam_actor;
   bool             delete_missing;
   uint8_t          used[MEMFILE_ACTORS_MAX];
-  uint32_t         moved, hp_set, deleted, missing_del;
+  uint8_t         *bb_done;
+  uint32_t         moved, hp_set, bb_set, deleted, missing_del;
 } actor_rest_ctx_t;
 
 static bool transform_differs(uintptr_t actor, const float pos[3], const float rot[9])
@@ -1649,6 +1898,10 @@ static void restore_actor_cb(uintptr_t actor, void *vctx)
         }
       }
     }
+    if (c->bb_done && !c->bb_done[match_idx] && restore_actor_bb(c->st, match, actor)) {
+      c->bb_done[match_idx] = 1;
+      c->bb_set++;
+    }
     return;
   }
 
@@ -1665,26 +1918,30 @@ static void restore_actor_cb(uintptr_t actor, void *vctx)
   }
 }
 
-static uint32_t actor_tot_moved, actor_tot_hp, actor_tot_dead, actor_tot_missing;
+static uint32_t actor_tot_moved, actor_tot_hp, actor_tot_bb, actor_tot_dead, actor_tot_missing;
+static uint8_t  actor_bb_done[MEMFILE_ACTORS_MAX];
 
 static void restore_actors_pass(const memfile_t *st, bool first, bool last)
 {
   if (!memfile_actors || !st->have_actors)
     return;
-  if (first)
-    actor_tot_moved = actor_tot_hp = actor_tot_dead = actor_tot_missing = 0;
+  if (first) {
+    actor_tot_moved = actor_tot_hp = actor_tot_bb = actor_tot_dead = actor_tot_missing = 0;
+    memset(actor_bb_done, 0, sizeof(actor_bb_done));
+  }
   uintptr_t cam_actor = 0;
   resolve_camera(&cam_actor);
-  actor_rest_ctx_t ctx = { st, link_actor(), cam_actor, true, { 0 }, 0, 0, 0, 0 };
+  actor_rest_ctx_t ctx = { st, link_actor(), cam_actor, true, { 0 }, actor_bb_done, 0, 0, 0, 0, 0 };
   walk_actor_tree(restore_actor_cb, &ctx);
   actor_tot_moved += ctx.moved;
   actor_tot_hp += ctx.hp_set;
+  actor_tot_bb += ctx.bb_set;
   actor_tot_dead += ctx.deleted;
   actor_tot_missing += ctx.missing_del;
   if (last)
-    log_printf("memfile %d load: actors restored (%u moved, %u hp, %u dead, %u missing enemies removed)", /* not menu text */
-               active_slot + 1, (unsigned)actor_tot_moved, (unsigned)actor_tot_hp, (unsigned)actor_tot_dead,
-               (unsigned)actor_tot_missing);
+    log_printf("memfile %d load: actors restored (%u moved, %u hp, %u bb, %u dead, %u missing enemies removed)", /* not menu text */
+               active_slot + 1, (unsigned)actor_tot_moved, (unsigned)actor_tot_hp, (unsigned)actor_tot_bb,
+               (unsigned)actor_tot_dead, (unsigned)actor_tot_missing);
 }
 
 static void finish_load(void)
@@ -1847,6 +2104,7 @@ bool memfile_save(int s)
   staging.life = staging.have_life ? *cur : 0;
   staging.have_magic = gd_get_int(F_MAGIC, &staging.magic);
   staging.have_nayru = nayru_get(&staging.nayru_left, &staging.nayru_total);
+  capture_link_extra(&staging);
   bool child = false;
   staging.child = gd_get_bool(F_IS_CHILDHOOD, &child) ? child : -1;
   staging.have_time = time_of_day(&staging.time);
@@ -2144,7 +2402,7 @@ static void step_post_move(const memfile_t *st)
 {
   if (phase == L_MOVING) {
     if (link_at(st, phase_frames)) {
-      cct_clear_fall_distance(link_actor());
+      restore_link_extra(st);
       double fx = 0, fz = 0;
       link_facing(&fx, &fz);
       log_printf("memfile %d loaded (Link placed after %d frames, facing %.3f,%.3f, saved %.3f,%.3f)",
@@ -2305,15 +2563,18 @@ void memfile_frame(void)
 #define SZM_STATE       SZM_TAG('S', 'T', 'A', 'T') /* start point, Link, vitals, clock, age */
 #define SZM_CAMERA      SZM_TAG('C', 'A', 'M', 'R') /* the player camera and its AI action nodes */
 #define SZM_ACTORS      SZM_TAG('A', 'C', 'T', 'R') /* scene actors: { u8 flags, u32 record_size, records } */
+#define SZM_ACTOR_BB    SZM_TAG('A', 'B', 'B', 'D') /* per-actor Blackboard primitive pool */
+#define SZM_EXTRA       SZM_TAG('X', 'T', 'R', 'A') /* Link velocity, fall/JS history, AutoSaveMgr SavePos */
 #define SZM_SCALAR_SIZE 18u /* format 2's records; a file's own are at least this */
 #define SZM_STRING_SIZE (4u + GD_STR_LEN)
-#define SZM_ACTOR_SIZE  70u /* u64 id, f32 pos[3], f32 rot[9], s32 life, s32 max_life, u8 state, u8 flags, u32 name_hash */
+#define SZM_ACTOR_SIZE  78u /* + u32 bb_off, u32 bb_len after name_hash */
 #define SZM_FILE_MAX    (GD_MAX_SAVE_BUF + (1u << 20))
 #define SZM_SLACK       0x10000u /* room for every section but the snapshot and the session fields */
 #define SZM_DIR         SD_DIR "/" MEMFILE_DIR_NAME
 #define SZM_PATH_LEN    (sizeof(SZM_DIR) + MEMFILE_FOLDER_LEN + MEMFILE_NAME_MAX + 8)
 
 enum { STATE_POS = 1, STATE_LIFE = 2, STATE_MAGIC = 4, STATE_TIME = 8, STATE_NAYRU = 16 };
+enum { EXTRA_VEL = 1, EXTRA_FALL = 2, EXTRA_SAVEPOS = 4, EXTRA_RESTART = 8 };
 enum { CAM_STATE = 1, CAM_COMPONENT = 2 };
 enum { ACTORS_TRUNCATED = 1 };
 
@@ -2405,7 +2666,7 @@ static void out_blob(szm_out_t *o, const void *b, uint32_t n)
 static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size_out)
 {
   uint32_t cap = (uint32_t)sizeof(szm_header_t) + st->save_size + st->s_scalar_count * SZM_SCALAR_SIZE +
-                 st->s_str_count * SZM_STRING_SIZE + st->actor_count * SZM_ACTOR_SIZE +
+                 st->s_str_count * SZM_STRING_SIZE + st->actor_count * SZM_ACTOR_SIZE + st->actor_bb_size +
                  CAMERA_ACTIONS * (16u + ACTION_BYTES) + SZM_SLACK;
   szm_out_t o = { alloc16(cap), (uint32_t)sizeof(szm_header_t), cap, true };
   if (!o.p)
@@ -2490,7 +2751,28 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
       OUT(&o, e->state);
       OUT(&o, e->flags);
       OUT(&o, e->name_hash);
+      OUT(&o, e->bb_off);
+      OUT(&o, e->bb_len);
     }
+    out_end(&o, at);
+  }
+
+  if (st->actor_bb && st->actor_bb_size) {
+    at = out_begin(&o, SZM_ACTOR_BB);
+    out_bytes(&o, st->actor_bb, st->actor_bb_size);
+    out_end(&o, at);
+  }
+
+  if (st->have_vel || st->have_fall || st->have_savepos || st->have_restart) {
+    at = out_begin(&o, SZM_EXTRA);
+    uint8_t xflags = (st->have_vel ? EXTRA_VEL : 0) | (st->have_fall ? EXTRA_FALL : 0) |
+                     (st->have_savepos ? EXTRA_SAVEPOS : 0) | (st->have_restart ? EXTRA_RESTART : 0);
+    OUT(&o, xflags);
+    OUT(&o, st->vel);
+    OUT(&o, st->fall);
+    out_bytes(&o, st->savepos_a, SAVEPOS_SLOT_BYTES);
+    out_bytes(&o, st->savepos_b, SAVEPOS_SLOT_BYTES);
+    out_bytes(&o, st->player_restart, PLAYER_RESTART_BYTES);
     out_end(&o, at);
   }
 
@@ -2652,12 +2934,34 @@ static bool szm_actors(const uint8_t *p, uint32_t size, memfile_t *st)
     e.flags = p[65];
     if (record >= 70u)
       memcpy(&e.name_hash, p + 66, 4);
+    if (record >= 78u) {
+      memcpy(&e.bb_off, p + 70, 4);
+      memcpy(&e.bb_len, p + 74, 4);
+    } else {
+      e.flags &= (uint8_t)~ACTOR_F_BB;
+    }
     if (e.instance_id && e.instance_id != UINT64_MAX && e.instance_id != 0xFFFFFFFFull)
       st->actors[st->actor_count++] = e;
   }
   st->have_actors = true;
   st->actors_truncated = (aflags & ACTORS_TRUNCATED) != 0;
   return true;
+}
+
+static void szm_extra(szm_in_t *in, memfile_t *st)
+{
+  uint8_t xflags = 0;
+  if (!IN(in, xflags))
+    return;
+  if (IN(in, st->vel) && (xflags & EXTRA_VEL))
+    st->have_vel = true;
+  if (IN(in, st->fall) && (xflags & EXTRA_FALL))
+    st->have_fall = true;
+  if (in_bytes(in, st->savepos_a, SAVEPOS_SLOT_BYTES) && in_bytes(in, st->savepos_b, SAVEPOS_SLOT_BYTES) &&
+      (xflags & EXTRA_SAVEPOS))
+    st->have_savepos = true;
+  if (in_bytes(in, st->player_restart, PLAYER_RESTART_BYTES) && (xflags & EXTRA_RESTART))
+    st->have_restart = true;
 }
 
 /* read a .szm file's bytes into st (zeroed; free_memfile it either way): 0, or why it can't be used */
@@ -2714,6 +3018,15 @@ static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
     } else if (tag == SZM_ACTORS && !st->actors) {
       if (!szm_actors(body, size, st))
         return "not enough memory for that memfile";
+    } else if (tag == SZM_ACTOR_BB && !st->actor_bb) {
+      if (size && size <= MEMFILE_BB_POOL_MAX) {
+        if (!(st->actor_bb = alloc16(size)))
+          return "not enough memory for that memfile";
+        memcpy(st->actor_bb, body, size);
+        st->actor_bb_size = size;
+      }
+    } else if (tag == SZM_EXTRA) {
+      szm_extra(&in, st);
     }
   }
   if (!st->save_buf || !have_state)

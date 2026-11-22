@@ -1489,7 +1489,7 @@ Tree. Writing the Enum alone, as before, left the manager at Ready: no scene, an
   masked signature, unique over 64 words; leo gives the same address, and #43 found both separately). The set-step's
   code is the same, so the manager's fields it uses are at the same offsets.
 
-### 9.14 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game; 1.0.0 mapped, not yet checked in game)
+### 9.14 The safety section: GameSafetyMgr's setting and flags (v131072; from the disassembly, the two values read in game; 1.0.0 checked in game)
 What a minigame, a boss fight or a story section turns off (saving, warping, ...) is one **GameSafetySetting**: a row
 of RSDB `GameSafetySetting.Product.111` (28 rows), named by a Challenge (`GameSafetySetting`, or a step's
 `ReplaceGameSafetySetting`). GameSafetyMgr, the scene's component 28 (§9.3), holds the one applied. The **safety**
@@ -1518,8 +1518,47 @@ and **safety flags** watches read it (`safety.c`).
   setter (`0x2C9D3B0`) match v131072's whole but for relocated addresses and another object's fields, so `+0x50` and
   `+0x54` are the same. In Lichii (22nd November 2026, read from memory) the title scene's 41 components had
   AutoSaveMgr at entry 12 and GameSafetyMgr, with this vtable, at entry 28, both values 0.
-- **Still to check in game, on both versions:** with a save loaded and the **safety** and **safety flags** watches on,
-  their values somewhere ordinary, then in a minigame (Lost Woods' Skull Kid ocarina game, the shooting gallery,
-  bombchu bowling) or a boss room, where **safety** should name a setting (`MiniGame`, ...) and the flags change
-  (the **flags** display type shows them as words). Reading the manager from memory at the same moment confirms
-  the watches show what it holds. This also answers what the two values are when no section is active.
+- **Checked in game on 1.0.0** (22nd November 2026): the mod found GameSafetyMgr at scene entry 28 by this vtable,
+  and the watches followed the slingshot minigame. Outside any section, after it, the manager held flags `0x0040`
+  (save) and name hash 0.
+
+### 9.15 The ocarina breath T-pose (v131072 and 1.0.0, checked in game)
+- **Symptom:** after holding one ocarina note for 3-5 s, Link's arms T-pose whenever he runs holding a bomb. Not
+  standing still. Idle fidgets, attacks, a boots change or reloading clear it.
+- **Link's AS** (`romfs/AS/Player_Child.root.asb`, `Player_Adult`; version 0x41B, string pool at the header's word
+  14) blends 9 layers (slots, header words 8/9, 0x10 bytes each: name, default bone group): Lower, Upper, RightArm,
+  LeftArm, Face, Finger, Mouth, MaskChange, MaskEquip. 16 bone groups (header words 21/22, 0xC bytes: entries'
+  offset, name, count; each entry a bone name and u16 0 in / 1 out, children included). Commands are 0x30 bytes
+  from 0x80 (name first, node index last); nodes 0x24 bytes from 0x58D0 (u16 type, body offset at +8); type 3 plays
+  an animation, type 27 is the node the breath's clip sits under (its label: "ocarina performance (includes Face and
+  Spine) [for breathing]").
+- **Cause:** a held note plays the command `DemoOcarinaBreath` in the Face layer (the player component P keeps the
+  layer's index at P`+0xFEC` = 4; `main+0xA2CD98` compares the playing command's name with it). That switches
+  the Face layer's bone mask from `Face_NoMouth` (Root out, Face_Root in, Mouth_Root out) to `OcarinaBreath` (Root
+  out, Spine_2 in, Weapon_L/R and the ten finger roots out): the whole upper body. It happens on every breath, not
+  only when the ocarina is cancelled during one. Nothing on the way out of the ocarina sets it back. Only Face
+  animations that name their own group do: idle fidgets (`VoiceServic*`), `CutS1`, `BootsChange`, events.
+  Until then the Face layer drives Link's chest and arms, and while he runs with a bomb, his arms are in bind pose.
+- **Where the mask is:** slots S = `[[[[actor+0x270]+0x40]+0x18]+0x18]` (count S`+0x18`, entries S`+0x20` of 0x48
+  bytes; the first qword is the slot's object O, `[O+0x10]` the playing command's name). Each O has a mask
+  table T = `[O+0x17198]` (= O`+0x17238`), which holds the mask of the *next* layer (entry 3 holds Face's). I =
+  `[T+8]` (vtable `main+0x4C12FD8`; T's is `main+0x4B48D68`, a generic wrapper): I`+8` capacity, `[I+0x10]` one
+  byte per entry (0x80 in, 0x83 out), I`+0x1C` a count, `[I+0x28]` u32 entries with the skeleton bone index in
+  the top 16 bits. Bone indices are the bfres skeleton's order (`romfs/Model/Player_Adult.Player_Adult.bfres`,
+  FSKL: bone array at +0x10, 0x58 bytes a bone, name first): adult Root 0, Spine_2 0x06, Weapon_L 0x12, Weapon_R
+  0x42, Face_Root 0x6B, Mouth_Root 0x89; child Spine_2 0x0B, Weapon_L 0x17, Face_Root 0x6B, Mouth_Root 0x8D.
+  The same slot walk is in 1.0.0 (`main+0x5754D4`, same offsets).
+- **Fix / feature:** `tpose.c` (link > bomb t-pose) writes entry 1 of the Face table as Spine_2 every frame (the
+  game rebuilds the table on its next mask change; a single write lasted about a second). Unticking writes
+  Face_Root back. It finds the table by its contents (entry 0 Root out, entry 1 Face_Root or Spine_2 in), so the
+  slot it sits in doesn't matter. Face_Root is 0x6B in both skeletons, so the age comes from `age_current`.
+  `Face_NoMouth` uses only 2 entries (I`+0x1C` = 2): the Mouth_Root seen in entry 2 is left over past the count,
+  and the game doesn't rewrite it. The first build matched on entries 1 and 2 together. After the game put entry 1
+  back and left entry 2 at Weapon_L, nothing matched, so it stopped writing ("tpose: no Face mask table found").
+- **1.0.0** (22nd November 2026, read from memory in Lichii, adult Link): 9 slots, every slot object's `+0x17198`
+  pointing at its own `+0x17238` (MaskEquip's elsewhere), and the Face table in slot 3 (before FaceDefault's slot 4)
+  with entry 1 Face_Root (0x6B), 2 entries in use: the same as v131072, so the offset is fixed for both builds and
+  the mod no longer searches the slot objects for it.
+- **Not checked:** child Link (indices from the child bfres, assumed to match as they do for adult), and which Face
+  animation leaves the arms in bind pose while running. The T-pose itself was checked on 1.0.0 (adult) after the
+  offset was fixed.

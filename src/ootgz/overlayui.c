@@ -46,6 +46,7 @@ bool overlayui_on_gpu(void)
 /* gpuui's quads are shared with the panels drawn after (MAX_QUADS a frame): the outlines take at most
  * this many lines, the nearest walls' first (airwall.c sorts them), and the nearest of them a glow */
 #define FACE_ALPHA 0.16f  /* the void columns' and fence's sides */
+#define GROUND_FACE_ALPHA 0.24f /* translucent green/red ground shift shading */
 #define MAX_LINES_DRAWN 1400
 #define MAX_GLOWS 500
 
@@ -60,6 +61,8 @@ static const gpu_colour_t line_colours[AW_NCOLORS] = {
   [AW_VOID_GROUND] = { 0.92f, 0.96f, 1.0f, 1 },  /* white: the edge of the mapped ground (voidmap.c) */
   [AW_VOID_DEADLY] = { 1.0f, 0.16f, 0.14f, 1 },  /* red: a deadly cell, or the ring once Link is past it */
   [AW_VOID_RING] = { 1.0f, 0.56f, 0.12f, 1 },    /* orange: the ring Link has to stay in off the map */
+  [AW_VOID_SHIFT_OK] = { 0.18f, 0.92f, 0.32f, 1 },   /* green: the 8-unit fence updates here */
+  [AW_VOID_SHIFT_FAIL] = { 0.96f, 0.18f, 0.16f, 1 }, /* red: the 8-unit fence stays stuck here */
   [AW_VOID_AREA] = { 0.72f, 0.36f, 1.0f, 1 },    /* purple: an area that voids Link inside it */
   [AW_OCARINA] = { 0.10f, 0.60f, 0.25f, 1 },   /* dark green: slot B if the ocarina were put away (savepos.c) */
   [AW_OCARINA_LOAD] = { 1.0f, 1.0f, 0.70f, 1 },   /* pale yellow: where a load puts Link from it */
@@ -73,21 +76,24 @@ static bool draw_lines(float w, float h, float px, int budget)
 {
   int n;
   const aw_line_t *lines = airwall_lines(&n);
-  if (!lines || !n)
-    return false;
-  /* the see-through faces first, under the lines: in the world, with the camera the game thread used */
   int n_faces;
   const view_cam_t *cam;
   const aw_face_t *faces = airwall_faces(&n_faces, &cam);
+  if ((!lines || !n) && (!faces || !n_faces))
+    return false;
+  /* the see-through faces first, under the lines: in the world, with the camera the game thread used */
   n_faces = n_faces < budget ? n_faces : budget;
   if (n_faces)
     gpuui_world(cam);
   for (int i = 0; i < n_faces; i++) {
-    gpu_colour_t c = line_colours[faces[i].color < AW_NCOLORS ? faces[i].color : 0];
-    c.a = FACE_ALPHA;
+    uint8_t ci = faces[i].color < AW_NCOLORS ? faces[i].color : 0;
+    gpu_colour_t c = line_colours[ci];
+    c.a = (ci == AW_VOID_SHIFT_OK || ci == AW_VOID_SHIFT_FAIL) ? GROUND_FACE_ALPHA : FACE_ALPHA;
     gpuui_face(faces[i].corner, faces[i].u, faces[i].v, c, faces[i].scene);
   }
   budget -= n_faces;
+  if (!lines || !n || budget <= 0)
+    return n_faces > 0;
   int n_lines = n < MAX_LINES_DRAWN ? n : MAX_LINES_DRAWN;
   n_lines = n_lines < budget ? n_lines : budget;
   int n_glows = n < MAX_GLOWS ? n : MAX_GLOWS;

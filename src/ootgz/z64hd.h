@@ -111,6 +111,11 @@ struct z64hd_build {
    * table of its record formats; 0: not known for this build */
   uint32_t voxel_mgr_ptr;
   uint32_t voxel_formats;
+  /* bool (const float from[3], const float to[3], void *hit, const void *ignore, int layer, int): Phive world
+   * raycast for sampling ground heights (voidmap.c), and the two vtables its 0x180-byte hit struct uses */
+  uint32_t phive_raycast;
+  uint32_t vt_raycast_hit;
+  uint32_t vt_raycast_filter;
   /* [main+this]: the event state the restart point update checks (+0x68: an event is running, FINDINGS 9.7);
    * 0: not known for this build */
   uint32_t event_state_ptr;

@@ -2359,6 +2359,16 @@ static void set_voids_ring(menu_item_t *it, bool on)
   voidmap_ring = on;
 }
 
+static bool get_voids_shift(menu_item_t *it)
+{
+  return voidmap_shift;
+}
+
+static void set_voids_shift(menu_item_t *it, bool on)
+{
+  voidmap_shift = on;
+}
+
 static bool get_voids_areas(menu_item_t *it)
 {
   return voidmap_areas;
@@ -2390,7 +2400,7 @@ static menu_t m_voids;
 
 static void build_voids(void)
 {
-  menu_init(&m_voids, "void out", 8);
+  menu_init(&m_voids, "void out", 9);
   menu_item_t *show = menu_add_check(&m_voids, "show", get_voids_shown, set_voids_shown, 0);
   if (show) {
     show->hint = "where the game's ground map voids link, round link";
@@ -2413,6 +2423,12 @@ static void build_voids(void)
     ring->hint = "orange: off the map link voids on leaving it";
     ring->log_label = "void out, fence:";
     ring->indent = 2;
+  }
+  menu_item_t *shift = menu_add_check(&m_voids, "where the fence moves", get_voids_shift, set_voids_shift, 0);
+  if (shift) {
+    shift->hint = "green: the fence moves here   red: it stays where it is";
+    shift->log_label = "void out, fence ground:";
+    shift->indent = 2;
   }
   menu_item_t *areas = menu_add_check(&m_voids, "void areas", get_voids_areas, set_voids_areas, 0);
   if (areas) {

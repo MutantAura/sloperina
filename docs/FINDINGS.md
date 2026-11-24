@@ -1136,6 +1136,22 @@ the probes' workings, what switches the flags off, and the void areas' shapes.
     keeps the best it has found until a nearer one turns up: hit `+0xBBC` bit 0, the cell `+0xBA0`, its distance
     `+0x1158`, and that distance level (x and z only) `+0x115C`. The old point is never checked again, so off the
     map it's as good as frozen;
+    - **How probe C updates (`main+0x38AEF0`, 1.0.0 `main+0x4D8910`):** starts from the probe's query position
+      `Q = probe+0xE0` (when probe A hit, first casts from probe A's hit cell centre toward `Q`, snapping `Q` to
+      any intervening hit cell centre). Computes the current **3D** distance `|Q - C|` (not 2D horizontal) to
+      probe C's remembered point `C = probe+0xBA0`. Across a 10-frame phase counter (`probe+0x1160` = 0..9,
+      stride 10, 6–7 rays/frame; all 64 when `+0xBBC` bit 0 is clear), fires 64 Fibonacci-sphere rays
+      `y = 1 - (2i+1)/64`, `r = sin(acos(y))`, `theta = i * 3.8832221` (`2*pi/phi`), up to `L_max = [[probe+0xA0]+0x150]+0x44`
+      (`5000.0` if `< 0`). The octree DDA (`main+0x543240`) with filter `main+0x3209720` hits only when a ray
+      **exits** a mapped leaf cell (level 7) across face `d` (`0:-X, 1:+X, 2:-Y, 3:+Y, 4:-Z, 5:+Z`) whose
+      6-bit `Intersect` (field 0) or `IntersectWater` (field 19) bit `1 << d` is set. Probe C replaces `C` if
+      and only if a ray hits at a **strictly smaller 3D distance** than `|Q - C|`.
+    - **Phive collision raycast for ground shading:** `main+0x5FF750` (1.0.0 `main+0x582D00`, unique 48-word
+      signature match) casts `(from, to, &hit, ignore, layer=0x1A, 0)` using a `0x180`-byte stack `RayCastHit`
+      with vtables `main+0x497FBA0` / `main+0x4C31470` (1.0.0 `main+0x491B278` / `main+0x4BCB868`), returning
+      hit pos at `+0x24` and normal at `+0x30`. voidmap.c samples ground heights on a world-snapped disk
+      around Link (radius 11 cells, incrementally shifted as Link walks) and evaluates probe C's 64-ray check
+      on each cell to shade ground green (fence moves) or red (fence stays stuck).
   - `+0xA8` bit 18: Link is more than 5 units outside the probe's own box.
 - **The flags:** `main+0x5F90A0` rebuilds Link's ground flags P`+0x13D0` every frame (P = `[[actor+0x270]+0x358]`):
   - bit 24 (0x1000000): probe A missed, or its hit is 5 units or more under Link. Never voids by itself (it only stops

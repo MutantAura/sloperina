@@ -824,7 +824,7 @@ void airwall_frame(bool gpu)
   }
   n_dots[f] = n;
   n_lines[f] = nl;
-  publish_set(&published, n || nl ? f : -1);
+  publish_set(&published, n || nl || n_faces[f] ? f : -1);
 }
 
 void airwall_take(void)

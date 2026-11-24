@@ -1370,6 +1370,8 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_VOID_GROUND] = { 0.92f, 0.96f, 1.0f, 1.0f },  /* white: the edge of the mapped ground (voidmap.c) */
   [AW_VOID_DEADLY] = { 1.0f, 0.14f, 0.12f, 1.0f },  /* red: a deadly cell, or the ring once Link is past it */
   [AW_VOID_RING] = { 1.0f, 0.54f, 0.10f, 1.0f },    /* orange: the ring Link has to stay in off the map */
+  [AW_VOID_SHIFT_OK] = { 0.18f, 0.92f, 0.32f, 1.0f },   /* green: the 8-unit fence updates here */
+  [AW_VOID_SHIFT_FAIL] = { 0.96f, 0.18f, 0.16f, 1.0f }, /* red: the 8-unit fence stays stuck here */
   [AW_VOID_AREA] = { 0.70f, 0.34f, 1.0f, 1.0f },    /* purple: an area that voids Link inside it */
   [AW_OCARINA] = { 0.08f, 0.58f, 0.22f, 1.0f },  /* dark green: slot B if the ocarina were put away (savepos.c) */
   [AW_OCARINA_LOAD] = { 1.0f, 1.0f, 0.68f, 1.0f },   /* pale yellow: where a load puts Link from it */
@@ -1879,7 +1881,7 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
     bool behind_link = !airwalls_xray && airwall_link_box(box, link.front, link.back, link.ground);
     if (behind_link)
       link.x0 = box[0], link.y0 = box[1], link.x1 = box[2], link.y1 = box[3];
-    if (n_lines && (behind_link || airwall_needs_depth()))
+    if ((n_lines && behind_link) || airwall_needs_depth())
       depth = scenedepth_lines(frame.area.w, frame.area.h, &depth_w, &depth_h, &prime_depth);
     if (!gpuui_depth(depth, depth_w, depth_h, prime_depth, &link))
       scenedepth_lines_give_up();

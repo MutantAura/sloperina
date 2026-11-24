@@ -34,6 +34,8 @@ extern bool input_block_game;
 /* The same, for a module's own short operation (savebackup.c's Load list refresh): kept apart from
  * input_block_game, which the menu sets and clears. */
 extern bool input_hold_game;
+/* The same while debug > free camera has the sticks (freecam.c). */
+extern bool input_freecam_game;
 /* Buttons the game never sees (e.g. L while levitate is on). */
 extern uint32_t input_hide_from_game;
 /* given to the game on top of the controller until cleared (frame advance's buffered input) */

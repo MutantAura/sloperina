@@ -433,6 +433,8 @@ folder (on an emulator: right-click the game > *Open save data location*).
 
 **return to title**: back to the game's title screen, without the pause screen: the game plays a 30-frame event and leaves it the way Game Over > Quit does. Nothing is saved, so whatever isn't saved is lost, as with the pause screen's Return to Title. Not while the game is paused, in a cutscene or other event, loading a map, saving or in a game over. It can be given buttons in **settings > rebind commands** (under **debug**; unbound to start with).
 
+**free camera**: takes the picture off Link so you can fly it anywhere. Close the menu to fly: the left stick moves along the view, the right stick looks round, **ZR** rises, **ZL** sinks and holding **X** goes six times faster. The game gets no input meanwhile, so Link stands where he was; untick it (or use its bind) to get the game's camera back, as it was. What's drawn and culled is the free camera's view, and the watches, air walls and other overlays are drawn from it too. The world isn't loaded round it, though: the game streams the terrain and places the actors round Link, so far from him you see the far, simple terrain and none of the actors there. It can be given buttons in **settings > rebind commands** (under **debug**, **free camera on/off**; unbound to start with), and remote control's `input` sticks and buttons fly it too.
+
 **tests > dive tests**: **from heights** and **while moving** measure how deep Link goes into water by how he falls in. Start
 one with Link swimming at the surface (facing open water for **while moving**) and leave the controls alone: it
 measures the surface, drops him again and again from set heights (from heights: 1 to 192 above the surface; while moving:
@@ -603,7 +605,7 @@ stay the game's. Settings from before the commands with frame advance on **R** b
 
 gz's **commands** menu, here **rebind commands**: each of sloperinaGZ's controls and the buttons it's bound to, under **menu**, **frame
 advance**, **link**, **scene**, **memfiles**, **watches and timer** and **debug**. The **scene** commands, **reload map** ([2.1.2](#212-scene-interaction)) and **end
-cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
+cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title** and **free camera on/off** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
 **right stick down**); letting go of one ends it, and pressing another button partway through cancels it. When one
 bind is part of another that's also held (**R + D-pad left** holds **D-pad left**), only the bigger one counts, so
 **R + A + D-pad right** resets jump height without also hiding the watches. **run again** takes its buttons in any

@@ -1939,3 +1939,30 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - **Not used:** driving the pause screen (open it with `DebugParam.IsRequestedTransitionPlusMenu`, which
   `BeforeMinusMenu` clears, then pick System > Return to Title > Yes): it depends on the screens' cursors and
   animations.
+
+### 9.30 A free camera: the render camera's matrix, and what the world is streamed round (1.1.1; 1.0.0 in brackets where checked)
+- **The picture:** the render camera `[[main+camera_ptr]+0x68]` (link.c's `camera()`) is a double-precision sead
+  look-at camera: eye and look-at as doubles at `+0x60` and `+0x78`, as floats at `+0x38` and `+0x44`, up (floats) at
+  `+0x50`. Its vtable (`main+0x4BF8A88` in 1.1.1) has its matrix function twice, slots 4 and 11 (`0x7139C0`, a leaf:
+  `(camera, float out[12])`, from the doubles and up). It runs after the game's camera logic has set eye and look-at,
+  so giving that one object a copy of its vtable with those slots leading to the module first (eye and look-at
+  written, then the game's function) puts any view on screen, culled to it, with the overlays (which read the same
+  camera) following. debug > free camera does this (freecam.c); the object gets its own vtable back when it's off,
+  and is hooked again when the game makes a new one. Checked in game (24th November 2026, 1.1.1): 100 m above Kokiri
+  Forest and 450 m across Hyrule Field, and back.
+- **Not like this:** writing the player camera's views (`component+0x5B8`, +0x450..+0x4F0, §9.18) from the frame hook
+  and snapping: the drawn eye the next frame was the game's again (the hook runs before the camera's update).
+- **The traverse system** (what the world is placed round): the game interface `[[main+0x4E91888]]` [`0x4E21428`]
+  holds at `+8` a store of 7 positions (vtable `main+0x4B99818` [`0x4B34748`]: `+0x20` set(pos, i), `+0x38` tryGet(out,
+  i), `+0x48`/`+0x50` set/clear additional position i, at index i + 2). Index 0, the base, follows Link exactly
+  every frame (logged once a second while he walked). Events put positions in 2 to 6 (`TraverseSetting`,
+  `SetTraverseBasePos`), and `0x9B7ED0` [`0x9CF350`] `(mgr [main+0x4E91930], true)` traverses again, as
+  `OneShotRequestInvokeTraverse` does.
+- **Not enough for the world to follow a free camera** (tried in Hyrule Field, 1.1.1): with the camera's position in
+  additional position 0 (index 2, read back each time) and a traverse every 50 m, 450 m from Link there was 1 actor
+  within 80 m of the camera (and 73 round Link), the same as with neither (1 and 74); the terrain there stayed the far,
+  simple version. Writing index 0 as well, from the frame hook and from the camera's matrix function, changed
+  nothing either. So the terrain, and the actors that come with its areas, stream round something else (Link's own
+  position, read where he's updated, is the likeliest). Moving Link with the camera would stream the world natively
+  but sets off loading zones, triggers and voids.
+

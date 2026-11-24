@@ -45,6 +45,7 @@ static int32_t stick_axes[4];     /* lx, ly, rx, ry */
 static int repeat_countdown;
 bool input_block_game;
 bool input_hold_game;
+bool input_freecam_game;
 uint32_t input_hide_from_game;
 
 static int controller = INPUT_PRO;
@@ -182,11 +183,12 @@ int32_t input_remote_stick[4];
  * advance's buffered input and take out the buttons the game mustn't see. */
 static void filter_game_states(void *states, int count)
 {
-  if (!input_block_game && !input_hold_game && !input_hide_from_game && !input_force_active && !input_remote_active)
+  if (!input_block_game && !input_hold_game && !input_freecam_game && !input_hide_from_game && !input_force_active &&
+      !input_remote_active)
     return;
   for (int i = 0; i < count; i++) {
     npad_state_t *state = (npad_state_t *)((char *)states + i * NPAD_STATE_SIZE);
-    if (input_block_game || input_hold_game) {
+    if (input_block_game || input_hold_game || input_freecam_game) {
       state->buttons = 0;
       state->lx = state->ly = state->rx = state->ry = 0;
       continue;

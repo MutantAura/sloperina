@@ -970,8 +970,15 @@ static bool waiting(bool held)
 
 void remote_frame(bool held)
 {
-  if (!remote_enabled || !settings_sd())
+  if (!remote_enabled || !settings_sd()) {
+    /* remote control off: what a script holds or has queued goes (its input would otherwise stay on the
+     * controller, "for 0" for good, as nothing here counts it down) */
+    if (input_remote_active)
+      input_off();
+    for (int c = 0; c < CMD_COUNT; c++)
+      fire_pending[c] = 0;
     return;
+  }
   if (!held) { /* a frame of the game */
     for (int c = 0; c < CMD_COUNT; c++)
       if (fire_pending[c]) {

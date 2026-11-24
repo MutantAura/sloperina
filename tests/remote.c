@@ -364,6 +364,19 @@ int main(void)
   assert(input_remote_active && input_remote_buttons == 3); /* for 0: until the next input */
   run_script("input off\n");
   assert(!input_remote_active);
+  /* turning remote control off lets go of a script's input, "for 0" and "for n" alike */
+  run_script("input A for 0\n");
+  assert(input_remote_active);
+  remote_enabled = false;
+  frame();
+  assert(!input_remote_active && !input_remote_buttons);
+  remote_enabled = true;
+  run_script("input B for 50\n");
+  assert(input_remote_active);
+  remote_enabled = false;
+  frame();
+  assert(!input_remote_active);
+  remote_enabled = true;
 
   /* status has how Link moves and what he holds; trace gives a line a frame, without holding the script up;
    * actors lists who is near */

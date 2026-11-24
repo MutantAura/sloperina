@@ -13,9 +13,20 @@
  *   get <menu path>            its value and its line as the menu shows it
  *   list [<menu path>]         a menu's items: number, kind, name, value
  *   wait <frames>              the next line runs that many frames later
- *   repeat <n> ... end         the lines between, that many times (up to four inside one another)
- *   status                     the frame, the map, where Link is, whether the menu and the game's pause
- *                              screen are open, the warp's state
+ *   repeat <n> ... end         the lines between, that many times (up to four inside one another); with wait
+ *                              and input, a sequence of any length
+ *   pause                      hold the game, as frame advance does (it needn't be on)
+ *   step [frames]              let that many frames through (pausing first), then hold again
+ *   run                        let the game run again
+ *   input <buttons> [ls <x> <y>] [rs <x> <y>] [for <frames>]
+ *                              buttons and sticks for the game, on top of the controller: "A+ZL", "0x41" or
+ *                              "-" for none; sticks -32767..32767; for 1 frame unless said (for 0: until the
+ *                              next input line). "input off" ends it.
+ *   status                     the frame, the map, where Link is and which way he faces (degrees, 0 = +z),
+ *                              whether the game is held, the menu and the game's pause screen are open, the
+ *                              warp's state
+ *   place <x> <y> <z> [facing] Link to that spot of this map, facing that way (degrees, 0 = +z), as load position
+ *                              moves him; wait some frames for it to settle
  *   echo <text>                the text, into out.txt
  * A menu path is the names from the top menu down, "/" between them, any case ("cheats/infinite magic",
  * "scene/end cutscene"); "name#2" is the second item of that name, "@7" the menu's item number 7 (list shows
@@ -30,7 +41,14 @@
 
 extern bool remote_enabled; /* settings > remote control */
 
-/* Once a frame on the game's thread, after the controller's read. */
-void remote_frame(void);
+/* Once a frame on the game's thread, after the controller's read (held: false), and from frame advance's hold
+ * while the game is held (held: true). */
+void remote_frame(bool held);
+
+/* For frame advance (ootgz.c): the script asked to hold the game; to let one frame through (true once per
+ * frame of a step); to run again. Each is taken by the call. */
+bool remote_take_pause(void);
+bool remote_take_step(void);
+bool remote_take_run(void);
 
 #endif

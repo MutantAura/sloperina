@@ -7,9 +7,12 @@
 
 #include "binds.h"
 #include "gamedata.h"
+#include "input.h"
 #include "link.h"
 #include "menu.h"
+#include "levitate.h"
 #include "menus.h"
+#include "position.h"
 #include "sdfs.h"
 #include "settings.h"
 #include "sys.h"
@@ -25,6 +28,7 @@
 #define OUT_MAX 8192      /* results waiting to be written */
 #define POLL_CALLS 6      /* look for cmd.txt every this many calls (10 times a second) */
 #define LINES_PER_CALL 64 /* at most this many lines a frame: a long script doesn't hold the game up */
+#define STICK_MAX 32767
 
 bool remote_enabled;
 
@@ -42,7 +46,15 @@ static struct {
 static int repeat_depth;
 
 /* what the line being run waits for */
-static int wait_left; /* wait: frames still to go */
+static int wait_left;               /* wait: frames still to go */
+static bool pause_wanted;           /* pause: for frame advance to take */
+static bool pause_waiting;          /* ... and until it holds the game */
+static int steps_left;              /* step: frames still to let through */
+static bool stepping;               /* ... and until the game is held again after them */
+static bool run_wanted, run_waiting; /* run: the same two */
+
+static uint16_t fire_pending[CMD_COUNT]; /* fire while the game is held: given on the next frame (1 + frames held) */
+static int input_frames;                 /* frames the script's input still lasts (0: until changed) */
 
 /* --- text ------------------------------------------------------------------------------------ */
 
@@ -472,19 +484,130 @@ static int command_by_key(const char *key)
   return -1;
 }
 
-static void run_status(void)
+static void input_off(void)
+{
+  input_remote_active = false;
+  input_remote_buttons = 0;
+  input_remote_sticks[0] = input_remote_sticks[1] = false;
+  input_frames = 0;
+}
+
+/* "input <buttons> [ls <x> <y>] [rs <x> <y>] [for <frames>]" */
+static const char *run_input(char *args)
+{
+  char *buttons = take_word(&args);
+  if (same(buttons, "off")) {
+    input_off();
+    return 0;
+  }
+  uint32_t mask = 0, bind;
+  int32_t number;
+  if (same(buttons, "-") || same(buttons, "none"))
+    mask = 0;
+  else if (parse_int(buttons, &number))
+    mask = (uint32_t)number;
+  else if (bind_parse(buttons, &bind))
+    mask = bind_mask(bind);
+  else
+    return "buttons: names with + between (A+ZL, at most four), a number (0x41) or -";
+  bool sticks[2] = { false, false };
+  int32_t axes[4] = { 0, 0, 0, 0 };
+  int32_t frames = 1;
+  for (char *word = take_word(&args); *word; word = take_word(&args)) {
+    int stick = same(word, "ls") ? 0 : same(word, "rs") ? 1 : -1;
+    if (stick >= 0) {
+      for (int axis = 0; axis < 2; axis++)
+        if (!parse_int(take_word(&args), &axes[2 * stick + axis]) || axes[2 * stick + axis] < -STICK_MAX ||
+            axes[2 * stick + axis] > STICK_MAX)
+          return "a stick: ls or rs, then x and y from -32767 to 32767";
+      sticks[stick] = true;
+    } else if (same(word, "for")) {
+      if (!parse_int(take_word(&args), &frames) || frames < 0)
+        return "for: a number of frames (0: until the next input)";
+    } else {
+      return "after the buttons: ls <x> <y>, rs <x> <y>, for <frames>";
+    }
+  }
+  input_remote_buttons = mask & 0xFFFF; /* the buttons; the sticks' direction bits come from the sticks */
+  memcpy(input_remote_sticks, sticks, sizeof(sticks));
+  memcpy(input_remote_stick, axes, sizeof(axes));
+  input_remote_active = true;
+  input_frames = frames;
+  return 0;
+}
+
+float atan2f(float y, float x); /* from sdk */
+
+/* which way Link faces, in degrees (0 = +z, 90 = +x); 0 where it can't be read */
+static float facing_degrees(void)
+{
+  double fx, fz;
+  if (!link_facing(&fx, &fz))
+    return 0;
+  float degrees = atan2f((float)fx, (float)fz) * (180.0f / 3.14159265f);
+  return degrees < 0 ? degrees + 360.0f : degrees;
+}
+
+/* "12.5", "-0.25", "110": a number with a decimal point */
+static bool parse_decimal(const char *s, double *out)
+{
+  bool negative = *s == '-';
+  if (negative || *s == '+')
+    s++;
+  double value = 0, scale = 1;
+  int digits = 0;
+  for (; *s >= '0' && *s <= '9'; s++, digits++)
+    value = value * 10 + (*s - '0');
+  if (*s == '.')
+    for (s++; *s >= '0' && *s <= '9'; s++, digits++) {
+      scale /= 10;
+      value += (*s - '0') * scale;
+    }
+  if (*s || !digits)
+    return false;
+  *out = negative ? -value : value;
+  return true;
+}
+
+/* "place <x> <y> <z> [facing]": Link to that spot of this map, as load position does it */
+static void run_place(char *args)
+{
+  double v[4] = { 0, 0, 0, 0 };
+  int n = 0;
+  for (char *word = take_word(&args); *word; word = take_word(&args), n++)
+    if (n >= 4 || !parse_decimal(word, &v[n])) {
+      result(false, "place: x y z, then the way to face in degrees (0 = +z) if not as now");
+      return;
+    }
+  if (n < 3) {
+    result(false, "place: x y z, then the way to face in degrees (0 = +z) if not as now");
+    return;
+  }
+  if (link_record_status() != REC_READY) {
+    result(false, "place: Link not found");
+    return;
+  }
+  if (n < 4)
+    v[3] = facing_degrees();
+  position_set(v[0], v[1], v[2], v[3]);
+  position_load();
+  result(true, "place %.3f %.3f %.3f facing %.1f", v[0], v[1], v[2], v[3]);
+}
+
+static void run_status(bool held)
 {
   vec3f_t pos = { 0, 0, 0 };
   bool has_pos = link_drawn_pos(&pos);
   const char *map = gd_ready() ? gd_get_str(GD_STR_MAP) : 0;
   const char *warp = warp_state();
-  result(true, "frame=%u map=%s link=%s x=%.3f y=%.3f z=%.3f menu=%d game_paused=%d warp=%s", (unsigned)frame_counter(),
-         map && map[0] ? map : "?", has_pos ? "yes" : "no", (double)pos.x, (double)pos.y, (double)pos.z,
-         menu_current != 0, (int)(gd_ready() && gd_game_paused(0, 0)), warp && warp[0] ? warp : "-");
+  result(true, "frame=%u map=%s link=%s x=%.3f y=%.3f z=%.3f facing=%.1f held=%d menu=%d game_paused=%d warp=%s",
+         (unsigned)frame_counter(), map && map[0] ? map : "?", has_pos ? "yes" : "no", (double)pos.x, (double)pos.y,
+         (double)pos.z, (double)facing_degrees(), (int)held, menu_current != 0,
+         (int)(gd_ready() && gd_game_paused(0, 0)), warp && warp[0] ? warp : "-");
 }
 
 /* Run one line. What it waits for, if anything, is left in the state above. */
-static void run_line(char *line)
+static void run_line(char *line, bool held)
 {
   char *args = line;
   char *verb = take_word(&args);
@@ -519,10 +642,14 @@ static void run_line(char *line)
   } else if (same(verb, "echo")) {
     result(true, "%s", args);
   } else if (same(verb, "status")) {
-    run_status();
+    run_status(held);
+  } else if (same(verb, "place")) {
+    run_place(args);
   } else if (same(verb, "wait")) {
     if (!parse_int(args, &number) || number < 0)
       result(false, "wait: a number of frames");
+    else if (held && number > 0)
+      result(false, "wait: the game is held, no frames pass (step lets them through)");
     else {
       wait_left = number;
       result(true, "wait %d", (int)number);
@@ -536,7 +663,10 @@ static void run_line(char *line)
     else if (*frames && (!parse_int(frames, &number) || number < 0))
       result(false, "fire: a number of frames to hold it");
     else {
-      binds_fire((command_t)cmd, number);
+      if (held)
+        fire_pending[cmd] = (uint16_t)(1 + (number > 60000 ? 60000 : number)); /* on the next frame let through */
+      else
+        binds_fire((command_t)cmd, number);
       result(true, "fire %s", command_keys[cmd]);
     }
   } else if (same(verb, "do")) {
@@ -594,6 +724,35 @@ static void run_line(char *line)
       result(false, "list: %s", problem);
     else
       list_menu(item ? item->submenu : menu);
+  } else if (same(verb, "pause")) {
+    if (held)
+      result(true, "paused");
+    else {
+      pause_wanted = true;
+      pause_waiting = true; /* its result once the game is held */
+    }
+  } else if (same(verb, "step")) {
+    if (*args && (!parse_int(args, &number) || number < 1))
+      result(false, "step: a number of frames");
+    else {
+      if (!held)
+        pause_wanted = true;
+      steps_left = number;
+      stepping = true; /* its result once they've gone through and the game is held again */
+    }
+  } else if (same(verb, "run")) {
+    if (!held)
+      result(true, "running");
+    else {
+      run_wanted = true;
+      run_waiting = true;
+    }
+  } else if (same(verb, "input")) {
+    problem = run_input(args);
+    if (problem)
+      result(false, "input: %s", problem);
+    else
+      result(true, "input 0x%x for %d", (unsigned)input_remote_buttons, input_frames);
   } else {
     result(false, "not a command: %s", verb);
   }
@@ -661,23 +820,80 @@ static void poll(void)
   running = true;
 }
 
-void remote_frame(void)
+/* Whether the line last run is still waiting; says so (its result) when the wait is over. */
+static bool waiting(bool held)
+{
+  if (wait_left > 0)
+    return true;
+  if (pause_waiting) {
+    if (!held)
+      return true;
+    pause_waiting = false;
+    result(true, "paused");
+  }
+  if (stepping) {
+    if (steps_left > 0 || !held)
+      return true;
+    stepping = false;
+    result(true, "stepped");
+  }
+  if (run_waiting) {
+    if (held)
+      return true;
+    run_waiting = false;
+    result(true, "running");
+  }
+  return false;
+}
+
+void remote_frame(bool held)
 {
   if (!remote_enabled || !settings_sd())
     return;
-  if (wait_left > 0)
-    wait_left--;
+  if (!held) { /* a frame of the game */
+    for (int c = 0; c < CMD_COUNT; c++)
+      if (fire_pending[c]) {
+        binds_fire((command_t)c, fire_pending[c] - 1);
+        fire_pending[c] = 0;
+      }
+    if (input_frames > 0 && --input_frames == 0)
+      input_off();
+    if (wait_left > 0)
+      wait_left--;
+  }
   if (!running)
     poll();
-  for (int lines = 0; running && lines < LINES_PER_CALL && !wait_left; lines++) {
+  for (int lines = 0; running && lines < LINES_PER_CALL && !waiting(held); lines++) {
     char *line = next_line();
     if (!line) {
       running = false;
       out_line("end");
       break;
     }
-    run_line(line);
+    run_line(line, held);
   }
   if (out_len)
     out_flush();
+}
+
+bool remote_take_pause(void)
+{
+  bool wanted = pause_wanted;
+  pause_wanted = false;
+  return wanted;
+}
+
+bool remote_take_step(void)
+{
+  if (steps_left <= 0)
+    return false;
+  steps_left--;
+  return true;
+}
+
+bool remote_take_run(void)
+{
+  bool wanted = run_wanted;
+  run_wanted = false;
+  return wanted;
 }

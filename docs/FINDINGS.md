@@ -1875,9 +1875,7 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
     than 5 m outside the box at sensor `+0xEC..+0x100` (the VolumeStats AABB, by its shape).
   - The whole step is skipped while an event runs (`[[main+0x4E94840]+0x68]` ≠ 0), when sensor `+0xA8` bit 1 is
     clear, or when P`+0x1C54` bit 0 is set.
-  - Probe 2 isn't a plain value: `main+0x38AEF0` keeps a counter at `+0x1160` (counts to 9 while probe 2 hits) and
-    ramps something with it, so its result depends on the last frames, not only on where Link is (not followed:
-    the decompile stops at the no-return thunk).
+  - Probe 2 (Probe C) stores its `VolumeStatsHit` at sensor `+0x948..+0xD4F` (vtable `+0x948`, 8 level records `+0x950..+0xB8F`, `max_level` `+0xB90`, `chunk_origin` `+0xB94`, anchor `point` `+0xBA0`, `cell` `+0xBAC`, `hit_face` `+0xBB8`, `has_point` `+0xBBC` bit 0, `extra_flags` `+0xBC0`, `extra_count` `+0xD48`) plus `dist3` `+0x1158`, `dist2` `+0x115C`, and the 10-frame Fibonacci ray rotation counter `ray_phase` `+0x1160` (0..9; identical offsets in 1.0.0 and 1.1.1). When `has_point == 0`, `main+0x38AEF0` (`0x38B554`) resets `ray_phase` to 0 and runs all 64 Fibonacci-sphere rays in a single frame; when `has_point != 0`, it shoots 6–7 rays/frame (stride 10) and only shifts `point` if a ray hits strictly closer in 3D than `|Q - C|`. Every `VolumeStatsHit` reader (`0x388340`, `0x38AEF0`, `0x38E3DC0`, `0x541A20`) skips level/extra record pointers when `max_level < 0` and `extra_count < 0`, so `memfile.c` safely saves/restores Probe C's anchor/cell/phase (zeroing records and setting both counts to `-1`, and appending under `EXTRA_VOID_RING` in `.szm` `XTRA`), and clears Probe C (`has_point = 0`) while teleporting or loading older `.szm` files without ring data to force a fresh 64-ray scan.
 - **Checked in game** (Sacred Forest Meadow, child; a temporary void-out log, not in the repo, ~50 positions round
   (-31..-28, 122..131, -121..-115), a ledge west of the grid's box, x min -29):
   - Probe 2's distance is **how far the nearest valid grid ground is, not floor below Link.** Link stood on solid

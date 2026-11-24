@@ -2072,3 +2072,43 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   position, read where he's updated, is the likeliest). Moving Link with the camera would stream the world natively
   but sets off loading zones, triggers and voids.
 
+
+### 9.31 The time of day: the WorldMgr's clock, and when it runs (both builds; 1.0.0 addresses; checked in game on both, 24th November 2026)
+- **Reading and setting it** (as §9.17; timeofday.c, memfile.c): `wm = [[main+wm_ptr]]`, `[wm+0x578]` is the clock,
+  whose vtable slot `+0x30` returns the seconds into the day. `setTime(wm, seconds)` `main+0x33F1580` doesn't set the
+  clock itself: it calls `main+0xEC1F10` on `[wm+0x510]`, which stores the seconds at `+0x48` (and `-1` at `+0x4C`)
+  and sets request bits in the flags at `+8`. The WorldMgr's update applies the request later.
+- **Before the story starts the clock** the clock reads exactly 06:00, doesn't move, and every request is ignored
+  (the user's early save, Hyrule Field, both builds). Talking to Kaepora Gaebora in Hyrule Field on leaving the Lost
+  Woods starts it, and so does Impa's escort after Zelda's Lullaby (from the user). On a later save (Goron City)
+  setting the hour and minute, the presets and freezing (setting it back every 10 frames) all work.
+- **What starts it isn't found yet.** Ruled out:
+  - Kaepora's flow (`HyruleField_Goto_HyruleCastle_Kaepora`, flowchart `Goto_HyruleCastle`) writes no GameData of its
+    own: it plays `Dm_HrlField_0010`, whose only clock actions are
+    `EventWorldManagerController.EventTrigger_SetTime(7:30, then 7:00)`, and moves the quest `Goto_HyruleCastle` to
+    Step02. Impa's escort cutscene (`Dm_HrlField_0020`) has no clock action at all, so the switch is probably a
+    condition the WorldMgr checks rather than something either event sets.
+  - Setting `Goto_HyruleCastle` to Step02, and `DoorOfTime` to Ready and to Step01, in memory (story menu) didn't start
+    the clock at once. No map was reloaded afterwards (that might autosave the changed story state).
+  - `IsWorldTimeStop` and `IsDisableTimeProgress` are strings in main but not GameData (no field has their hashes).
+    `HyruleField_Child`'s GameBancParam and WorldParam have no time switch (the WorldParam's `$parent`,
+    `MainField`, isn't a loose romfs file).
+- **Next:** the same quest steps followed by a map reload, or watching `[wm+0x510]+8` / `+0x48` with the GDB stub to
+  find what applies or drops the request.
+
+### 9.32 The world overlays over the game's pauses (both builds; checked in game on 1.0.0, 24th November 2026)
+- The overlays drawn in the world (airwall.c: air walls, void out, save positions, the hookshot's hook) were
+  hidden whenever the game paused (`gd_game_paused`), so the item wheel, which pauses the game, made them go and come
+  back at once each time it opened and closed: flashing when it's opened and closed quickly.
+- **The item wheel turns the game's camera** (the camera angle watch went from 329.5 to 58.3 with it open) and the
+  game draws the world behind it from there, but the scene depth the module copies (scenedepth.c) isn't refreshed
+  meanwhile. So with the overlays kept live, the depth-tested faces (the void shading, the fence and columns' sides)
+  were dropped (`gpuui_face` needs a fresh depth), and keeping the last depth with the live overlays tested them
+  against the old view and smeared them over the wheel.
+- **What's done instead:** while the game is paused, the last frame built stays as it was, with the depth it was
+  drawn against (`scenedepth_keep_last`), and fades out over 20 frames where the overlays are hidden (the pause
+  screen and map, and the item wheel with **hide world overlays over item wheel**, on at first); they fade in again
+  after (`airwall_fade`, applied in overlayui.c). Off, they stay over the wheel as they were.
+- **Telling the wheel from the pause screen:** the menu screen Enum (`0x578D41E1`) is `None` (`0xB6EEDE09`) for the
+  R item list. When the user opened their wheel, the overlays were hidden as for a menu screen, so the wheel they use
+  may set it; the log's pause line now gives the value. Enemy health bars (enemyhp.c) still go and come back at once.

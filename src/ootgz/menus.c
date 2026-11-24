@@ -28,6 +28,7 @@
 #include "ragdoll.h"
 #include "title.h"
 #include "actorsmenu.h"
+#include "freecam.h"
 #include "tpose.h"
 #include "hsstore.h"
 #include "remote.h"
@@ -4344,11 +4345,19 @@ static void act_dive_test(menu_item_t *it)
 
 static menu_t m_log; /* (defined with the log's code below) debug > log */
 
+static bool get_freecam(menu_item_t *it) { return freecam_on; }
+static void set_freecam(menu_item_t *it, bool on) { freecam_set(on); }
+
 static void build_debug(void)
 {
   build_pause_research();
   build_flaglog();
-  menu_init(&m_debug, "debug", 9);
+  menu_init(&m_debug, "debug", 10);
+  menu_item_t *freecam = menu_add_check(&m_debug, "free camera", get_freecam, set_freecam, 0);
+  if (freecam) {
+    freecam->hint = "close the menu to fly: left stick move, right stick look, ZR up, ZL down, X fast";
+    freecam->log_label = "free camera:";
+  }
   menu_item_t *to_title = menu_add_action(&m_debug, "return to title", act_return_to_title, 0);
   if (to_title) {
     to_title->hint = "L: back to the title screen, as game over's quit does (what isn't saved is lost)";

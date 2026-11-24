@@ -47,6 +47,7 @@
 #include "tpose.h"
 #include "hsstore.h"
 #include "actorsmenu.h"
+#include "freecam.h"
 #include "remote.h"
 #include "eventskip.h"
 #include "position.h"
@@ -439,6 +440,7 @@ static void frame(void)
   ragdoll_frame(menu_current != 0);
   tpose_frame();
   position_frame(menu_current != 0);
+  freecam_frame(menu_current != 0);
   divetest_frame(menu_current != 0);
   lock_frame();
   warp_frame();

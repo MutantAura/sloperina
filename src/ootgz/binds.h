@@ -37,6 +37,7 @@ typedef enum {
   CMD_WATCHES, CMD_TIMER, CMD_RESET_TIMER, CMD_RESET_LAG, CMD_RESET_JS,
   /* debug: unbound until given buttons */
   CMD_TITLE,       /* debug > return to title */
+  CMD_FREECAM,     /* debug > free camera, on / off */
   CMD_COUNT
 } command_t;
 

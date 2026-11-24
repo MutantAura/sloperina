@@ -1136,7 +1136,7 @@ the probes' workings, what switches the flags off, and the void areas' shapes.
     keeps the best it has found until a nearer one turns up: hit `+0xBBC` bit 0, the cell `+0xBA0`, its distance
     `+0x1158`, and that distance level (x and z only) `+0x115C`. The old point is never checked again, so off the
     map it's as good as frozen;
-    - **How probe C updates (`main+0x38AEF0`, 1.0.0 `main+0x4D8910`):** starts from the probe's query position
+    - **How probe C updates (`main+0x38AEF0`, 1.0.0 `main+0x4D8810`):** starts from the probe's query position
       `Q = probe+0xE0` (when probe A hit, first casts from probe A's hit cell centre toward `Q`, snapping `Q` to
       any intervening hit cell centre). Computes the current **3D** distance `|Q - C|` (not 2D horizontal) to
       probe C's remembered point `C = probe+0xBA0`. Across a 10-frame phase counter (`probe+0x1160` = 0..9,

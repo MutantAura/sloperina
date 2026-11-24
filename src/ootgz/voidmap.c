@@ -9,7 +9,7 @@
  * Other voids aren't in the map: the areas placed to void Link (airwall.c draws those, from data.c; the holes
  * down into grottos are among them) and floors tagged Abyss (not drawn).
  *
- * How probe C (the 8-unit fence's anchor) moves (main+0x38AEF0, 1.0.0 main+0x4D8910):
+ * How probe C (the 8-unit fence's anchor) moves (main+0x38AEF0, 1.0.0 main+0x4D8810):
  *   Each frame, after probe A casts down, probe C computes the 3D distance from Link's query position Q to its
  *   remembered point C, then shoots 64 Fibonacci-sphere rays (6-7 per frame across a 10-frame cycle) from Q
  *   through the VolumeStats octree. A ray hits when it exits a mapped leaf cell across a face whose 6-bit

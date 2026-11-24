@@ -26,6 +26,7 @@
 #include "memfile.h"
 #include "voidmap.h"
 #include "ragdoll.h"
+#include "title.h"
 #include "tpose.h"
 #include "hsstore.h"
 #include "remote.h"
@@ -362,6 +363,15 @@ static void act_end_cutscene(menu_item_t *it)
 {
   if (eventskip_start())
     menu_close(); /* so the skip can be watched */
+}
+
+static void act_return_to_title(menu_item_t *it)
+{
+  const char *problem = title_start();
+  if (problem)
+    gfx_notice(problem);
+  else
+    menu_close(); /* so the way out can be watched */
 }
 
 static void act_reload_map(menu_item_t *it)
@@ -4316,7 +4326,12 @@ static void build_debug(void)
 {
   build_pause_research();
   build_flaglog();
-  menu_init(&m_debug, "debug", 7);
+  menu_init(&m_debug, "debug", 8);
+  menu_item_t *to_title = menu_add_action(&m_debug, "return to title", act_return_to_title, 0);
+  if (to_title) {
+    to_title->hint = "L: back to the title screen, as game over's quit does (what isn't saved is lost)";
+    to_title->log_label = "return to title";
+  }
   menu_add_submenu(&m_debug, "tests", &m_tests);
   menu_add_submenu(&m_debug, "heap", &m_heap);
   menu_add_submenu(&m_debug, "memory", &memview_menu);

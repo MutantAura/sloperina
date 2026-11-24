@@ -1883,3 +1883,59 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   param. The collision's user shape tag `Abyss` (bit 4, mask 0x10, PhiveConfig material presets `Floor_Abyss`,
   `Material_Sand_Abyss`, `Material_Metal_Spike_Abyss`) exists, but no code reading it was found yet.
 - Where a void-out puts Link back (`EventPlayerPostAbyss`, `main+0x26BA6F0`'s node) wasn't followed.
+### 9.26 Returning to the title screen (both builds; 1.0.0 addresses, 1.1.1 in brackets; not yet checked in game)
+- **No call does it:** the game reaches its title screen by a state change of the sequence graph
+  (`romfs/Sequence/FormalSequence.root.ainb`, read with the `ainb` package 0.2.17; 0.2.18 doesn't import). Its
+  `Title` state (node 0, `Title.module`) is entered by the transition named `Title` of two states only: `PlusMenu`
+  and `Event`. `Main` has no such transition.
+- **The pause screen's System > Return to Title** (`PlusMenu.module`): the string selector on the decided button
+  (node 51) takes `Pa_System_00/Pa_Button_04` to `ConfirmationBackToTitle.module`, which opens `SystemWindow_00`
+  (preset `BackToTitle`: the strings `NewGame`, `ResetOption`, `BackToTitle`, `BackToTitleFromGameOver`... in main
+  are these confirmation presets, not requests) and waits for its buttons; Yes runs `PlusMenuToTitle.module`, then
+  `DeletePouchAssignableItem`, `ResetCursorLog` and `ResetSystemMenuCursor`, and the state ends with `Title`. All of
+  it is chosen by the screens' buttons, so it can't be asked for without driving the pause screen.
+- **Leaving an event:** `Event.module` runs `AfterEvent.module` once no main event plays; its string selector on the
+  String16 `Sequence_EventResult` (`0x6000F875`) takes `Title` to `EventToTitle.module` and the state ends with
+  `Title`. This is how Game Over's Quit leaves play: `DmF_SY_GameOver` › `DisplayGameOver` runs
+  `GameSystemActor.EventSetEventResult(EventResult=Title)` and sets `Sequence_ToTitleFromGameOver`. In
+  `GameSystemActor.pack` › `AI/GameSystemActor.event.root.ainb` that command is node 33, whose only child writes
+  `Sequence_EventResult` through `OneShotSetNonStructGameDataString16`. `Defeat_Ganon` does the same with
+  `Sequence_ToTitleFromGameClear`; no other event flow uses the command.
+- **EventToTitle and PlusMenuToTitle do the same work** (close `SystemWindow_00` / `SystemBG_00`, prepare the loading
+  screens, unload the resident screens, `XLinkModuleReset`, `System_IsSaveTemporaryStorage` = false,
+  `GameSafetyMgrStopSafety`, `UnloadBanc` with the resident actors, Link's pouch and the menu actor deleted,
+  `ChangeScenery`, `BeforeTitle`, `CloseLoadingFade`). EventToTitle also closes `GameOver_00` and clears the texture
+  cache, and only with `Sequence_ToTitleFromGameOver` (`0x53F4FC89`) releases `GameOverPause`, only with
+  `Sequence_RequestLastGameOverSave` (`0x2C095360`) saves, and only with `Sequence_ToTitleFromGameClear`
+  (`0x04D31E64`) makes the game clear save. With all three false it saves nothing. The graphs are byte for byte the
+  same in both builds except EventToTitle, where 1.1.1 adds two `SeqExecuteGenericDummyAction` nodes.
+- **The event has to be a real one:** Main's branch picker (a native selector, `_LocalModule_cf31571495c4` is empty;
+  1.1.1 vtable `main+0x4BD0158`, select slot 39 `main+0x3303CA0`) takes `GameOver` while `IsGameOverTrig` is set and
+  `Event` while `[M+0x68]` (the running event, §9.10) isn't 0. So something must run as an event for AfterEvent to
+  read the result.
+- **The carrier:** `DefaultParentEvent` (`romfs/Event/EventFlow`, the same file in both builds) is one
+  `GameSystemActor.EventWait(Frames=30)`. It has its own row in `RSDB/EventSetting` (`FlowchartEvent`: non-members
+  `AllPause`; StarterPos base setting) and many `Dm_*` cutscene rows use its flowchart as theirs. The running flow's
+  name (`flow+0x8`, §9.10) is `DefaultParentEvent`.
+- **The game's SetString16** `main+0xF83410` [`main+0xF69FF0`] (`manager, const char *const *value, hash`): what both
+  String16 nodes call (1.1.1 `SeqOneShotSetNonStructGameDataString16` slot 40 `main+0x3BB64F0`, vtable from
+  `main+0x4C6F630`; 1.0.0 `main+0x3B588E0`, through the GameData manager `[[main+0x4C184D8]]`). It finds the field in
+  the String16 type's hash table (manager `+0x4A0`, so the type entry is at manager `+0x488`) and queues the write
+  (`+0x4B8`, `0x28`-byte entries, string copied), applied at the next flush like SetInt's. 1.0.0's was matched by
+  masked signature over 64 instructions: one match, the same over 16 to 64, and its four callers line up with 1.1.1's.
+- **title.c** (remote `title`, **scene > return to title**): refuses while paused or a game menu is up, during an
+  event, while a map loads, while `System_IsSaveLoading` (`0xF5DEEF0A`) or a game over (or any of the three flags
+  above) is set, or with no Link; requests `DefaultParentEvent` through the same request as the warp (§5.18); once
+  it runs (current flow named `DefaultParentEvent`) writes `Title` with SetString16. When the event ends, AfterEvent
+  goes to the title screen. The result is only written while our event runs, so a refused or dropped request leaves
+  nothing; once no event has run for a second after ours, `Sequence_EventResult` is written `""` again (what
+  AfterEvent leaves it as), so a result that wasn't read can't wait for the next event. Another event starting first,
+  or ours not starting within 10 s (it waits until Link can join an event), gives up.
+- **Not checked in game yet:** that the request is accepted in ordinary play (the warp's is), how long it waits when
+  Link is mid-air or swimming (no `IgnoreDissentPlay`, unlike `Dm_SY_BancChangeGo`), that the title screen and a
+  continue afterwards behave as after the pause screen's Return to Title (the PlusMenu-only resets of the item
+  shortcuts and menu cursors are skipped, as after Game Over > Quit), and whether `System_IsSaveLoading` is the
+  right "saving" test.
+- **Not used:** driving the pause screen (open it with `DebugParam.IsRequestedTransitionPlusMenu`, which
+  `BeforeMinusMenu` clears, then pick System > Return to Title > Yes): it depends on the screens' cursors and
+  animations.

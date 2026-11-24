@@ -169,26 +169,26 @@ static void log_refusal(uintptr_t manager)
     }
     pending[n] = 0;
   }
-  log_printf("warp: refused with manager flags %x, running event \"%s\", event running %d", (unsigned)flags,
+  log_printf("event request refused with manager flags %x, running event \"%s\", event running %d", (unsigned)flags,
              pending, sys_ptr(manager + 0x68) != 0);
 }
 
-static bool request_warp_event(const warp_map_t *map, const spawn_t *spawn)
+/* Start a request for the event `name` in `request`, as the node does; the event manager, or 0 (nothing built). */
+static void *begin_request(const char *name)
 {
   uintptr_t manager_holder = sys_ptr(MAIN(z64hd_game->event_mgr_ptr));
   void *manager = (void *)(manager_holder ? sys_ptr(manager_holder) : 0);
   if (!manager)
-    return false;
+    return 0;
   memset(request, 0, sizeof(request));
   MAIN_FN(req_ctor_t, z64hd_game->event_req_ctor)(request);
-  set_game_string(request + Z64HD_EVENT_REQ_NAME, "Dm_SY_BancChangeGo");
-  snprintf(pos_air, sizeof(pos_air), "%s_Air", spawn->pos);
-  static const bool no = false;
-  bool ok = add_param("NextBanc", Z64HD_EVENT_PARAM_STRING, map->name) &&
-            add_param("NextStartPos", Z64HD_EVENT_PARAM_STRING, spawn->pos) &&
-            add_param("NextStartPosAir", Z64HD_EVENT_PARAM_STRING, pos_air) &&
-            add_param("BootEventName", Z64HD_EVENT_PARAM_STRING, arrival_event(spawn)) &&
-            add_param("IsCheckAir", Z64HD_EVENT_PARAM_BOOL, &no);
+  set_game_string(request + Z64HD_EVENT_REQ_NAME, name);
+  return manager;
+}
+
+/* Submit the request begun (if its params went in: ok) and destroy it. */
+static bool finish_request(void *manager, bool ok)
+{
   if (ok) {
     ok = MAIN_FN(req_submit_t, z64hd_game->event_req_submit)(manager, request);
     if (!ok)
@@ -196,6 +196,27 @@ static bool request_warp_event(const warp_map_t *map, const spawn_t *spawn)
   }
   destroy_request();
   return ok;
+}
+
+static bool request_warp_event(const warp_map_t *map, const spawn_t *spawn)
+{
+  void *manager = begin_request("Dm_SY_BancChangeGo");
+  if (!manager)
+    return false;
+  snprintf(pos_air, sizeof(pos_air), "%s_Air", spawn->pos);
+  static const bool no = false;
+  bool ok = add_param("NextBanc", Z64HD_EVENT_PARAM_STRING, map->name) &&
+            add_param("NextStartPos", Z64HD_EVENT_PARAM_STRING, spawn->pos) &&
+            add_param("NextStartPosAir", Z64HD_EVENT_PARAM_STRING, pos_air) &&
+            add_param("BootEventName", Z64HD_EVENT_PARAM_STRING, arrival_event(spawn)) &&
+            add_param("IsCheckAir", Z64HD_EVENT_PARAM_BOOL, &no);
+  return finish_request(manager, ok);
+}
+
+bool warp_request_event(const char *name)
+{
+  void *manager = begin_request(name);
+  return manager && finish_request(manager, true);
 }
 
 /* --- fallback: swap the destination of the next exit Link takes ---------------------------------- */

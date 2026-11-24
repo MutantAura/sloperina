@@ -199,6 +199,9 @@ struct z64hd_build {
   uint32_t action_main_slot;
   uint32_t action_weapon_slot;
   uint32_t action_id;
+  /* GameData SetString16 (manager, const char *const *value, hash): queued like SetInt, what the AINB node
+   * (Seq)OneShotSetNonStructGameDataString16 calls; title.c writes Sequence_EventResult with it (FINDINGS 9.26) */
+  uint32_t gd_set_string16;
   struct z64hd_link_path link_paths[5];
 };
 

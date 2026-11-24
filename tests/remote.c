@@ -83,6 +83,25 @@ int actors_near(float radius, actor_near_t *out, int max)
   return n;
 }
 
+/* return to title's side: why it can't start (0: it starts), and how it goes once started */
+static const char *title_problem;
+static title_status_t title_now = TITLE_IDLE;
+static const char *title_text = "";
+static int title_starts;
+const char *title_start(void)
+{
+  if (title_problem)
+    return title_problem;
+  title_starts++;
+  title_now = TITLE_PENDING;
+  title_text = "waiting for the game to start the event";
+  return 0;
+}
+title_status_t title_status(const char **text)
+{
+  *text = title_text;
+  return title_now;
+}
 bool input_remote_active;
 uint32_t input_remote_buttons;
 bool input_remote_sticks[2];
@@ -447,6 +466,44 @@ int main(void)
   out_has(" 1 err place: Link not found\n");
   assert(position_loads == 2);
   record = REC_READY;
+
+  /* title: refused at once with the reason; otherwise the script waits until the game has started the event (ok)
+   * or it failed (err), and goes on after it */
+  title_problem = "can't return to title while the game is paused";
+  run_script("title\ntitle now\necho next\n");
+  out_has(" 1 err title: can't return to title while the game is paused\n");
+  out_has(" 2 err title: nothing goes after it\n");
+  out_has(" 3 ok next\n");
+  assert(!title_starts);
+  title_problem = 0;
+  out_size = 0;
+  out_file[0] = 0;
+  send("title\necho after\n");
+  for (int i = 0; i < POLL_CALLS + 3; i++)
+    frame();
+  assert(title_starts == 1 && running && !strstr(out_file, "title")); /* the event hasn't started yet */
+  title_now = TITLE_DONE;
+  title_text = "on the way to the title screen";
+  frame();
+  out_has(" 1 ok title: on the way to the title screen\n");
+  out_has(" 2 ok after\n");
+  assert(!running);
+  send("title\n");
+  for (int i = 0; i < POLL_CALLS; i++)
+    frame();
+  title_now = TITLE_FAILED;
+  title_text = "can't return to title: the game didn't start the event";
+  frame();
+  out_has(" 1 err title: can't return to title: the game didn't start the event\n");
+  assert(title_starts == 2 && !running);
+  run_script("pause\ntitle\nrun\n"); /* held: no frames for the game to start an event in */
+  assert(remote_take_pause());
+  remote_frame(true);
+  out_has(" 2 err title: the game is held");
+  assert(title_starts == 2 && remote_take_run());
+  frame();
+  out_has(" 3 ok running\n");
+  assert(!running);
 
   /* repeat ... end: the lines between again and again, inside one another, with waits; a line can be run twice */
   run_script("repeat 3\necho a  b\nrepeat 2\necho c\nend\nend\necho d\nend\nrepeat x\n");

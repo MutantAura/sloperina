@@ -86,6 +86,27 @@ static void flow_name(uintptr_t flow, char *out)
   out[n] = 0;
 }
 
+bool eventskip_flow_name(char out[EVENTSKIP_NAME_MAX])
+{
+  _Static_assert(EVENTSKIP_NAME_MAX == NAME_MAX, "eventskip.h's name size");
+  out[0] = 0;
+  uintptr_t event = next(manager(), MGR_EVENT);
+  if (!event)
+    return false;
+  uintptr_t flows_at = event + z64hd_game->event_flows;
+  uintptr_t flows = next(event, (intptr_t)z64hd_game->event_flows);
+  uint32_t count, current;
+  if (!flows || !sys_read32(flows_at + FLOW_COUNT, &count) || !sys_read32(flows_at + FLOW_INDEX, &current))
+    return false;
+  if ((int32_t)count < 1 || count > MAX_FLOWS || current >= count || !sys_mapped(flows + current * 8, 8, SYS_PERM_R))
+    return false;
+  uintptr_t flow = sys_ptr(flows + current * 8);
+  if (!flow || !next(flow, FLOW_NAME))
+    return false;
+  flow_name(flow, out);
+  return true;
+}
+
 static skip_result_t skip_flow(uintptr_t flow, uint32_t i, uint32_t count, uint32_t current, bool log)
 {
   uintptr_t player = next(flow, FLOW_PLAYER);

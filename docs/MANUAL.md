@@ -414,6 +414,8 @@ folder (on an emulator: right-click the game > *Open save data location*).
 
 ### 2.11 Debug
 
+**return to title**: back to the game's title screen, without the pause screen: the game plays a 30-frame event and leaves it the way Game Over > Quit does. Nothing is saved, so whatever isn't saved is lost, as with the pause screen's Return to Title. Not while the game is paused, in a cutscene or other event, loading a map, saving or in a game over. It can be given buttons in **settings > rebind commands** (under **debug**; unbound to start with).
+
 **tests > dive tests**: **from heights** and **while moving** measure how deep Link goes into water by how he falls in. Start
 one with Link swimming at the surface (facing open water for **while moving**) and leave the controls alone: it
 measures the surface, drops him again and again from set heights (from heights: 1 to 192 above the surface; while moving:
@@ -583,8 +585,8 @@ stay the game's. Settings from before the commands with frame advance on **R** b
 #### 2.12.4 Rebind commands
 
 gz's **commands** menu, here **rebind commands**: each of sloperinaGZ's controls and the buttons it's bound to, under **menu**, **frame
-advance**, **link**, **scene** and **watches and timer**. The **scene** commands, **reload map** ([2.1](#21-link)) and **end
-cutscene** ([2.3](#23-scene)), start out unbound. A bind is up to four buttons pressed in that order (**R**, then
+advance**, **link**, **scene**, **memfiles**, **watches and timer** and **debug**. The **scene** commands, **reload map** ([2.1](#21-link)) and **end
+cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
 **right stick down**); letting go of one ends it, and pressing another button partway through cancels it. When one
 bind is part of another that's also held (**R + D-pad left** holds **D-pad left**), only the bigger one counts, so
 **R + A + D-pad right** resets jump height without also hiding the watches. **run again** takes its buttons in any
@@ -633,6 +635,7 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | `trace <frames>` / `trace off` | A line for each of the next frames, without holding the script up: `<line> t y= vy= hs= x= z= hand= zr= paused= lock= ground= act= wpn=`. |
 | `actors [metres]` | The running actors within that distance of Link (6 unless said), nearest first, by the game's names. |
 | `place <x> <y> <z> [facing]` | Puts Link on that spot of this map as **load position** does (wait some frames for it). With a facing (degrees, 0 = +z) he is turned to it; without, he faces as he did. |
+| `title` | Goes back to the game's title screen, the way the game's own Game Over > Quit leaves play (as **debug > return to title**). `ok` once the game is running the short event it leaves by (30 frames, then it fades to the title); `err` with the reason if it can't now: the game paused or a menu of its own up, a cutscene or other event, a map loading, the game saving or loading, a game over, or the game held (`run` first). Whatever isn't saved is lost, as with the pause screen's Return to Title. |
 | `echo <text>` | Puts the text in `out.txt` (a marker). |
 | `id <word>` | The word that starts this script's lines in `out.txt` (otherwise `-`), to tell them from another's. |
 

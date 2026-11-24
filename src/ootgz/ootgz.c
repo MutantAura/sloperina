@@ -43,6 +43,7 @@
 #include "savepos.h"
 #include "memfile.h"
 #include "ragdoll.h"
+#include "title.h"
 #include "tpose.h"
 #include "hsstore.h"
 #include "remote.h"
@@ -438,6 +439,7 @@ static void frame(void)
   divetest_frame(menu_current != 0);
   lock_frame();
   warp_frame();
+  title_frame();
   eventskip_frame();
   age_frame();
   memfile_binds_frame(menu_current != 0);

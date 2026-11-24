@@ -35,12 +35,14 @@ typedef enum {
   CMD_MEMFILE_NEXT, CMD_MEMFILE_PREV, /* select the next / previous slot, wrapping */
   /* watches and the timer */
   CMD_WATCHES, CMD_TIMER, CMD_RESET_TIMER, CMD_RESET_LAG, CMD_RESET_JS,
+  /* debug: unbound until given buttons */
+  CMD_TITLE,       /* debug > return to title */
   CMD_COUNT
 } command_t;
 
 enum {
   CMD_GROUP_MENU, CMD_GROUP_FRAME_ADVANCE, CMD_GROUP_LINK, CMD_GROUP_SCENE, CMD_GROUP_MEMFILES, CMD_GROUP_WATCHES,
-  CMD_GROUPS
+  CMD_GROUP_DEBUG, CMD_GROUPS
 };
 
 typedef struct {

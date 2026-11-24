@@ -48,6 +48,20 @@ typedef struct {
 } actor_read_t;
 bool actor_read(uintptr_t actor, actor_read_t *out);
 
+/* actors.c: kill an actor found earlier, the game's way (FINDINGS 9.27): a death request, reason FallIntoAbyss (the
+ * void's), to its Death component; with none, an NPC or a thing (Npc_, Obj_, Item_) is deleted as the AI's delete
+ * node does. Never Link. Game thread, outside any walk. */
+typedef enum {
+  KILL_DEATH,          /* the death request was taken: it dies as it would in a void */
+  KILL_DEATH_REFUSED,  /* its own rules ignore the reason (bosses), or it's already dying */
+  KILL_DELETED,        /* no Death component: deleted */
+  KILL_DELETE_REFUSED, /* the delete was refused (already going) */
+  KILL_NOT_ALLOWED,    /* Link, or no Death component and not an NPC or a thing */
+  KILL_GONE,           /* not in the actor manager any more */
+  KILL_UNKNOWN,        /* this game version's offsets aren't known */
+} actor_kill_t;
+actor_kill_t actor_kill(uintptr_t actor);
+
 /* the colours of the rectangles (nvn.c) */
 enum { EH_BACK, EH_FILL, EH_LOW, EH_TEXT, EH_NCOLORS };
 

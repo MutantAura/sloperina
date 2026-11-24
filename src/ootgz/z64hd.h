@@ -202,6 +202,13 @@ struct z64hd_build {
   /* GameData SetString16 (manager, const char *const *value, hash): queued like SetInt, what the AINB node
    * (Seq)OneShotSetNonStructGameDataString16 calls; title.c writes Sequence_EventResult with it (FINDINGS 9.26) */
   uint32_t gd_set_string16;
+  /* bool (void **death, u32 reason, u32 sub): a death request to an actor's Death component [[actor+0x270]+0x1C0],
+   * checked, what the AI node OneShotDeathRequestDeathToTargetActor calls; refused by the actor's own
+   * DeathReasonProcedures where it ignores the reason (bosses for FallIntoAbyss) (FINDINGS 9.27) */
+  uint32_t death_request;
+  /* bool (actor, u32 reason): the engine's request to delete an actor, what OneShotGenericDeleteThisActor calls
+   * (reason 0); takes the manager's lock itself (FINDINGS 9.27) */
+  uint32_t actor_delete;
   struct z64hd_link_path link_paths[5];
 };
 

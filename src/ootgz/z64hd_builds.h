@@ -182,6 +182,8 @@ static const struct z64hd_build z64hd_builds[] = {
     .action_main_slot = 0x1C0,
     .action_weapon_slot = 0x1C8,
     .action_id = 0x4C,
+    .death_request = 0x2CB69B0, /* 1.1.1 0x2D0A540, matched over 24 and 40 instructions (FINDINGS 9.27) */
+    .actor_delete = 0xC4FA0,    /* 1.1.1 0xA6490, matched over 32 and 64 instructions */
     .gd_set_string16 = 0xF83410, /* SetString16: 1.1.1 0xF69FF0, matched over 64 instructions (FINDINGS 9.26) */
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
@@ -306,6 +308,8 @@ static const struct z64hd_build z64hd_builds[] = {
     .action_main_slot = 0x1C0,
     .action_weapon_slot = 0x1C8,
     .action_id = 0x4C,
+    .death_request = 0x2D0A540, /* FINDINGS 9.27 */
+    .actor_delete = 0xA6490,
     .gd_set_string16 = 0xF69FF0, /* SetString16 (FINDINGS 9.26) */
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },

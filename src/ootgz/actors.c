@@ -412,3 +412,46 @@ bool actor_read(uintptr_t actor, actor_read_t *out)
   }
   return true;
 }
+
+/* --- killing one (debug > actors > kill, FINDINGS 9.27) ------------------------------------------ */
+
+#define COMPONENTS_DEATH 0x1C0
+#define DEATH_ACTOR 0x18           /* the Death component's actor */
+#define DEATH_FALL_INTO_ABYSS 8u   /* game__death DeathReason: what the void areas send */
+#define DELETE_AS_AI 0u            /* the delete reason OneShotGenericDeleteThisActor gives */
+
+typedef bool (*death_request_t)(uintptr_t *death, uint32_t reason, uint32_t sub);
+typedef bool (*actor_delete_t)(uintptr_t actor, uint32_t reason);
+
+/* deleted only if it has no Death component: an NPC or a thing, never Link, scenery, enemies' parts or the
+ * game's own system actors */
+static bool deletable(const char *name)
+{
+  return starts_with(name, "Npc_") || starts_with(name, "Obj_") || starts_with(name, "Item_");
+}
+
+actor_kill_t actor_kill(uintptr_t actor)
+{
+  actor_read_t a;
+  if (!z64hd_game || !z64hd_game->death_request || !z64hd_game->actor_delete)
+    return KILL_UNKNOWN;
+  if (!actor_read(actor, &a)) /* found again in the manager: still this actor */
+    return KILL_GONE;
+  if (actor == link_actor())
+    return KILL_NOT_ALLOWED;
+  uintptr_t components = readable(actor + ACTOR_COMPONENTS, 8) ? *(uintptr_t *)(actor + ACTOR_COMPONENTS) : 0;
+  uintptr_t death = readable(components + COMPONENTS_DEATH, 8) ? *(uintptr_t *)(components + COMPONENTS_DEATH) : 0;
+  if (death && readable(death, DEATH_ACTOR + 8) && in_main(*(uintptr_t *)death) &&
+      *(uintptr_t *)(death + DEATH_ACTOR) == actor) {
+    bool ok = MAIN_FN(death_request_t, z64hd_game->death_request)(&death, DEATH_FALL_INTO_ABYSS, 0);
+    log_printf("actors: death request (FallIntoAbyss) to %s %#lx: %s", a.name, (unsigned long)actor,
+               ok ? "taken" : "refused");
+    return ok ? KILL_DEATH : KILL_DEATH_REFUSED;
+  }
+  if (!deletable(a.name))
+    return KILL_NOT_ALLOWED;
+  bool ok = MAIN_FN(actor_delete_t, z64hd_game->actor_delete)(actor, DELETE_AS_AI);
+  log_printf("actors: delete request to %s %#lx (no Death component): %s", a.name, (unsigned long)actor,
+             ok ? "taken" : "refused");
+  return ok ? KILL_DELETED : KILL_DELETE_REFUSED;
+}

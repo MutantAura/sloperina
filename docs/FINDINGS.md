@@ -1883,7 +1883,7 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   param. The collision's user shape tag `Abyss` (bit 4, mask 0x10, PhiveConfig material presets `Floor_Abyss`,
   `Material_Sand_Abyss`, `Material_Metal_Spike_Abyss`) exists, but no code reading it was found yet.
 - Where a void-out puts Link back (`EventPlayerPostAbyss`, `main+0x26BA6F0`'s node) wasn't followed.
-### 9.26 Returning to the title screen (both builds; 1.0.0 addresses, 1.1.1 in brackets; not yet checked in game)
+### 9.26 Returning to the title screen (both builds; 1.0.0 addresses, 1.1.1 in brackets; checked in game on 1.0.0, 24th November 2026: the title screen, then Continue back into play)
 - **No call does it:** the game reaches its title screen by a state change of the sequence graph
   (`romfs/Sequence/FormalSequence.root.ainb`, read with the `ainb` package 0.2.17; 0.2.18 doesn't import). Its
   `Title` state (node 0, `Title.module`) is entered by the transition named `Title` of two states only: `PlusMenu`
@@ -1939,3 +1939,40 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - **Not used:** driving the pause screen (open it with `DebugParam.IsRequestedTransitionPlusMenu`, which
   `BeforeMinusMenu` clears, then pick System > Return to Title > Yes): it depends on the screens' cursors and
   animations.
+
+### 9.27 Killing an actor: the death request and the delete request (both builds; 1.1.1 addresses, 1.0.0 in brackets)
+- **The Death component** of an actor is `D = [[actor+0x270]+0x1C0]` (NULL where it has none); `D+0x18` is its actor.
+  Every death goes through `0x3A8BB0` [`0x3EF850`] `(D, u32 reason, u32 sub, bool internal) -> bool`: false if `D+0x2C`
+  bit 5 is set (rejects every reason), if the actor is already dying for an equal or higher reason, if the reason is
+  16 or more, or if the actor's `DeathReasonProcedures` table (`romfs/System/CombinationDataTableData/*
+  _game__death__DeathReasonProcedures`, chosen by its `Component/DeathParam`) has no cell for the reason or the cell
+  says `IsIgnoreThisDeathReason`. Otherwise it records the request (a compare-and-swap on `D+0x20`: made for callers
+  on other threads) and D's own update runs the procedure; an actor not running (state other than 4) with
+  RequestDelete or RequestFadeOutDelete is deleted at once.
+- **Reasons** (the reflected enum `game::death::DeathReason`, table `main+0x3EF8090` [`0x3E98BF0`]): 0 AI,
+  1 ChemicalCriticalHitFire, 2 Drowned, 3 Eaten, 4 PickedUp, 5 Exploded, 6 Burned, 7 Unequiped, 8 FallIntoAbyss,
+  9 PhysicsKinematicCollision, 10 LifeDepleted, 11 LifeCondition, 12 UpperCrushed, 13 SideCrushed, 14 Frozen,
+  15 AutoPlacementMgr. No plain "kill". The game always passes sub reason 0.
+- **Who sends one:** the void areas' node `HoldSensorHitInfoGiveAbyssActor` (a message, type `0x613B0000`, reason 8,
+  that D's update `0x3A88B0` passes on); the AI node `OneShotDeathRequestDeath` (on its own actor) and
+  `OneShotDeathRequestDeathToTargetActor`, which calls **`0x2D0A540` [`0x2CB69B0`] `(void **D, reason, sub) -> bool`**:
+  it checks D's type, then `0x3A8BB0(D, reason, sub, 0)`, synchronously, on another actor. 1.0.0's is the only
+  masked-signature match of 1.1.1's over 24 and 40 instructions.
+- **FallIntoAbyss** is what debug > actors > kill sends (actors.c, `actor_kill`): the default and enemy tables fade the
+  actor out and delete it, with no drop or death effect (the enemy table also clears its respawn flag), and the
+  tables that ignore it (the dungeon bosses, Bongo Bongo, Volvagia, Dead Hand's hand, Skull Kid, the club Moblin,
+  crack objects and some more: 18 of 112) refuse it, so their scripted deaths aren't skipped. LifeDepleted (the
+  real kill, with drops) is ignored by 1 table only, but 78 wait for the AI's signal, so with life not at 0 an enemy
+  might stay "dying"; Upper/SideCrushed would kill bosses outright. Not used.
+- **With no Death component** (most NPCs and props, all scenery and the game's system actors; about 139 of 341
+  Enemy_ packs have one, 161 of 997 Obj_, 32 of 379 Npc_, all Npc_Equipment*): the engine's delete request,
+  **`0xA6490` [`0xC4FA0`] `(actor, u32 reason) -> bool`**, what `OneShotGenericDeleteThisActor` calls with reason 0
+  (`OneShotGenericFarDeleteThisActor`: 3). False if the state is 7..11 or a delete was already asked for (`+0x30`
+  bit 16) or a per-actor mask forbids it; otherwise it sets that bit and queues the actor on the manager, taking
+  the manager's lock (`mgr+0x3C8`) itself when called from outside the actor system's threads. Unique match over
+  32 and 64 instructions. It skips everything a death does: no respawn flag, no drop, nothing counted as killed.
+  The mod only deletes Npc_, Obj_ and Item_ actors this way, never Link.
+- **Checked in game** (24th November 2026, Lichii): a Deku Baba (taken; state 7, then gone: about 180 frames on
+  1.1.1, under 800 on 1.0.0), the Deku Tree's spider web and its interactive part (taken, gone), Gohma (refused, on
+  1.1.1), a Kokiri (no Death component: deleted) on both builds; the game ran on normally after each. Not checked: a
+  room that opens once its enemies are dead, after one is killed this way.

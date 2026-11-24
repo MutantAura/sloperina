@@ -1,5 +1,6 @@
 /* debug > actors (actorsmenu.h): gz's actors menu for this game. The running actors near Link, nearest first,
- * read through actors.c when the menu is entered or refresh is chosen; one of them chosen with L, then gone to.
+ * read through actors.c when the menu is entered or refresh is chosen; one of them chosen with L, then gone to
+ * or killed (actor_kill: the game's death request, or its delete request for an NPC or thing with no death).
  *
  * The list is a copy: an actor in it may have gone since, so the chosen one is looked for again in the actor
  * manager (actor_read) every time it's shown or used, and is never touched once it isn't there. */
@@ -115,6 +116,37 @@ static void act_goto(menu_item_t *it)
   }
 }
 
+static void act_kill(menu_item_t *it)
+{
+  if (!chosen) {
+    gfx_notice("choose an actor first");
+    return;
+  }
+  switch (actor_kill(chosen)) {
+    case KILL_DEATH:
+      gfx_notice("killed");
+      break;
+    case KILL_DEATH_REFUSED:
+      gfx_notice("it won't die that way (a boss, or already dying)");
+      break;
+    case KILL_DELETED:
+      gfx_notice("deleted (it had no death of its own)");
+      break;
+    case KILL_DELETE_REFUSED:
+      gfx_notice("the game refused to delete it");
+      break;
+    case KILL_NOT_ALLOWED:
+      gfx_notice("not that one: it can't die, and only npcs and things are deleted");
+      break;
+    case KILL_GONE:
+      gfx_notice("that actor has gone");
+      break;
+    case KILL_UNKNOWN:
+      gfx_notice("kill: not known for this game version");
+      break;
+  }
+}
+
 static void text_count(menu_item_t *it, char *buf, int len)
 {
   if (!n_rows)
@@ -179,6 +211,9 @@ static void fill(void)
   item = menu_add_action(&m_actors, "go to", act_goto, 0);
   if (item)
     item->hint = "L: Link to the chosen actor (load position's way; the saved position stays)";
+  item = menu_add_action(&m_actors, "kill", act_kill, 0);
+  if (item)
+    item->hint = "L: the game's death request, as a fall into the void; npcs and things with none are deleted";
   menu_add_return(&m_actors);
   m_actors.pinned = 4; /* refresh, range, show and the count stay at the top */
   m_actors.pinned_end = m_actors.n_items - list_end; /* the chosen one, go to and return at the bottom */
@@ -187,7 +222,7 @@ static void fill(void)
 
 menu_t *actorsmenu_build(void)
 {
-  menu_init(&m_actors, "actors", ROWS + 12);
+  menu_init(&m_actors, "actors", ROWS + 13);
   fill();
   return &m_actors;
 }

@@ -14,7 +14,7 @@
 
 static bool menu_axis[3]; /* the menu's locks, by lock_axis_t */
 static bool hold;         /* a position load is settling */
-static bool no_void;      /* cheats > no void outs: the same word's PATCH_BIT_NO_VOID */
+static bool no_void;      /* link > no void outs: the same word's PATCH_BIT_NO_VOID */
 static char lock_map[64]; /* the map the menu's locks were set in */
 
 static bool same_str(const char *a, const char *b)

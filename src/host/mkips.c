@@ -13,6 +13,9 @@
  *                       lock_slot and runs the original stp, one single-value store (Y held: str d0 at +0x10,
  *                       X held: str d1 at +0x18) or nothing (both held). Then one stub per single store (Z,
  *                       collision): skips the store while its bit is set, else runs it. Each site becomes `b`.
+ *   NO_VOID_OFF         the void-out decision's stub (abyss_check, FINDINGS 9.25): returns at once while
+ *                       PATCH_BIT_NO_VOID is set at lock_slot, else runs the first instruction (pacibsp) and
+ *                       goes on. x16 is free at a function's entry (IP0). Its first instruction becomes `b`.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -33,6 +36,11 @@
 #define PAIR_INSNS  17 /* the X+Y store's stub: four ways to run it, one per lock state */
 #define PAIR_SIZE   (PAIR_INSNS * 4)
 #define MARKER_SIZE 16 /* OOTGZ_MARKER (8), the version (4), the revision (4) */
+#define NO_VOID_INSNS 6
+#define NO_VOID_SIZE  (NO_VOID_INSNS * 4)
+
+#define PACIBSP 0xD503237Fu /* the decision's first instruction in every build (checked with re64.py) */
+#define RET     0xD65F03C0u
 
 #define STP_X16_X17_PRE  0xA9BF47F0u /* stp x16, x17, [sp, #-16]! */
 #define LDP_X16_X17_POST 0xA8C147F0u /* ldp x16, x17, [sp], #16 */
@@ -182,6 +190,12 @@ int main(int argc, char **argv)
     fprintf(stderr, "invalid lock slot or code cave for %s\n", build->version);
     return 1;
   }
+  uint32_t no_void_at = build->cave_start + OOTGZ_NO_VOID_OFF;
+  if (build->abyss_check && ((build->lock_slot & 7) || !build->lock_slot || stores_at + stores_size > no_void_at ||
+                             no_void_at + NO_VOID_SIZE > build->cave_end)) {
+    fprintf(stderr, "no room for the no-void stub, or no lock slot, for %s\n", build->version);
+    return 1;
+  }
 
   uint8_t marker[MARKER_SIZE] = { 0 };
   memcpy(marker, OOTGZ_MARKER, 8);
@@ -271,6 +285,25 @@ int main(int argc, char **argv)
     put_le32(branch, insn_b(site_at, at));
     write_record(f, site_at, branch, sizeof(branch));
     at += STORE_SIZE;
+  }
+  if (build->abyss_check) {
+    uint32_t site_at = build->abyss_check;
+    uint32_t a = no_void_at;
+    uint32_t no_void_code[NO_VOID_INSNS] = {
+      insn_adrp(X16, a, build->lock_slot),
+      insn_ldr_x(X16, X16, build->lock_slot & 0xFFF),
+      insn_tbnz(X16, PATCH_BIT_NO_VOID, a + 8, a + 20), /* set: return before anything (LR not signed yet) */
+      PACIBSP,                                         /* the original first instruction */
+      insn_b(a + 16, site_at + 4),
+      RET,
+    };
+    uint8_t bytes[NO_VOID_SIZE];
+    for (int k = 0; k < NO_VOID_INSNS; k++)
+      put_le32(bytes + 4 * k, no_void_code[k]);
+    write_record(f, a, bytes, sizeof(bytes));
+    uint8_t branch[4];
+    put_le32(branch, insn_b(site_at, a));
+    write_record(f, site_at, branch, sizeof(branch));
   }
   fwrite("EEOF", 1, 4, f);
   if (fclose(f) != 0) {

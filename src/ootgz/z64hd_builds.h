@@ -116,6 +116,7 @@ static const struct z64hd_build z64hd_builds[] = {
      * manager, as in v131072. */
     .scene_mgr_ptr = 0x4E271E8,
     .safety_search = 0x9444A0,
+    .abyss_check = 0x818640, /* v131072's 0x82C510: the same code but for branch targets and its global's offsets */
     .event_state_ptr = 0x4E243E0,
     /* Found the same way (FINDINGS 9.8, 9.11): data through the code that loads it (v131072's loads matched, 9 to 12
      * each, all agreeing), functions by masked signature, vtables slot by slot. The ground map's record formats are
@@ -240,6 +241,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .ragdoll_controller = 0x5F88C0,
     .caption_mgr_ptr = 0x4E78E38,
     .caption_empty = 0xBB0010,
+    .abyss_check = 0x82C510,
     .caption_request = 0xF6DA40,
     .caption_update = 0x4E5420,
     .caption_empty_entry = 0xBAFF10,

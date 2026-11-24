@@ -188,6 +188,8 @@ static void set_lock_x(menu_item_t *it, bool on) { set_lock_axis(LOCK_X, on); }
 static void set_lock_y(menu_item_t *it, bool on) { set_lock_axis(LOCK_Y, on); }
 static void set_lock_z(menu_item_t *it, bool on) { set_lock_axis(LOCK_Z, on); }
 static bool get_ragdoll(menu_item_t *it) { return ragdoll_active(); }
+static bool get_no_void(menu_item_t *it) { return lock_no_void_is_set(); }
+static void set_no_void(menu_item_t *it, bool on) { lock_no_void_set(on); }
 static void set_ragdoll(menu_item_t *it, bool on) { ragdoll_set(on); }
 static bool get_tpose(menu_item_t *it) { return tpose_enabled(); }
 static void set_tpose(menu_item_t *it, bool on) { tpose_set(on); }
@@ -430,7 +432,7 @@ static void act_load_position(menu_item_t *it)
 
 static void build_link(void)
 {
-  menu_init(&m_link, "link", 20);
+  menu_init(&m_link, "link", 30);
   /* what can be changed first */
   menu_item_t *health = menu_add_number(&m_link, "health", get_health, set_health, max_health, fill_health, 0);
   if (health) {
@@ -474,6 +476,13 @@ static void build_link(void)
   }
   menu_item_t *tpose = menu_add_check(&m_link, "bomb t-pose", get_tpose, set_tpose, 0);
   if (tpose)
+  if (lock_no_void_available()) {
+    menu_item_t *no_void = menu_add_check(&m_link, "no void outs", get_no_void, set_no_void, 0);
+    if (no_void) {
+      no_void->hint = "the game never voids link out: he keeps falling instead";
+      no_void->log_label = "no void outs:";
+    }
+  }
     tpose->hint = "the ocarina breath glitch: Link t-poses running with a bomb; untick also clears the real one";
   if (hsstore_force_available()) { /* 1.0.0 only: hidden where the trick doesn't work */
     menu_item_t *hs_force = menu_add_check(&m_link, "force hookshot storage", get_hs_force, set_hs_force, 0);

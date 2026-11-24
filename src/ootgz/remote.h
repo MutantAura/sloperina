@@ -33,6 +33,10 @@
  *   place <x> <y> <z> [facing] Link to that spot of this map, facing that way (degrees, 0 = +z), as load position
  *                              moves him; wait some frames for it to settle
  *   actors [metres]            the running actors within that distance of Link (6 unless said), nearest first
+ *   title                      back to the game's title screen, the way Game Over's Quit leaves play (FINDINGS
+ *                              9.26): ok once the game runs the 30-frame event it leaves by, after which it fades
+ *                              to the title; err if it can't now (paused, a cutscene, a map loading...). What
+ *                              isn't saved is lost, as with the pause screen's Return to Title
  *   echo <text>                the text, into out.txt
  * A menu path is the names from the top menu down, "/" between them, any case ("cheats/infinite magic",
  * "scene/end cutscene"); "name#2" is the second item of that name, "@7" the menu's item number 7 (list shows

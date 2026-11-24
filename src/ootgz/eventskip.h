@@ -7,6 +7,9 @@
 
 bool eventskip_known(void);   /* this build's event layout is known */
 bool eventskip_running(void); /* an event is running */
+#define EVENTSKIP_NAME_MAX 64
+/* the name of the running event's current flow (its flowchart); false (out "") when none is known */
+bool eventskip_flow_name(char out[EVENTSKIP_NAME_MAX]);
 /* game thread: skip or cancel the running event; false if none runs or it couldn't be done */
 bool eventskip_start(void);
 /* game thread, once a frame: repeats a skip while the event (or the next one in its chain) still runs */

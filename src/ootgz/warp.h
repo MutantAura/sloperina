@@ -19,5 +19,8 @@ bool warp_pending(void);            /* requested or armed, not yet happened */
 bool warp_abandoned(void);          /* cancelled or timed out before Link left the map */
 /* the last warp_arm/warp_arm_silent went through the game's event (instant), not the exit fallback */
 bool warp_requested(void);
+/* Request the event `name` with no parameters, as the SeqOneShotRequestEvent node does (title.c); false if the
+ * game refused it (another event runs or is being started) */
+bool warp_request_event(const char *name);
 
 #endif

@@ -17,6 +17,7 @@
 #include "sdfs.h"
 #include "settings.h"
 #include "sys.h"
+#include "title.h"
 #include "warp.h"
 #include "watches.h"
 #include "z64hd.h"
@@ -55,6 +56,7 @@ static bool pause_waiting;          /* ... and until it holds the game */
 static int steps_left;              /* step: frames still to let through */
 static bool stepping;               /* ... and until the game is held again after them */
 static bool run_wanted, run_waiting; /* run: the same two */
+static bool title_waiting;          /* title: until the game has started the event or it failed */
 
 static int trace_left;               /* trace: frames it still reports */
 
@@ -869,6 +871,15 @@ static void run_line(char *line, bool held)
       run_wanted = true;
       run_waiting = true;
     }
+  } else if (same(verb, "title")) {
+    if (*args)
+      result(false, "title: nothing goes after it");
+    else if (held)
+      result(false, "title: the game is held (run first: the game has to start an event)");
+    else if ((problem = title_start()))
+      result(false, "title: %s", problem);
+    else
+      title_waiting = true; /* its result once the event runs, or not */
   } else if (same(verb, "input")) {
     problem = run_input(args);
     if (problem)
@@ -964,6 +975,14 @@ static bool waiting(bool held)
       return true;
     run_waiting = false;
     result(true, "running");
+  }
+  if (title_waiting) {
+    const char *text = "";
+    title_status_t now = title_status(&text);
+    if (now == TITLE_PENDING)
+      return true;
+    title_waiting = false;
+    result(now == TITLE_DONE, "title: %s", text);
   }
   return false;
 }

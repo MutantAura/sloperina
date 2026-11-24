@@ -182,6 +182,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .action_main_slot = 0x1C0,
     .action_weapon_slot = 0x1C8,
     .action_id = 0x4C,
+    .gd_set_string16 = 0xF83410, /* SetString16: 1.1.1 0xF69FF0, matched over 64 instructions (FINDINGS 9.26) */
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -305,6 +306,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .action_main_slot = 0x1C0,
     .action_weapon_slot = 0x1C8,
     .action_id = 0x4C,
+    .gd_set_string16 = 0xF69FF0, /* SetString16 (FINDINGS 9.26) */
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

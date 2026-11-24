@@ -26,6 +26,7 @@
 #include "memfile.h"
 #include "voidmap.h"
 #include "ragdoll.h"
+#include "title.h"
 #include "tpose.h"
 #include "hsstore.h"
 #include "remote.h"
@@ -362,6 +363,15 @@ static void act_end_cutscene(menu_item_t *it)
 {
   if (eventskip_start())
     menu_close(); /* so the skip can be watched */
+}
+
+static void act_return_to_title(menu_item_t *it)
+{
+  const char *problem = title_start();
+  if (problem)
+    gfx_notice(problem);
+  else
+    menu_close(); /* so the way out can be watched */
 }
 
 static void act_reload_map(menu_item_t *it)
@@ -2854,13 +2864,16 @@ static void build_scene(void)
 {
   build_savepos();
   build_voids();
-  menu_init(&m_scene, "scene", 11);
+  menu_init(&m_scene, "scene", 12);
   menu_item_t *reload = menu_add_action(&m_scene, "reload map", act_reload_map, 0);
   if (reload)
     reload->hint = "L: reload this map (at the age set in the link menu)";
   menu_item_t *end_cutscene = menu_add_action(&m_scene, "end cutscene", act_end_cutscene, 0);
   if (end_cutscene)
     end_cutscene->hint = "L: end the cutscene or event that's playing";
+  menu_item_t *to_title = menu_add_action(&m_scene, "return to title", act_return_to_title, 0);
+  if (to_title)
+    to_title->hint = "L: back to the title screen, as game over's quit does (what isn't saved is lost)";
   menu_add_heading(&m_scene, "collision");
   menu_add_submenu(&m_scene, "environment", &m_collision);
   menu_add_submenu(&m_scene, "void out", &m_voids);

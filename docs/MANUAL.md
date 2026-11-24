@@ -123,6 +123,7 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 |---|---|
 | **reload map** | Reloads the current map (at the age set in **link**). |
 | **end cutscene** | Ends the cutscene (or dialogue, chest opening or other event) that's playing. A played-back cutscene is skipped the way the game's own skip does; any other event is cancelled the way the game cancels one. Flags the rest of the event would have set aren't set, so it may play again. |
+| **return to title** | Back to the game's title screen, without the pause screen: the game plays a 30-frame event and leaves it the way Game Over > Quit does. Nothing is saved, so whatever isn't saved is lost, as with the pause screen's Return to Title. Not while the game is paused, in a cutscene or other event, loading a map, saving or in a game over. |
 | *collision* | |
 | **environment** | See below. |
 | **void out** | See [2.3.3](#233-void-out). |
@@ -633,6 +634,7 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | `trace <frames>` / `trace off` | A line for each of the next frames, without holding the script up: `<line> t y= vy= hs= x= z= hand= zr= paused= lock= ground= act= wpn=`. |
 | `actors [metres]` | The running actors within that distance of Link (6 unless said), nearest first, by the game's names. |
 | `place <x> <y> <z> [facing]` | Puts Link on that spot of this map as **load position** does (wait some frames for it). With a facing (degrees, 0 = +z) he is turned to it; without, he faces as he did. |
+| `title` | Goes back to the game's title screen, the way the game's own Game Over > Quit leaves play (as **scene > return to title**). `ok` once the game is running the short event it leaves by (30 frames, then it fades to the title); `err` with the reason if it can't now: the game paused or a menu of its own up, a cutscene or other event, a map loading, the game saving or loading, a game over, or the game held (`run` first). Whatever isn't saved is lost, as with the pause screen's Return to Title. |
 | `echo <text>` | Puts the text in `out.txt` (a marker). |
 | `id <word>` | The word that starts this script's lines in `out.txt` (otherwise `-`), to tell them from another's. |
 

@@ -167,6 +167,21 @@ static const struct z64hd_build z64hd_builds[] = {
     .global_random_ptr = 0x4C18260,
     .vt_timer_mgr = 0x4B3CEF8,
     .vt_minigame_mgr = 0x4B3C268,
+    /* remote control's player state (z64hd.h): structure offsets, the same as 1.1.1's. Checked in Lichii
+     * (24th November 2026): velocity against the position's change, on-ground and the action ids (40, 1, 33, 32,
+     * 65) through walk, fall, landing and ZL; lock 3 with nothing to target; hand, ZR and weapon read -1, -1 and 0
+     * on a save with no sword or items */
+    .link_velocity = 0x388,
+    .player_zr_item = 0x7D0,
+    .player_held_kind = 0x7D8,
+    .player_lock_state = 0x1C74,
+    .player_on_ground = 0x13D0,
+    .player_actions_1 = 0x18,
+    .player_actions_2 = 0x270,
+    .player_actions_3 = 0x188,
+    .action_main_slot = 0x1C0,
+    .action_weapon_slot = 0x1C8,
+    .action_id = 0x4C,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -278,6 +293,18 @@ static const struct z64hd_build z64hd_builds[] = {
     .global_random_ptr = 0x4C7DF08,
     .vt_timer_mgr = 0x4BA2148,
     .vt_minigame_mgr = 0x4BA14B8,
+    /* remote control's player state (z64hd.h), read in the running game */
+    .link_velocity = 0x388,
+    .player_zr_item = 0x7D0,
+    .player_held_kind = 0x7D8,
+    .player_lock_state = 0x1C74,
+    .player_on_ground = 0x13D0,
+    .player_actions_1 = 0x18,
+    .player_actions_2 = 0x270,
+    .player_actions_3 = 0x188,
+    .action_main_slot = 0x1C0,
+    .action_weapon_slot = 0x1C8,
+    .action_id = 0x4C,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

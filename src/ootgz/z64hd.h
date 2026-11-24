@@ -183,6 +183,22 @@ struct z64hd_build {
   uint32_t global_random_ptr;
   uint32_t vt_timer_mgr;
   uint32_t vt_minigame_mgr;
+  /* Link's state for remote control's status and trace (remote.c): his velocity (3 floats) at actor+link_velocity;
+   * in the player object ([[actor+0x270]+0x358]) the item on ZR and in hand (s32s), the lock-on state (2 with a
+   * target, 3 with none) and the on-ground flag (bit 0); his action table at [[[player+player_actions_1]
+   * +player_actions_2]+player_actions_3], whose main and weapon slots point at actions with their id at +action_id.
+   * Structure offsets, not main's. 0: not known for this build (status and trace print - or -1) */
+  uint32_t link_velocity;
+  uint32_t player_zr_item;
+  uint32_t player_held_kind;
+  uint32_t player_lock_state;
+  uint32_t player_on_ground;
+  uint32_t player_actions_1;
+  uint32_t player_actions_2;
+  uint32_t player_actions_3;
+  uint32_t action_main_slot;
+  uint32_t action_weapon_slot;
+  uint32_t action_id;
   struct z64hd_link_path link_paths[5];
 };
 

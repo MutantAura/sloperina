@@ -22,11 +22,17 @@
  *                              buttons and sticks for the game, on top of the controller: "A+ZL", "0x41" or
  *                              "-" for none; sticks -32767..32767; for 1 frame unless said (for 0: until the
  *                              next input line). "input off" ends it.
- *   status                     the frame, the map, where Link is and which way he faces (degrees, 0 = +z),
- *                              whether the game is held, the menu and the game's pause screen are open, the
- *                              warp's state
+ *   status                     the frame, the map, where Link is and which way he faces, how he moves (vy, hs:
+ *                              his speed up and across), what he holds and has on ZR, whether ZL has a target
+ *                              (lock: 2 yes, 3 no), whether he's on the ground, his main and weapon action ids,
+ *                              whether the game is held; vy to wpn come from the build's offsets (z64hd.h), "-"
+ *                              and -1 where it has none. vy and hs are the actor's velocity as the game last set
+ *                              it: it can keep a value while Link stands still (after a landing, for one)
+ *   trace <frames> | off       a line for each of the next frames: "<line> t y= vy= hs= x= z= hand= zr= paused=
+ *                              lock= ground= act= wpn="
  *   place <x> <y> <z> [facing] Link to that spot of this map, facing that way (degrees, 0 = +z), as load position
  *                              moves him; wait some frames for it to settle
+ *   actors [metres]            the running actors within that distance of Link (6 unless said), nearest first
  *   echo <text>                the text, into out.txt
  * A menu path is the names from the top menu down, "/" between them, any case ("cheats/infinite magic",
  * "scene/end cutscene"); "name#2" is the second item of that name, "@7" the menu's item number 7 (list shows

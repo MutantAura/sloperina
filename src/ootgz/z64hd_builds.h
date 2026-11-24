@@ -38,10 +38,8 @@ static const struct z64hd_build z64hd_builds[] = {
     .version = "1.0.0",
     .build_id = "33FA6C2C23848282A77E8B88A0A93F4887C55920",
     .revision = 65536,
-    /* the base game's item event returns from AddPouch without the separate notification; and remote control's
-     * player state (link_velocity to action_id) isn't found for 1.0.0 yet: its status and trace print - and -1 */
-    .absent = "pouch_notify pouch_notify_ptr "
-              "link_velocity player_zr_item player_held_kind player_lock_state player_on_ground player_actions_1 player_actions_2 player_actions_3 action_main_slot action_weapon_slot action_id",
+    /* the base game's item event returns from AddPouch without the separate notification */
+    .absent = "pouch_notify pouch_notify_ptr",
     .nnmain = 0x11C1FB0,
     .mod0 = 0x3BE705C,
     .cave_start = 0x3BE6A00,
@@ -168,6 +166,21 @@ static const struct z64hd_build z64hd_builds[] = {
     .global_random_ptr = 0x4C18260,
     .vt_timer_mgr = 0x4B3CEF8,
     .vt_minigame_mgr = 0x4B3C268,
+    /* remote control's player state (z64hd.h): structure offsets, the same as 1.1.1's. Checked in Lichii
+     * (24th November 2026): velocity against the position's change, on-ground and the action ids (40, 1, 33, 32,
+     * 65) through walk, fall, landing and ZL; lock 3 with nothing to target; hand, ZR and weapon read -1, -1 and 0
+     * on a save with no sword or items */
+    .link_velocity = 0x388,
+    .player_zr_item = 0x7D0,
+    .player_held_kind = 0x7D8,
+    .player_lock_state = 0x1C74,
+    .player_on_ground = 0x13D0,
+    .player_actions_1 = 0x18,
+    .player_actions_2 = 0x270,
+    .player_actions_3 = 0x188,
+    .action_main_slot = 0x1C0,
+    .action_weapon_slot = 0x1C8,
+    .action_id = 0x4C,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */

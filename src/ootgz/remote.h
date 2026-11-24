@@ -26,7 +26,8 @@
  *                              his speed up and across), what he holds and has on ZR, whether ZL has a target
  *                              (lock: 2 yes, 3 no), whether he's on the ground, his main and weapon action ids,
  *                              whether the game is held; vy to wpn come from the build's offsets (z64hd.h), "-"
- *                              and -1 where it has none (1.0.0)
+ *                              and -1 where it has none. vy and hs are the actor's velocity as the game last set
+ *                              it: it can keep a value while Link stands still (after a landing, for one)
  *   trace <frames> | off       a line for each of the next frames: "<line> t y= vy= hs= x= z= hand= zr= paused=
  *                              lock= ground= act= wpn="
  *   place <x> <y> <z> [facing] Link to that spot of this map, facing that way (degrees, 0 = +z), as load position

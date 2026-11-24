@@ -20,6 +20,7 @@
 #include "gameimage.h"
 #include "levitate.h"
 #include "lock.h"
+#include "novoid.h"
 #include "position.h"
 #include "quests.h"
 #include "savepos.h"
@@ -187,6 +188,15 @@ static void set_lock_axis(lock_axis_t axis, bool on)
 static void set_lock_x(menu_item_t *it, bool on) { set_lock_axis(LOCK_X, on); }
 static void set_lock_y(menu_item_t *it, bool on) { set_lock_axis(LOCK_Y, on); }
 static void set_lock_z(menu_item_t *it, bool on) { set_lock_axis(LOCK_Z, on); }
+static bool get_novoid(menu_item_t *it) { return novoid_enabled(); }
+static void set_novoid(menu_item_t *it, bool on)
+{
+  if (!novoid_available()) {
+    gfx_notice("ignore voids isn't available on this game version");
+    return;
+  }
+  novoid_set(on);
+}
 static bool get_ragdoll(menu_item_t *it) { return ragdoll_active(); }
 static void set_ragdoll(menu_item_t *it, bool on) { ragdoll_set(on); }
 static bool get_tpose(menu_item_t *it) { return tpose_enabled(); }
@@ -430,7 +440,7 @@ static void act_load_position(menu_item_t *it)
 
 static void build_link(void)
 {
-  menu_init(&m_link, "link", 20);
+  menu_init(&m_link, "link", 26);
   /* what can be changed first */
   menu_item_t *health = menu_add_number(&m_link, "health", get_health, set_health, max_health, fill_health, 0);
   if (health) {
@@ -467,6 +477,9 @@ static void build_link(void)
   menu_item_t *lock_z = menu_add_check(&m_link, "lock Z", get_lock_z, set_lock_z, 0);
   if (lock_z)
     lock_z->hint = "Hold Link's Z (map East/West) where he is; off after a map change";
+  menu_item_t *no_void = menu_add_check(&m_link, "ignore voids", get_novoid, set_novoid, 0);
+  if (no_void)
+    no_void->hint = "immune to void planes, out-of-bounds voids, lava, quicksand and crushers";
   menu_item_t *ragdoll = menu_add_check(&m_link, "ragdoll ({ragdoll})", get_ragdoll, set_ragdoll, 0);
   if (ragdoll) {
     ragdoll->hint = "knock Link over, as a bomb does; he gets up by himself";

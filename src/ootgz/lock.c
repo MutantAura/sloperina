@@ -14,6 +14,7 @@
 
 static bool menu_axis[3]; /* the menu's locks, by lock_axis_t */
 static bool hold;         /* a position load is settling */
+static uint64_t extra_flags; /* non-axis patch flags kept in lock_slot (e.g. LOCK_BIT_NO_VOID) */
 static char lock_map[64]; /* the map the menu's locks were set in */
 
 static bool same_str(const char *a, const char *b)
@@ -25,22 +26,36 @@ static bool same_str(const char *a, const char *b)
 
 static bool any_menu_lock(void) { return menu_axis[LOCK_X] || menu_axis[LOCK_Y] || menu_axis[LOCK_Z]; }
 
-bool lock_available(void) { return z64hd_game->pair != 0 && z64hd_game->lock_slot != 0; }
+bool lock_available(void) { return z64hd_game && z64hd_game->pair != 0 && z64hd_game->lock_slot != 0; }
 
 bool lock_is_set(lock_axis_t axis) { return menu_axis[axis]; }
 
 static void apply(void)
 {
+  if (!z64hd_game || !z64hd_game->lock_slot)
+    return;
   uint64_t word = 0;
   if (menu_axis[LOCK_X] || hold)
-    word |= 1u << LOCK_BIT_X;
+    word |= 1ull << LOCK_BIT_X;
   if (menu_axis[LOCK_Y] || hold)
-    word |= 1u << LOCK_BIT_Y;
+    word |= 1ull << LOCK_BIT_Y;
   if (menu_axis[LOCK_Z] || hold)
-    word |= 1u << LOCK_BIT_Z;
+    word |= 1ull << LOCK_BIT_Z;
   if (word)
-    word |= 1u << LOCK_BIT_COLLISION;
+    word |= 1ull << LOCK_BIT_COLLISION;
+  word |= extra_flags;
   *(volatile uint64_t *)MAIN(z64hd_game->lock_slot) = word;
+}
+
+void lock_flag_set(uint32_t bit, bool on)
+{
+  if (!z64hd_game || !z64hd_game->lock_slot || bit >= 64)
+    return;
+  if (on)
+    extra_flags |= 1ull << bit;
+  else
+    extra_flags &= ~(1ull << bit);
+  apply();
 }
 
 void lock_set(lock_axis_t axis, bool on)

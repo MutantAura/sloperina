@@ -1798,3 +1798,49 @@ and **safety flags** watches read it (`safety.c`).
 - A memfile restores GameData through the deserializer alone, so the manager kept its stages: loading one taken
   after Ganondorf into the castle collapse on a fresh boot left Zelda standing. memfile.c (quests_on_load) now
   does what the save load does after WorldMgr's and NaviMgr's on-load: the selected quest, `+0x73`, then `+0x72`.
+
+### 9.25 Voiding evaluation, abyss messages and void types (1.0.0; 1.1.1 in brackets; from the disassembly)
+Follows on from §9.8 (P = Link's player component `[[actor+0x270]+0x358]`).
+- **Central void evaluator:** `main+0x818640` [`main+0x82C510`] (`(P)`) is the sole function in the binary that writes
+  a non-zero `AbyssType` to P`+0x191C` (every other store — constructor, reset, `ExecutePlayerReactionPreAbyss` leave,
+  `ExecuteEventPlayerDrown` leave — zeroes it). It has only two callers:
+  - `SelectorPlayerSchedulerReaction` (`main+0x817D38` [`main+0x82BC08`]), which immediately tests `P+0x191C != 0`;
+  - `ExecuteEventPlayerDie`'s abyss check (`main+0x27832B0` [`main+0x27D4E50`]), which handles voiding while dying.
+- **All five void triggers** evaluated inside `main+0x818640` [`main+0x82C510`]:
+  1. **Deep lava (`AbyssType` 3):** walks the fluid contact list `[[actor+0x270]+0x198]` for entries of type `1`,
+     takes the maximum depth, and checks it against `LavaDamage_DeepDepth` (`+0x110` on fluid params via
+     `[[actor+0x270]+0x1B0]+0x140`, helper `main+0x818840` [`main+0x82C710`]).
+  2. **Quicksand / drifting sand (`AbyssType` 7):** P`+0x13D0` bit 7 (skipped when P`+0x7E8 == 2`); when P`+0x13D0`
+     bit 8 and P`+0x1C30` bit 6 (set by `HoldSensorHitInfoSendSandAbyss`, message `0x76910020`) are set, triggers once
+     P`+0x16A0 > DriftingSandAbyssTime` or P`+0x13E8` bit 4 is set.
+  3. **Abyss-tagged collision floors (`AbyssType` 1):** P`+0x13E8` bit 4 (unless P`+0x13FB` bit 2 is set; presets
+     `Floor_Abyss`, `Material_Sand_Abyss`, `Material_Metal_Spike_Abyss`).
+  4. **Abyss / crusher messages (`AbyssType` 1, 4, 5, 8, 9):** P`+0x28` bit 2 (`0x04`); sub-bits 3..6 select
+     `AbyssType` 4 (`0x08`, upper crush), 5 (`0x10`, side crush), 8 (`0x20`, whirlpools), 9 (`0x40`, mountain), or
+     default 1.
+  5. **Voxel ground map (`AbyssType` 1):** P`+0x13D0` bits 19 (`0x80000`, deadly cell or >5 units outside probe box)
+     and 25 (`0x2000000`, probe A missed and probe C ≥ 8.0 units away horizontally), tested together as
+     `P+0x13D2 & 0x208`.
+  When triggered, it also mirrors `AbyssType` to a global record (`[[[main+0x4C19FD8]]+0x1DA8/+0x1DAC]`
+  [`[[[main+0x4C7FC80]]+0x2B30/+0x2B34]`]). P`+0x1C38` bit 5 (read by `QueryIsPlayerAbyssForEvent`) is derived
+  directly from `P+0x191C != 0` (`1.1.1: main+0x482540`).
+- **Reaction and death routing:** in `SelectorPlayerSchedulerReaction`, `P+0x191C != 0` clears P`+0x28` bits 2..6
+  (`& ~0x7C`) and checks whether Link's health is at or below the void penalty (4 quarter-hearts, or 2 with double
+  defense; `1.1.1: main+0x2B37280`). If he survives, it selects `PreAbyss`, which starts `DmF_SY_FallDown`
+  (`ExecuteEventPlayerAbyss` / `ExecuteEventPlayerDrown`); if fatal, it selects `PreDie` and maps `AbyssType` 1..9 to
+  death reason P`+0x1BE0` via a 9-entry table (`1.1.1: main+0x3EEDEF0`: 1→3, 2→1, 3→4, 4→6, 5→7, 6→1, 7→5, 8→8, 9→3).
+- **Void-plane and crusher messages (`0x613B0000` / `0x613B0001`):** `HoldSensorHitInfoGiveAbyssActor`
+  (`main+0x318CD74` [`main+0x31E4614`]), `HoldSensorHitInfoGiveAbyssActorCondition`, and
+  `ExecuteUpDownLiftDeathCheckAndRequest` send message `0x613B0000` with cause `8` (`FallIntoAbyss`, optional sub-type
+  `0x11` whirlpools or `0x12` mountain), `12` (`0xC`, upper crush), or `13` (`0xD`, side crush).
+  `PlayerComponent::onMessage` (`main+0x2E2B2B0` [`main+0x2E7FFB0`], abyss branch `main+0x2E2BB90` [`main+0x2E80890`],
+  ignore return `main+0x2E2B914` [`main+0x2E80614`]) records the message in P`+0x974..0x984` (cleared at frame end),
+  sets P`+0x1C34` bit 4 and copies the backup restart point P`+0x18B4` to AutoSaveMgr slot B, sets P`+0x28` bit 31 if
+  an event is running (read by `QueryGenericCheckStateAbyss`), and sets P`+0x28` bits 2..6 for causes `8`, `12`, `13`.
+- **Horse (Epona):** `SelectorHorseRoot` (`main+0x2AD0FD0` [`main+0x2B24290`], cause check at `main+0x2AD102C`
+  [`main+0x2B242EC`], non-abyss continuation `main+0x2AD10A0` [`main+0x2B24360`]) separately listens for `0x613B0000`
+  cause `8`, flagging `[horse+0x1B8] |= 2` when ridden or branching to its own abyss child when unridden.
+- **Coordinate bounds and restart-point consumers:** P`+0x13D0` bit 11 (`|x| > 5000`, `y < -3000`, `y > 5000`,
+  `|z| > 4000`) only suppresses restart-point updates (§9.7) and does not trigger a void. The restart-point getter
+  (`1.1.1: main+0x30170E0`) has only four callers across `ExecuteEventPlayerAbyss`, `ExecuteEventPlayerDrown`, and
+  `ExecuteEventPlayerWarpSafePos` (besides direct reads in `ExecutePlayerUseWarpItem`).

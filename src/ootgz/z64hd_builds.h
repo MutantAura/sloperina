@@ -166,6 +166,12 @@ static const struct z64hd_build z64hd_builds[] = {
     .global_random_ptr = 0x4C18260,
     .vt_timer_mgr = 0x4B3CEF8,
     .vt_minigame_mgr = 0x4B3C268,
+    /* void checks (FINDINGS 9.8 / 9.25): identical instruction layout to 1.1.1 */
+    .void_check_abyss = 0x818640,
+    .void_msg_abyss = 0x2E2BB90,
+    .void_msg_reject = 0x2E2B914,
+    .void_horse_abyss = 0x2AD102C,
+    .void_horse_skip = 0x2AD10A0,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -276,6 +282,12 @@ static const struct z64hd_build z64hd_builds[] = {
     .global_random_ptr = 0x4C7DF08,
     .vt_timer_mgr = 0x4BA2148,
     .vt_minigame_mgr = 0x4BA14B8,
+    /* void checks (FINDINGS 9.8 / 9.25) */
+    .void_check_abyss = 0x82C510,
+    .void_msg_abyss = 0x2E80890,
+    .void_msg_reject = 0x2E80614,
+    .void_horse_abyss = 0x2B242EC,
+    .void_horse_skip = 0x2B24360,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

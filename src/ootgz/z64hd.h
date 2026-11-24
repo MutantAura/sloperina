@@ -28,6 +28,7 @@ struct z64hd_pair {
 #define LOCK_BIT_Y         1u /* body Y (height) */
 #define LOCK_BIT_Z         2u /* body Z (horizontal) */
 #define LOCK_BIT_COLLISION 3u /* the collision resolver's two stores; set whenever an axis is held */
+#define LOCK_BIT_NO_VOID   4u /* ignore void planes and void states (novoid.c) */
 
 /* One entry per supported game build (z64hd_builds.h). Every offset below is meant to be filled in for every
  * build: a feature reads its offsets from the running build's entry and stays off where one is 0, so a gap would
@@ -179,6 +180,15 @@ struct z64hd_build {
   uint32_t global_random_ptr;
   uint32_t vt_timer_mgr;
   uint32_t vt_minigame_mgr;
+  /* Void-out checks patched by mkips (novoid.c, gated by LOCK_BIT_NO_VOID in lock_slot):
+   *   void_check_abyss: central void evaluator (sets PlayerComponent+0x191C AbyssType)
+   *   void_msg_abyss / void_msg_reject: PlayerComponent::onMessage 0x613B0000/1 branch & ignore return
+   *   void_horse_abyss / void_horse_skip: SelectorHorseRoot cause==8 check & non-abyss continuation */
+  uint32_t void_check_abyss;
+  uint32_t void_msg_abyss;
+  uint32_t void_msg_reject;
+  uint32_t void_horse_abyss;
+  uint32_t void_horse_skip;
   struct z64hd_link_path link_paths[5];
 };
 

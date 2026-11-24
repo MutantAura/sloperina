@@ -32,10 +32,22 @@
 #define STORE_SIZE  (STORE_INSNS * 4)
 #define PAIR_INSNS  17 /* the X+Y store's stub: four ways to run it, one per lock state */
 #define PAIR_SIZE   (PAIR_INSNS * 4)
+#define VOID_CHECK_INSNS  10 /* check_abyss stub: skips evaluation and clears P+0x28 bits 2..6 & P+0x191C */
+#define VOID_CHECK_SIZE   (VOID_CHECK_INSNS * 4)
+#define VOID_BRANCH_INSNS 6  /* onMessage / SelectorHorseRoot stub: redirects to skip target when bit set */
+#define VOID_BRANCH_SIZE  (VOID_BRANCH_INSNS * 4)
 #define MARKER_SIZE 16 /* OOTGZ_MARKER (8), the version (4), the revision (4) */
 
-#define STP_X16_X17_PRE  0xA9BF47F0u /* stp x16, x17, [sp, #-16]! */
-#define LDP_X16_X17_POST 0xA8C147F0u /* ldp x16, x17, [sp], #16 */
+#define STP_X16_X17_PRE     0xA9BF47F0u /* stp x16, x17, [sp, #-16]! */
+#define LDP_X16_X17_POST    0xA8C147F0u /* ldp x16, x17, [sp], #16 */
+#define PACIBSP_INSN        0xD503237Fu /* pacibsp */
+#define LDR_W16_X0_28       0xB9402810u /* ldr w16, [x0, #0x28] */
+#define AND_W16_CLEAR_ABYSS 0x12196A10u /* and w16, w16, #0xffffff83 (clear bits 2..6) */
+#define STR_W16_X0_28       0xB9002810u /* str w16, [x0, #0x28] */
+#define STR_WZR_X0_191C     0xB9191C1Fu /* str wzr, [x0, #0x191c] */
+#define RET_INSN            0xD65F03C0u /* ret */
+#define LDRB_W8_X19_974     0x3965D268u /* ldrb w8, [x19, #0x974] */
+#define CMP_W8_8            0x7100211Fu /* cmp w8, #8 */
 
 /* --- AArch64 instruction encodings --------------------------------------------------------- */
 
@@ -177,8 +189,11 @@ int main(int argc, char **argv)
   }
   uint32_t stores_at = build->cave_start + OOTGZ_STORES_OFF;
   uint32_t stores_size = (build->pair ? PAIR_SIZE : 0) + build->store_count * STORE_SIZE;
-  if ((build->pair || build->store_count) &&
-      ((build->lock_slot & 7) || stores_at + stores_size > build->cave_end)) {
+  uint32_t void_size = (build->void_check_abyss ? VOID_CHECK_SIZE : 0) +
+                       (build->void_msg_abyss && build->void_msg_reject ? VOID_BRANCH_SIZE : 0) +
+                       (build->void_horse_abyss && build->void_horse_skip ? VOID_BRANCH_SIZE : 0);
+  if ((build->pair || build->store_count || void_size) &&
+      ((build->lock_slot & 7) || stores_at + stores_size + void_size > build->cave_end)) {
     fprintf(stderr, "invalid lock slot or code cave for %s\n", build->version);
     return 1;
   }
@@ -271,6 +286,70 @@ int main(int argc, char **argv)
     put_le32(branch, insn_b(site_at, at));
     write_record(f, site_at, branch, sizeof(branch));
     at += STORE_SIZE;
+  }
+  if (build->void_check_abyss) {
+    uint32_t site_at = build->void_check_abyss;
+    uint32_t skip = at + 5 * 4;
+    uint32_t vcode[VOID_CHECK_INSNS] = {
+      insn_adrp(X16, at, build->lock_slot),
+      insn_ldr_x(X16, X16, build->lock_slot & 0xFFF),
+      insn_tbnz(X16, LOCK_BIT_NO_VOID, at + 8, skip),
+      PACIBSP_INSN,
+      insn_b(at + 16, site_at + 4),
+      LDR_W16_X0_28,
+      AND_W16_CLEAR_ABYSS,
+      STR_W16_X0_28,
+      STR_WZR_X0_191C,
+      RET_INSN,
+    };
+    uint8_t bytes[VOID_CHECK_SIZE];
+    for (int k = 0; k < VOID_CHECK_INSNS; k++)
+      put_le32(bytes + 4 * k, vcode[k]);
+    write_record(f, at, bytes, sizeof(bytes));
+    uint8_t branch[4];
+    put_le32(branch, insn_b(site_at, at));
+    write_record(f, site_at, branch, sizeof(branch));
+    at += VOID_CHECK_SIZE;
+  }
+  if (build->void_msg_abyss && build->void_msg_reject) {
+    uint32_t site_at = build->void_msg_abyss;
+    uint32_t reject = at + 5 * 4;
+    uint32_t vcode[VOID_BRANCH_INSNS] = {
+      insn_adrp(X16, at, build->lock_slot),
+      insn_ldr_x(X16, X16, build->lock_slot & 0xFFF),
+      insn_tbnz(X16, LOCK_BIT_NO_VOID, at + 8, reject),
+      LDRB_W8_X19_974,
+      insn_b(at + 16, site_at + 4),
+      insn_b(reject, build->void_msg_reject),
+    };
+    uint8_t bytes[VOID_BRANCH_SIZE];
+    for (int k = 0; k < VOID_BRANCH_INSNS; k++)
+      put_le32(bytes + 4 * k, vcode[k]);
+    write_record(f, at, bytes, sizeof(bytes));
+    uint8_t branch[4];
+    put_le32(branch, insn_b(site_at, at));
+    write_record(f, site_at, branch, sizeof(branch));
+    at += VOID_BRANCH_SIZE;
+  }
+  if (build->void_horse_abyss && build->void_horse_skip) {
+    uint32_t site_at = build->void_horse_abyss;
+    uint32_t skip = at + 5 * 4;
+    uint32_t vcode[VOID_BRANCH_INSNS] = {
+      insn_adrp(X16, at, build->lock_slot),
+      insn_ldr_x(X16, X16, build->lock_slot & 0xFFF),
+      insn_tbnz(X16, LOCK_BIT_NO_VOID, at + 8, skip),
+      CMP_W8_8,
+      insn_b(at + 16, site_at + 4),
+      insn_b(skip, build->void_horse_skip),
+    };
+    uint8_t bytes[VOID_BRANCH_SIZE];
+    for (int k = 0; k < VOID_BRANCH_INSNS; k++)
+      put_le32(bytes + 4 * k, vcode[k]);
+    write_record(f, at, bytes, sizeof(bytes));
+    uint8_t branch[4];
+    put_le32(branch, insn_b(site_at, at));
+    write_record(f, site_at, branch, sizeof(branch));
+    at += VOID_BRANCH_SIZE;
   }
   fwrite("EEOF", 1, 4, f);
   if (fclose(f) != 0) {

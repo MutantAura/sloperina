@@ -4,6 +4,7 @@
 #define LOCK_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef enum { LOCK_X, LOCK_Y, LOCK_Z } lock_axis_t;
 
@@ -11,6 +12,7 @@ bool lock_available(void);             /* the build has the store stubs (z64hd_b
 bool lock_is_set(lock_axis_t axis);
 void lock_set(lock_axis_t axis, bool on);
 void lock_hold_set(bool on);
+void lock_flag_set(uint32_t bit, bool on); /* set/clear a non-axis bit in lock_slot (e.g. LOCK_BIT_NO_VOID) */
 void lock_frame(void);                 /* the menu's locks let go when the map changes */
 
 #endif

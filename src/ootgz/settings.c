@@ -40,6 +40,7 @@
 #include "airwall.h"
 #include "savepos.h"
 #include "voidmap.h"
+#include "novoid.h"
 #include "hsstore.h"
 #include "flaglog.h"
 #include "savebackup.h"
@@ -142,6 +143,7 @@ typedef struct {
   int32_t flag_log_status;
   int32_t flag_log_story;
   int32_t hook_shown;
+  int32_t ignore_voids;
   uint32_t binds[CMD_COUNT]; /* binds.h */
   char archive_folder[SAVE_FOLDER_LEN]; /* where archive now puts them (savebackup.h) */
 } snapshot_t;
@@ -231,6 +233,7 @@ static snapshot_t take_snapshot(void)
   s.flag_log_status = flaglog_status_enabled;
   s.flag_log_story = flaglog_story_enabled;
   s.hook_shown = hsstore_shown;
+  s.ignore_voids = novoid_enabled();
   return s;
 }
 
@@ -332,6 +335,7 @@ static void apply_snapshot(const snapshot_t *s)
   flaglog_status_enabled = s->flag_log_status != 0;
   flaglog_story_enabled = s->flag_log_story != 0;
   hsstore_shown = s->hook_shown != 0;
+  novoid_set(s->ignore_voids != 0);
 }
 
 /* --- reading the file ------------------------------------------------------------------------- */
@@ -434,6 +438,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("flag_log_player_status", flag_log_status),
   INT_KEY("flag_log_story", flag_log_story),
   INT_KEY("hookshot_hook_shown", hook_shown),
+  INT_KEY("ignore_voids", ignore_voids),
 };
 #define N_INT_KEYS (sizeof(int_keys) / sizeof(*int_keys))
 
@@ -677,7 +682,8 @@ static void save_settings_file(const snapshot_t *s)
                   (int)s->voidmap_xray, (int)s->voidmap_areas, (int)s->input_attach, s->archive_folder,
                   (int)s->system_keyboard);
   if (n < (int)sizeof(buf))
-    n += snprintf(buf + n, sizeof(buf) - n, "save_backup_hard_numbered=%d\n", (int)s->save_backup_numbered);
+    n += snprintf(buf + n, sizeof(buf) - n, "save_backup_hard_numbered=%d\nignore_voids=%d\n",
+                  (int)s->save_backup_numbered, (int)s->ignore_voids);
   for (int c = 0; c < CMD_COUNT && n < (int)sizeof(buf); c++) {
     char name[48];
     bind_name(s->binds[c], name, sizeof(name));

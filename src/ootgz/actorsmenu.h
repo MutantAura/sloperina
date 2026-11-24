@@ -1,4 +1,5 @@
-/* debug > actors: the running actors near Link, nearest first (gz's actors menu); choose one, then go to it or kill it. */
+/* debug > actors: the running actors near Link, nearest first (gz's actors menu); choose one, then go to it, copy it or kill
+ * it; browse every actor in the scene by kind; spawn any enemy, npc, object or item by name. */
 #ifndef ACTORSMENU_H
 #define ACTORSMENU_H
 

@@ -13,11 +13,13 @@
  * for the current life at +0x1C10 and the max at +0x1C18 (QueryActorLife reads exactly these). */
 #include "enemyhp.h"
 
+#include <string.h>
+
 #include "link.h"
 #include "sys.h"
 #include "z64hd.h"
 
-float sqrtf(float x); /* from sdk */
+float sqrtf(float x), sinf(float x), cosf(float x); /* from sdk */
 
 #define MGR_TREE_ROOT 0x38
 #define NODE_LEFT 0x00
@@ -496,4 +498,50 @@ actor_kill_t actor_kill(uintptr_t actor)
   log_printf("actors: delete request to %s %#lx (no Death component): %s", a.name, (unsigned long)actor,
              ok ? "taken" : "refused");
   return ok ? KILL_DELETED : KILL_DELETE_REFUSED;
+}
+
+/* --- making one (debug > actors > spawn, FINDINGS 9.29) ------------------------------------------- */
+
+#define CREATE_POS 1u
+#define CREATE_ROT 2u
+#define CREATE_QUEUE 0u /* as the game's own air-wall spawner (1.1.1) */
+
+typedef struct {             /* the create request's argument, 0xA0 bytes */
+  float pos[3];              /* +0x00 */
+  float rot[9];              /* +0x0C, 3x3 by rows, as the actor's at +0x328 */
+  float scale[3];            /* +0x30, with flag 4 only */
+  uint32_t pad3c;
+  const char *instance_name; /* +0x40: never NULL */
+  uint8_t opt[0x50];         /* +0x48: links, overrides, heap: none */
+  uint8_t flags;             /* +0x98: CREATE_POS, CREATE_ROT */
+  uint8_t pad[7];
+} actor_create_arg_t;
+_Static_assert(sizeof(actor_create_arg_t) == 0xA0, "the create argument is 0xA0 bytes");
+
+typedef bool (*actor_create_t)(uintptr_t mgr, const char *const *name, const actor_create_arg_t *arg,
+                               uintptr_t *handle, uint32_t queue, uintptr_t preloaded, uintptr_t tmpl, uintptr_t cb,
+                               bool flag, uint32_t *result, uintptr_t *out_param);
+
+bool actor_spawn(const char *name, const float pos[3], float yaw_degrees, uint32_t *result)
+{
+  *result = ~0u;
+  if (!z64hd_game || !z64hd_game->actor_create || !z64hd_game->actor_create_mgr_ptr || !name || !*name)
+    return false;
+  uintptr_t mgr = sys_ptr(MAIN(z64hd_game->actor_create_mgr_ptr));
+  if (!readable(mgr, 0x110))
+    return false;
+  float a = yaw_degrees * (3.14159265f / 180.0f), s = sinf(a), c = cosf(a);
+  actor_create_arg_t arg;
+  memset(&arg, 0, sizeof(arg));
+  arg.pos[0] = pos[0], arg.pos[1] = pos[1], arg.pos[2] = pos[2];
+  const float rot[9] = { c, 0, s, 0, 1, 0, -s, 0, c }; /* a turn about Y */
+  memcpy(arg.rot, rot, sizeof(rot));
+  arg.instance_name = "";
+  arg.flags = CREATE_POS | CREATE_ROT;
+  const char *the_name = name;
+  bool ok = MAIN_FN(actor_create_t, z64hd_game->actor_create)(mgr, &the_name, &arg, 0, CREATE_QUEUE, 0, 0, 0, false,
+                                                             result, 0);
+  log_printf("actors: create request %s at %.2f %.2f %.2f: %s (result %u)", name, (double)pos[0], (double)pos[1],
+             (double)pos[2], ok ? "queued" : "refused", (unsigned)*result);
+  return ok;
 }

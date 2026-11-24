@@ -1976,3 +1976,43 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   1.1.1, under 800 on 1.0.0), the Deku Tree's spider web and its interactive part (taken, gone), Gohma (refused, on
   1.1.1), a Kokiri (no Death component: deleted) on both builds; the game ran on normally after each. Not checked: a
   room that opens once its enemies are dead, after one is killed this way.
+
+### 9.28 Moving an actor: the warp requests, and why fetch was dropped (1.1.1 addresses, 1.0.0 in brackets)
+- **Tried for debug > actors > fetch** (the chosen actor to Link), not kept. The AI nodes that teleport actors
+  (`OneShotWarpToHomeMatrix`, `OneShotWarpNpcFairyToTagetPosAndRot`, `OneShotPoeWarpTo`; a node's execute is the
+  vtable entry 0xA0 bytes after its name function's) go through **`0xC6FB30` [`0xC35500`] `(actor, const float m[12],
+  bool)`**: m is 3x4 by rows, the position in the fourth column. It calls the physics body's warp
+  **`0x4C6630` [`0x665790`] `(physics [[actor+0x270]+0x50], const float pos[3], const float rot[9], bool)`** (NaN in
+  `[0]`: keep that part as it is; the actor is `[physics+0x38]`): it stores the matrix at `[physics+0x20]+0x1D0` and
+  sets bits 0 and 1 of `[physics+0x20]+0x228` (pending). Only if that returns false does `0xC6FD60` write the actor's
+  own request (position `+0x358`, rotation `+0x364`, clearing bit 15 of `+0x4A8`). The actor's rotation is 3x3 by rows
+  at `+0x328`, after its position at `+0x31C`. Both matched uniquely over 24, 40 and 64 instructions.
+- **In game** (1.1.1, 24th November 2026): taken every time, but nothing moved. A gossip stone (static), a Kokiri
+  (40 m away, its AI schedule), a Deku Baba and a Skullwalltula (their AI): `+0x31C` stayed put and the body's
+  pending bits stayed set for good (logged for 40 frames). So the physics only applies a warp to bodies it steps
+  freely; one left pending could fire later, which is why fetch isn't offered. Not tried: loose things (items,
+  pots, bombs), which may be the ones it works for.
+
+### 9.29 Making an actor: the create request (both builds; 1.1.1 addresses, 1.0.0 in brackets)
+- **The call:** **`0x372A70` [`0x97FEB0`] `(mgr, const char *const *name, const arg *, handle *, u32 queue, 0, 0, 0,
+  false, u32 *result, 0) -> bool`**, on the manager `sys_ptr(main+0x4E91888)` [`0x4E21428`] (not the actor tree's
+  manager). It's what the AI node `ExecuteGenericRequestCreateActor` calls (vtable `0x49A0818`, Enter `0x26E62B0`); in
+  1.1.1 the game also makes `FldObj_AirWall_Player_GenerateNavMesh_Dynamic` this way with no handle and queue 0,
+  which is how debug > actors calls it. 1.0.0's: unique masked-signature match over 24 and 48 instructions (the whole
+  function, 826 instructions, differs only in addresses); its manager slot from the matched caller, 0x70460 below.
+- **The argument** (0xA0 bytes, zeroed): position `+0x00`, rotation 3x3 by rows `+0x0C`, scale `+0x30` (with flag 4),
+  instance name `+0x40` (never NULL: `""`), flags `+0x98` (1 position, 2 rotation, 4 scale). The rest (links,
+  overrides, a heap) stays 0, so a made actor has none of a placed one's map data.
+- **What it does:** finds or makes the name's template from `RSDB/ActorInfo` (resident), asks for
+  `Pack/Actor/<name>.pack` itself (asynchronously, shared with any copy already loaded), and queues the request for
+  the actor workers. So any actor with a pack can be made on any map. The result code: 0 queued, 1 the manager isn't
+  taking any (a map change), 2 no name, 3 no template, 4 setup failed, 5 no pack name, 6 no heap, 7 and 8 out of
+  memory. A name with no ActorInfo row takes a template slot for good, so spawn by name only offers the 1856 enemies,
+  NPCs, objects and items both versions have a pack for (`tools/actornames.py` writes `src/ootgz/actornames.c` from
+  the dumps' romfs).
+- **Checked in game** (24th November 2026, Lichii): a copy of a guidepost in Kokiri Forest (1.1.1), of a Deku Baba in
+  the Deku Tree (1.1.1: running, life 2/2, killed by debug > actors > kill), and an Armos (`Enemy_Amos`, whose pack
+  Kokiri Forest doesn't load) in Kokiri Forest on both builds: each in the actor tree 10 frames after the request,
+  running, life 1/1. Not checked: what a made actor does without its placement data (NPCs with event flows, doors,
+  bosses), whether made actors go with a map change, and memory limits after many.
+

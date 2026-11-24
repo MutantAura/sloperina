@@ -65,6 +65,11 @@ typedef enum {
 } actor_kill_t;
 actor_kill_t actor_kill(uintptr_t actor);
 
+/* actors.c: ask the game to make an actor by name at pos, turned yaw degrees about Y (FINDINGS 9.29): the actor
+ * manager's create request, which loads its pack itself; it appears some frames later, or not (no handle is
+ * kept). False, with the game's result code, if the request wasn't queued. Game thread, while the game runs. */
+bool actor_spawn(const char *name, const float pos[3], float yaw_degrees, uint32_t *result);
+
 /* the colours of the rectangles (nvn.c) */
 enum { EH_BACK, EH_FILL, EH_LOW, EH_TEXT, EH_NCOLORS };
 

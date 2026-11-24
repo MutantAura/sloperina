@@ -3,8 +3,9 @@
  * The menu itself: the running actors near Link, nearest first, read through actors.c when the menu is entered or
  * refresh is chosen. browse: every actor in the actor manager, any state, in folders by kind (with their counts),
  * filtered by a piece of their names; a folder groups its actors under their names, or sorts them by distance.
- * In either list L chooses an actor, which can then be gone to or killed (actor_kill: the game's death request, or
- * its delete request for an NPC or thing with no death).
+ * In either list L chooses an actor, which can then be gone to, copied (actor_spawn: the game's create request) or
+ * killed (actor_kill: the game's death request, or its delete request for an NPC or thing with no death). spawn by
+ * name makes any enemy, NPC, object or item the game has a pack for (actornames.c), loading it if it must.
  *
  * The lists are copies: an actor in them may have gone since, so the chosen one is looked for again in the actor
  * manager (actor_read) every time it's shown or used, and is never touched once it isn't there. */
@@ -13,8 +14,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "actornames.h"
 #include "enemyhp.h"
 #include "gfx.h"
+#include "link.h"
 #include "osk.h"
 #include "position.h"
 #include "sys.h"
@@ -26,7 +29,7 @@
 #define FOLDER_HEADS 60  /* ... and its names over them */
 #define FILTER_MAX 31
 
-static menu_t m_actors, m_browse, m_folder;
+static menu_t m_actors, m_browse, m_folder, m_spawn;
 
 static const char *const range_names[] = { "5 m", "10 m", "20 m", "50 m", "100 m" };
 static const float ranges[] = { 5, 10, 20, 50, 100 };
@@ -150,6 +153,76 @@ static void act_kill(menu_item_t *it)
   }
 }
 
+/* spawn: one more of the chosen actor's name, then watched for in the actor tree until it appears */
+#define SPAWN_AHEAD 2.0     /* metres in front of Link */
+#define SPAWN_WAIT 600      /* frames to look for it (its pack may have to load) */
+#define SPAWN_COUNT_MAX 128
+
+float atan2f(float y, float x); /* from sdk */
+
+static struct {
+  char name[64];
+  int frames, before;
+} spawning;
+static uintptr_t spawn_found[SPAWN_COUNT_MAX];
+
+/* the game asked to make `name` in front of Link, facing him; watched for by spawn_frame */
+static void spawn_named(const char *name)
+{
+  vec3f_t link;
+  double fx = 0, fz = 1;
+  if (spawning.frames) {
+    gfx_notice("still waiting for the last one");
+    return;
+  }
+  if (!link_drawn_pos(&link)) {
+    gfx_notice("spawn: Link not found");
+    return;
+  }
+  link_facing(&fx, &fz);
+  float at[3] = { (float)(link.x + fx * SPAWN_AHEAD), (float)link.y, (float)(link.z + fz * SPAWN_AHEAD) };
+  float yaw = atan2f((float)fx, (float)fz) * (180.0f / 3.14159265f) + 180.0f; /* facing Link */
+  snprintf(spawning.name, sizeof(spawning.name), "%s", name);
+  spawning.before = actors_named(spawning.name, spawn_found, SPAWN_COUNT_MAX);
+  uint32_t result;
+  if (!actor_spawn(spawning.name, at, yaw, &result)) {
+    char text[96];
+    snprintf(text, sizeof(text), "the game refused to make it (%u)", (unsigned)result);
+    gfx_notice(text);
+    return;
+  }
+  spawning.frames = SPAWN_WAIT;
+  gfx_notice("spawning");
+  menu_close(); /* so it can be watched */
+}
+
+static void act_spawn(menu_item_t *it)
+{
+  if (!chosen) {
+    gfx_notice("choose an actor first");
+    return;
+  }
+  spawn_named(chosen_name);
+}
+
+static void spawn_frame(void)
+{
+  if (!spawning.frames)
+    return;
+  spawning.frames--;
+  if (spawning.frames % 10)
+    return;
+  int now = actors_named(spawning.name, spawn_found, SPAWN_COUNT_MAX);
+  if (now > spawning.before) {
+    log_printf("actors: %s made after %d frames (%d now)", spawning.name, SPAWN_WAIT - spawning.frames, now);
+    gfx_notice("spawned");
+    spawning.frames = 0;
+  } else if (!spawning.frames) {
+    log_printf("actors: %s didn't appear in %d frames", spawning.name, SPAWN_WAIT);
+    gfx_notice("it didn't appear");
+  }
+}
+
 /* the chosen actor, as it is now: three lines */
 static void text_chosen(menu_item_t *it, char *buf, int len)
 {
@@ -185,6 +258,9 @@ static int add_chosen_items(menu_t *menu)
   menu_item_t *item = menu_add_action(menu, "go to", act_goto, 0);
   if (item)
     item->hint = "L: Link to the chosen actor (load position's way; the saved position stays)";
+  item = menu_add_action(menu, "spawn one like it", act_spawn, 0);
+  if (item)
+    item->hint = "L: the game makes another of the chosen actor, in front of Link (its pack loads if it must)";
   item = menu_add_action(menu, "kill", act_kill, 0);
   if (item)
     item->hint = "L: the game's death request, as a fall into the void; npcs and things with none are deleted";
@@ -248,6 +324,9 @@ static void fill(void)
   menu_item_t *item = menu_add_submenu(&m_actors, "browse", &m_browse);
   if (item)
     item->hint = "every actor in the scene, in folders by kind, at any distance";
+  item = menu_add_submenu(&m_actors, "spawn by name", &m_spawn);
+  if (item)
+    item->hint = "any enemy, npc, object or item the game has: it loads what it needs";
   item = menu_add_action(&m_actors, "refresh", act_refresh, 0);
   if (item)
     item->hint = "L: read the actors near Link again (also on entering this menu)";
@@ -267,7 +346,7 @@ static void fill(void)
       item->log_label = "";
     }
   }
-  m_actors.pinned = 5; /* browse, refresh, range, show and the count stay at the top */
+  m_actors.pinned = 6; /* browse, spawn by name, refresh, range, show and the count stay at the top */
   m_actors.pinned_end = add_chosen_items(&m_actors);
   menu_refresh(&m_actors);
 }
@@ -478,13 +557,78 @@ static void fill_folder(void)
   menu_refresh(&m_folder);
 }
 
+/* --- spawn by name: the actors the game has a pack for (actornames.c) ------------------------------- */
+
+#define SPAWN_ROWS 40
+
+static char spawn_filter[FILTER_MAX + 1];
+static char spawn_filter_label[FILTER_MAX + 24];
+static int spawn_rows[SPAWN_ROWS], n_spawn_rows, n_spawn_matches;
+
+static void fill_spawn(void);
+
+static void spawn_filter_typed(const char *text, intptr_t ctx)
+{
+  snprintf(spawn_filter, sizeof(spawn_filter), "%s", text ? text : "");
+  fill_spawn();
+}
+
+static void act_spawn_filter(menu_item_t *it)
+{
+  osk_open("actor name has", spawn_filter, FILTER_MAX, spawn_filter_typed, 0);
+}
+
+static void act_spawn_row(menu_item_t *it) { spawn_named(actor_names[spawn_rows[it->data]]); }
+
+static void text_spawn_count(menu_item_t *it, char *buf, int len)
+{
+  if (!n_spawn_matches)
+    snprintf(buf, len, "no actor's name has \"%s\"", spawn_filter);
+  else if (n_spawn_matches > n_spawn_rows)
+    snprintf(buf, len, "%d match: the first %d (type more of the name)", n_spawn_matches, n_spawn_rows);
+  else
+    snprintf(buf, len, "%d match", n_spawn_matches);
+}
+
+static void fill_spawn(void)
+{
+  n_spawn_rows = n_spawn_matches = 0;
+  for (int i = 0; i < actor_names_count; i++)
+    if (has_piece(actor_names[i], spawn_filter)) {
+      if (n_spawn_rows < SPAWN_ROWS)
+        spawn_rows[n_spawn_rows++] = i;
+      n_spawn_matches++;
+    }
+  menu_reset(&m_spawn);
+  snprintf(spawn_filter_label, sizeof(spawn_filter_label), "name has: %s", spawn_filter[0] ? spawn_filter : "anything");
+  menu_item_t *item = menu_add_action(&m_spawn, spawn_filter_label, act_spawn_filter, 0);
+  if (item) {
+    item->hint = "L: type a piece of the name (any case), e.g. wolfos, tsubo, rupee";
+    item->log_label = "";
+  }
+  menu_add_text(&m_spawn, text_spawn_count, 0);
+  for (int i = 0; i < n_spawn_rows; i++) {
+    item = menu_add_action(&m_spawn, actor_names[spawn_rows[i]], act_spawn_row, i);
+    if (item) {
+      item->hint = "L: the game makes it in front of Link, facing him (its pack loads if it must)";
+      item->log_label = "";
+    }
+  }
+  m_spawn.pinned = 2;
+  m_spawn.pinned_end = 1;
+  menu_add_return(&m_spawn);
+  menu_refresh(&m_spawn);
+}
+
 /* --- building, and entering ----------------------------------------------------------------------- */
 
 menu_t *actorsmenu_build(void)
 {
-  menu_init(&m_actors, "actors", ROWS + 14);
+  menu_init(&m_actors, "actors", ROWS + 17);
+  menu_init(&m_spawn, "spawn by name", SPAWN_ROWS + 4);
+  fill_spawn();
   menu_init(&m_browse, "browse", N_KINDS + 6);
-  menu_init(&m_folder, "all", 3 + FOLDER_ROWS + FOLDER_HEADS + 8);
+  menu_init(&m_folder, "all", 3 + FOLDER_ROWS + FOLDER_HEADS + 10);
   fill_browse();
   fill_folder();
   fill(); /* last: its browse item makes it browse's parent */
@@ -493,6 +637,7 @@ menu_t *actorsmenu_build(void)
 
 void actorsmenu_frame(void)
 {
+  spawn_frame();
   static menu_t *was;
   if (menu_current != was) {
     if (menu_current == &m_actors && was != &m_browse)

@@ -209,6 +209,11 @@ struct z64hd_build {
   /* bool (actor, u32 reason): the engine's request to delete an actor, what OneShotGenericDeleteThisActor calls
    * (reason 0); takes the manager's lock itself (FINDINGS 9.27) */
   uint32_t actor_delete;
+  /* the actor manager that creates actors (a slot: sys_ptr(MAIN(it))), not the tree's actor_mgr_ptr; and its create
+   * request (mgr, const char *const *name, arg, handle, queue, ...) -> bool, what ExecuteGenericRequestCreateActor
+   * calls: loads the actor's pack itself and makes it on a worker (FINDINGS 9.29) */
+  uint32_t actor_create_mgr_ptr;
+  uint32_t actor_create;
   struct z64hd_link_path link_paths[5];
 };
 

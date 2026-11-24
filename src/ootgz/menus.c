@@ -173,7 +173,7 @@ static uint32_t is_get_hash(const char *item)
 
 /* --- link ------------------------------------------------------------------------------------ */
 
-static menu_t m_link;
+static menu_t m_link, m_link_status, m_link_scene, m_link_position, m_link_actions;
 
 static bool get_lock_x(menu_item_t *it) { return lock_is_set(LOCK_X); }
 static bool get_lock_y(menu_item_t *it) { return lock_is_set(LOCK_Y); }
@@ -443,66 +443,87 @@ static void act_load_position(menu_item_t *it)
 
 static void build_link(void)
 {
-  menu_init(&m_link, "link", 30);
-  /* what can be changed first */
-  menu_item_t *health = menu_add_number(&m_link, "health", get_health, set_health, max_health, fill_health, 0);
+  /* Link's own numbers */
+  menu_init(&m_link_status, "status", 6);
+  menu_item_t *health =
+    menu_add_number(&m_link_status, "current health", get_health, set_health, max_health, fill_health, 0);
   if (health) {
     health->text = health_text;
     health->hint = "d-left/right: change by a quarter heart   L: fill";
   }
   menu_item_t *containers =
-    menu_add_number(&m_link, "heart containers", get_containers, set_containers, max_containers, 0, 0);
+    menu_add_number(&m_link_status, "heart containers", get_containers, set_containers, max_containers, 0, 0);
   if (containers)
     containers->num_min = 1;
-  menu_add_number(&m_link, "rupees", get_rupees, set_rupees, max_rupees, fill_rupees, 0);
-  menu_item_t *age = menu_add_option(&m_link, "age", ARRAY_LEN(age_names), age_names, get_age, set_age, 0);
+  menu_add_number(&m_link_status, "rupees", get_rupees, set_rupees, max_rupees, fill_rupees, 0);
+  menu_item_t *age = menu_add_option(&m_link_status, "age", ARRAY_LEN(age_names), age_names, get_age, set_age, 0);
   if (age)
-    age->hint = "takes effect when the map reloads (reload map, below)";
-  menu_item_t *reload = menu_add_action(&m_link, "reload map", act_reload_map, 0);
-  if (reload)
-    reload->hint = "L: reload this map at the age above";
-  menu_item_t *save = menu_add_action(&m_link, "save position ({savepos})", act_save_position, 0);
-  if (save) {
-    save->hint = "L: remember where Link is and which way he faces";
-    save->log_label = "save position";
-  }
-  menu_item_t *load = menu_add_action(&m_link, "load position ({loadpos})", act_load_position, 0);
-  if (load) {
-    load->hint = "L: put Link back there (same map only)";
-    load->log_label = "load position";
-  }
-  menu_item_t *lock_x = menu_add_check(&m_link, "lock X", get_lock_x, set_lock_x, 0);
-  if (lock_x)
-    lock_x->hint = "Hold Link's X (map North/South) where he is; off after a map change";
-  menu_item_t *lock_y = menu_add_check(&m_link, "lock Y", get_lock_y, set_lock_y, 0);
-  if (lock_y)
-    lock_y->hint = "Hold Link's Y (height) where he is; off after a map change";
-  menu_item_t *lock_z = menu_add_check(&m_link, "lock Z", get_lock_z, set_lock_z, 0);
-  if (lock_z)
-    lock_z->hint = "Hold Link's Z (map East/West) where he is; off after a map change";
-  menu_item_t *ragdoll = menu_add_check(&m_link, "ragdoll ({ragdoll})", get_ragdoll, set_ragdoll, 0);
-  if (ragdoll) {
-    ragdoll->hint = "knock Link over, as a bomb does; he gets up by himself";
-    ragdoll->log_label = "ragdoll:";
-  }
-  menu_item_t *tpose = menu_add_check(&m_link, "bomb t-pose", get_tpose, set_tpose, 0);
-  if (tpose)
-    tpose->hint = "the ocarina breath glitch: Link t-poses running with a bomb; untick also clears the real one";
+    age->hint = "takes effect when the map reloads (link > scene interaction > reload map)";
+  menu_add_return(&m_link_status);
+
+  /* how the map treats him */
+  menu_init(&m_link_scene, "scene interaction", 5);
   if (lock_no_void_available()) {
-    menu_item_t *no_void = menu_add_check(&m_link, "no void outs", get_no_void, set_no_void, 0);
+    menu_item_t *no_void = menu_add_check(&m_link_scene, "no void outs", get_no_void, set_no_void, 0);
     if (no_void) {
       no_void->hint = "the game never voids link out: he keeps falling instead";
       no_void->log_label = "no void outs:";
     }
   }
+  menu_item_t *hs_shown = menu_add_check(&m_link_scene, "show hookshot hook", get_hs_shown, set_hs_shown, 0);
+  if (hs_shown)
+    hs_shown->hint = "gold box: the hook out; grey cross: where a hook was put away; red: the shot's aim";
+  menu_item_t *reload = menu_add_action(&m_link_scene, "reload map", act_reload_map, 0);
+  if (reload)
+    reload->hint = "L: reload this map at the age set in link > status";
+  menu_add_return(&m_link_scene);
+
+  /* where he is */
+  menu_init(&m_link_position, "position", 7);
+  menu_item_t *lock_x = menu_add_check(&m_link_position, "lock X", get_lock_x, set_lock_x, 0);
+  if (lock_x)
+    lock_x->hint = "Hold Link's X (map North/South) where he is; off after a map change";
+  menu_item_t *lock_y = menu_add_check(&m_link_position, "lock Y", get_lock_y, set_lock_y, 0);
+  if (lock_y)
+    lock_y->hint = "Hold Link's Y (height) where he is; off after a map change";
+  menu_item_t *lock_z = menu_add_check(&m_link_position, "lock Z", get_lock_z, set_lock_z, 0);
+  if (lock_z)
+    lock_z->hint = "Hold Link's Z (map East/West) where he is; off after a map change";
+  menu_item_t *save = menu_add_action(&m_link_position, "save position ({savepos})", act_save_position, 0);
+  if (save) {
+    save->hint = "L: remember where Link is and which way he faces";
+    save->log_label = "save position";
+  }
+  menu_item_t *load = menu_add_action(&m_link_position, "load position ({loadpos})", act_load_position, 0);
+  if (load) {
+    load->hint = "L: put Link back there (same map only)";
+    load->log_label = "load position";
+  }
+  menu_add_return(&m_link_position);
+
+  /* things done to him */
+  menu_init(&m_link_actions, "actions", 5);
+  menu_item_t *ragdoll = menu_add_check(&m_link_actions, "ragdoll ({ragdoll})", get_ragdoll, set_ragdoll, 0);
+  if (ragdoll) {
+    ragdoll->hint = "knock Link over, as a bomb does; he gets up by himself";
+    ragdoll->log_label = "ragdoll:";
+  }
+  menu_item_t *tpose = menu_add_check(&m_link_actions, "bomb t-pose", get_tpose, set_tpose, 0);
+  if (tpose)
+    tpose->hint = "the ocarina breath glitch: Link t-poses running with a bomb; untick also clears the real one";
   if (hsstore_force_available()) { /* 1.0.0 only: hidden where the trick doesn't work */
-    menu_item_t *hs_force = menu_add_check(&m_link, "force hookshot storage", get_hs_force, set_hs_force, 0);
+    menu_item_t *hs_force =
+      menu_add_check(&m_link_actions, "force hookshot storage", get_hs_force, set_hs_force, 0);
     if (hs_force)
       hs_force->hint = "a bomb's medium hit the moment a hookshot shot starts";
   }
-  menu_item_t *hs_shown = menu_add_check(&m_link, "show hookshot hook", get_hs_shown, set_hs_shown, 0);
-  if (hs_shown)
-    hs_shown->hint = "gold box: the hook out; grey cross: where a hook was put away; red: the shot's aim";
+  menu_add_return(&m_link_actions);
+
+  menu_init(&m_link, "link", 16);
+  menu_add_submenu(&m_link, "status", &m_link_status);
+  menu_add_submenu(&m_link, "scene interaction", &m_link_scene);
+  menu_add_submenu(&m_link, "position", &m_link_position);
+  menu_add_submenu(&m_link, "actions", &m_link_actions);
   menu_add_return(&m_link);
   /* what can only be read, under return after a blank line */
   add_blank_line(&m_link);

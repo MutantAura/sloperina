@@ -88,23 +88,40 @@ have none at first.
 
 ### 2.1 Link
 
+Four submenus, then under **return** what can only be read: Link's **position** (x, y, z), his **current age**, the **map** and whether he has **hookshot storage** (yes / no; - without a hookshot).
+
+#### 2.1.1 Status
+
 | Item | What it does |
 |---|---|
-| **health** | Link's health in hearts and quarters. D-pad changes it a quarter heart at a time; **L** fills it. |
+| **current health** | Link's health in hearts and quarters. D-pad changes it a quarter heart at a time; **L** fills it. |
 | **heart containers** | 1 to 20. Lowering it below your health lowers your health too. |
 | **rupees** | Up to your wallet's size. **L** fills it. |
-| **age** | **child** or **adult**: what the next **reload map** gives you. |
-| **reload map** | Reloads the map you're in, at the age chosen above. Changing age loads the other age's version of the map and swaps sword and shield with the ones from the other age (adult-only tunics and boots come off a child). |
+| **age** | **child** or **adult**: what the next **reload map** (**scene interaction**) gives you. |
 
+#### 2.1.2 Scene interaction
+
+| Item | What it does |
+|---|---|
+| **no void outs** | The game never voids Link out, whatever the cause (out-of-bounds ground, a bottomless pit, the fall-down areas in dungeons). He keeps falling instead: levitate, load a position or warp to get back. A void-out already under way when it's ticked still finishes. Off when the game restarts. |
+| **show hookshot hook** | Draws the hookshot in the world, through walls. **Gold** box: the hook while it's out, with a gold line (the chain) from Link's hand. **Grey** cross: where a hook was put away. **Red**: a line from where the shot started to the spot it aimed at, with a cross there, while a shot runs or while storage holds it: that's where a stored shot pulls Link to. |
+| **reload map** | Reloads the map you're in, at the age set in **status**. Changing age loads the other age's version of the map and swaps sword and shield with the ones from the other age (adult-only tunics and boots come off a child). |
+
+#### 2.1.3 Position
+
+| Item | What it does |
+|---|---|
+| **lock X / lock Y / lock Z** | Hold Link's X (map North/South), Y (height) or Z (map East/West) where he is. They let go after a map change. |
 | **save position (R + d-up)** | Remembers where Link is, which way he faces and the map (gz's save position). Works at the first press, anywhere. |
 | **load position (R + d-down)** | Puts Link back there, facing the same way. Only in the same map. With nothing saved: "No position saved yet". |
-| **no void outs** | The game never voids Link out, whatever the cause (out-of-bounds ground, a bottomless pit, the fall-down areas in dungeons). He keeps falling instead: levitate, load a position or warp to get back. A void-out already under way when it's ticked still finishes. Off when the game restarts. |
+
+#### 2.1.4 Actions
+
+| Item | What it does |
+|---|---|
 | **ragdoll (R3)** | Knocks Link over and tumbles him backwards: the game's own reaction to a bomb, so he can't attack and doesn't sink while it lasts. He gets up by himself and it unticks then; it can't be cut short. When the game wouldn't take a hit (a map's arrival, an event) it says so and does nothing. On 1.1.1 the game caps the tumble's speed; 1.0 has no cap. |
 | **bomb t-pose** | Turns on the ocarina breath glitch: Link's arms go into a T-pose while he runs holding a bomb. In the game it comes from holding one ocarina note until Link takes a breath (about 4.5 s), and lasts until an idle animation, an attack or a boots change. While ticked it stays on through those. Unticking puts the normal pose back, which also clears the glitch if the ocarina caused it. Checked on 1.1.1 and 1.0.0 as adult Link. |
 | **force hookshot storage** | Gives hookshot storage on purpose: the moment a hookshot or longshot shot starts, Link takes a bomb's medium hit, which cancels the shot before the hook flies. The next shot then skips flying and pulls Link straight towards the spot the cancelled shot aimed at, through walls if it was behind one (on another map it crashes the game). Says "hookshot storage" when it worked. A shot that uses storage isn't hit, so it can be used with this ticked. 1.0.0 only: on 1.1.1 the game lets go when nothing real is hooked, so the option isn't in the menu there. |
-| **show hookshot hook** | Draws the hookshot in the world, through walls. **Gold** box: the hook while it's out, with a gold line (the chain) from Link's hand. **Grey** cross: where a hook was put away. **Red**: a line from where the shot started to the spot it aimed at, with a cross there, while a shot runs or while storage holds it: that's where a stored shot pulls Link to. |
-
-Under **return**: Link's **position** (x, y, z), his **current age**, the **map** and whether he has **hookshot storage** (yes / no; - without a hookshot).
 
 ### 2.2 Warps
 
@@ -585,7 +602,7 @@ stay the game's. Settings from before the commands with frame advance on **R** b
 #### 2.12.4 Rebind commands
 
 gz's **commands** menu, here **rebind commands**: each of sloperinaGZ's controls and the buttons it's bound to, under **menu**, **frame
-advance**, **link**, **scene**, **memfiles**, **watches and timer** and **debug**. The **scene** commands, **reload map** ([2.1](#21-link)) and **end
+advance**, **link**, **scene**, **memfiles**, **watches and timer** and **debug**. The **scene** commands, **reload map** ([2.1.2](#212-scene-interaction)) and **end
 cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
 **right stick down**); letting go of one ends it, and pressing another button partway through cancels it. When one
 bind is part of another that's also held (**R + D-pad left** holds **D-pad left**), only the bigger one counts, so

@@ -623,8 +623,13 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | `get <menu path>` | The item's value. |
 | `list [<menu path>]` | A menu's items: number, kind, name and value. Without a path, the top menu. |
 | `wait <frames>` | The next line runs that many frames later. |
-| `repeat <n>` ... `end` | Runs the lines between that many times (up to four inside one another). |
-| `status` | The game's frame counter, the map, where Link is, whether the menu and the game's pause screen are open, and the warp's state. |
+| `repeat <n>` ... `end` | Runs the lines between that many times (up to four inside one another): with `wait` and `input`, a sequence of any length. |
+| `pause` | Holds the game as frame advance does (frame advance needn't be on). |
+| `step [frames]` | Lets that many frames through (one unless said), then holds the game again. Pauses first if the game was running. |
+| `run` | Lets the game run again. |
+| `input <buttons> [ls <x> <y>] [rs <x> <y>] [for <frames>]` | Buttons and sticks for the game, on top of the controller's: names with `+` between (`A+ZL`, at most four), a number (`0x41`) or `-` for none; a stick is -32767 to 32767 each way. For one frame unless said; `for 0` lasts until the next `input`; `input off` ends it. The menu's shortcuts don't see these buttons: use `fire` for those. |
+| `status` | The game's frame counter, the map, where Link is and which way he faces (`facing`, degrees), whether the menu and the game's pause screen are open, whether the game is held, and the warp's state. |
+| `place <x> <y> <z> [facing]` | Puts Link on that spot of this map as **load position** does (wait some frames for it). With a facing (degrees, 0 = +z) he is turned to it; without, he faces as he did. |
 | `echo <text>` | Puts the text in `out.txt` (a marker). |
 | `id <word>` | The word that starts this script's lines in `out.txt` (otherwise `-`), to tell them from another's. |
 
@@ -634,9 +639,11 @@ the menu's item number 7 (as `list` numbers them), for lines with no name. The n
 language. An item that opens something to type or pick in (a keyboard, a list) needs the menu and isn't run.
 
 Each line of `out.txt` is `<frame> <id> <line number> ok <what happened>` or `... err <why not>`, with the game's
-frame counter when it ran, and `<frame> <id> end` closes a script. A script waits where a line does (`wait`), so
-"this command 60 frames after that one" is a script, not a matter of timing on the PC: `fire savepos`, `wait 60`,
-`fire loadpos`, `status`.
+frame counter when it ran, and `<frame> <id> end` closes a script. A script waits where a line does (`wait`, `step`,
+`pause`, `run`), so "the same input on the same frame after loading a position" is a script, not a matter of timing
+on the PC: `fire loadpos`, `wait 60`, `pause`, `input A for 1`, `step 30`, `status`. While the game is held `wait`
+can't pass (no frames do: use `step`), and a `fire` takes effect on the first frame let through. A script that ends
+with the game held leaves it held for the next one; `run`, or turning **remote control** off, lets it go on.
 
 At most 65,535 bytes a script, and 64 of its lines a frame. Blank lines and lines that start with `#` are skipped.
 

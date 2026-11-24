@@ -1,4 +1,4 @@
-/* The command file (remote.c): reading a script, its lines, menu items by name, waiting,
+/* The command file (remote.c): reading a script, its lines, menu items by name, waiting, pausing and stepping,
  * and what out.txt gets; no game. The SD card, the menu tree and the game's state are stand-ins. */
 #include <assert.h>
 #include <stdarg.h>
@@ -26,6 +26,27 @@ bool gd_ready(void) { return true; }
 const char *gd_get_str(uint32_t hash) { return "KokiriForest"; }
 bool gd_game_paused(bool *is_pause, int32_t *pause_requests) { return false; }
 const char *warp_state(void) { return ""; }
+static float facing_x = 1, facing_z = 0;
+bool link_facing(double *fx, double *fz)
+{
+  *fx = facing_x, *fz = facing_z;
+  return true;
+}
+/* load position's side: whether Link's record is known, and where a place put the saved position */
+static link_record_status_t record = REC_READY;
+static int position_loads;
+static double placed[4];
+link_record_status_t link_record_status(void) { return record; }
+void position_load(void) { position_loads++; }
+void position_set(double x, double y, double z, double facing)
+{
+  placed[0] = x, placed[1] = y, placed[2] = z, placed[3] = facing;
+}
+bool input_remote_active;
+uint32_t input_remote_buttons;
+bool input_remote_sticks[2];
+int32_t input_remote_stick[4];
+
 /* the SD card: cmd.txt (there or not) and out.txt */
 static char cmd_file[SCRIPT_MAX * 2];
 static size_t cmd_size;
@@ -136,7 +157,7 @@ static void frame(void)
 {
   now++;
   binds_update(0, 0, 0);
-  remote_frame();
+  remote_frame(false);
 }
 
 /* frames until the script is taken and done (not past a wait it's still in) */
@@ -244,10 +265,76 @@ int main(void)
   out_has(" 2 | @3 action reload map\n");
   out_has(" 3 err list: not a menu\n");
 
-  /* status: the frame, the map, where Link is, the menu, the game's pause, the warp */
+  /* status: the frame, the map, where Link is and which way he faces, whether the game is held, the menu, the
+   * game's pause, the warp */
   run_script("status\n");
   out_has(" 1 ok frame=");
-  out_has(" map=KokiriForest link=yes x=1.500 y=2.000 z=-3.000 menu=0 game_paused=0 warp=-\n");
+  out_has(" map=KokiriForest link=yes x=1.500 y=2.000 z=-3.000 facing=90.0 held=0 menu=0 game_paused=0 warp=-\n");
+
+  /* pause, step and run, as frame advance takes them (ootgz.c), with input and a fire for the frames let through */
+  out_size = 0;
+  out_file[0] = 0;
+  send("pause\ninput A+ZL ls 100 -200 for 2\nfire loadpos\nwait 1\nstep 3\nstatus\nrun\necho after\n");
+  for (int i = 0; i < POLL_CALLS; i++)
+    frame();
+  assert(remote_take_pause() && !remote_take_pause() && running);
+  frame();
+  assert(!strstr(out_file, "paused") && !input_remote_active); /* not held yet: the pause waits */
+  remote_frame(true);                                           /* held: on to the lines after it */
+  out_has(" 1 ok paused\n");
+  out_has(" 2 ok input 0x101 for 2\n");
+  out_has(" 4 err wait: the game is held");
+  assert(input_remote_active && input_remote_buttons == (BTN_A | BTN_ZL) && input_remote_sticks[0] &&
+         !input_remote_sticks[1] && input_remote_stick[0] == 100 && input_remote_stick[1] == -200);
+  assert(!cmd_pressed(CMD_LOADPOS)); /* fired while held: on the first frame let through */
+  assert(!strstr(out_file, "status") && !remote_take_run());
+  assert(remote_take_step());
+  frame();
+  assert(cmd_pressed(CMD_LOADPOS) && input_remote_active);
+  assert(remote_take_step());
+  frame();
+  assert(!cmd_pressed(CMD_LOADPOS) && !input_remote_active); /* the input's two frames are over */
+  assert(remote_take_step() && !remote_take_step());
+  frame();
+  assert(!strstr(out_file, "stepped")); /* the third frame ran; held again before the step is done */
+  remote_frame(true);
+  out_has(" 5 ok stepped\n");
+  out_has(" 6 ok frame=");
+  out_has(" map=KokiriForest link=yes x=1.500 y=2.000 z=-3.000 facing=90.0 held=1 menu=0 game_paused=0 warp=-\n");
+  assert(remote_take_run() && !remote_take_run() && running);
+  remote_frame(true);
+  assert(!strstr(out_file, "after")); /* run waits until the game runs */
+  frame();
+  out_has(" 7 ok running\n");
+  out_has(" 8 ok after\n");
+  assert(!running);
+  run_script("step\n"); /* a step with the game running pauses first */
+  assert(remote_take_pause() && remote_take_step() && !remote_take_step() && running);
+  remote_frame(true);
+  out_has(" 1 ok stepped\n");
+  run_script("input off\ninput 0x3 for 0\ninput A+Q\ninput A ls 1\ninput - rs 0 40000\n");
+  out_has(" 2 ok input 0x3 for 0\n");
+  out_has(" 3 err input: buttons");
+  out_has(" 4 err input: a stick");
+  out_has(" 5 err input: a stick");
+  for (int i = 0; i < 5; i++)
+    frame();
+  assert(input_remote_active && input_remote_buttons == 3); /* for 0: until the next input */
+  run_script("input off\n");
+  assert(!input_remote_active);
+
+  /* place: the saved position set and loaded; facing as now unless given; refused while Link's record isn't known */
+  run_script("place -12.45 110.36 4.66 250\nplace 1 2.5 -3\nplace 1 2\nplace 1 2 x\n");
+  out_has(" 1 ok place -12.450 110.360 4.660 facing 250.0\n");
+  out_has(" 2 ok place 1.000 2.500 -3.000 facing 90.0\n");
+  out_has(" 3 err place: x y z");
+  out_has(" 4 err place: x y z");
+  assert(position_loads == 2 && placed[0] == 1 && placed[1] == 2.5 && placed[2] == -3 && placed[3] > 89.9);
+  record = REC_NONE;
+  run_script("place 1 2 3\n");
+  out_has(" 1 err place: Link not found\n");
+  assert(position_loads == 2);
+  record = REC_READY;
 
   /* repeat ... end: the lines between again and again, inside one another, with waits; a line can be run twice */
   run_script("repeat 3\necho a  b\nrepeat 2\necho c\nend\nend\necho d\nend\nrepeat x\n");
@@ -261,15 +348,15 @@ int main(void)
   out_has(" 8 err end: no repeat to end\n");
   out_has(" 9 err repeat: how many times\n");
   out_size = 0;
-  send("repeat 3\nfire savepos\nwait 2\nend\necho done\n");
-  for (int i = 0; i < POLL_CALLS - 1; i++)
+  send("repeat 3\ninput A for 1\nwait 2\nend\necho done\n");
+  for (int i = 0; i < POLL_CALLS; i++)
     frame();
   int on = 0;
-  for (int i = 0; i < 8 && (running || cmd_there); i++) {
+  for (int i = 0; i < 8 && running; i++) {
+    on += input_remote_active;
     frame();
-    on += cmd_pressed(CMD_SAVEPOS);
   }
-  assert(on == 3 && !running); /* pressed on one frame of every two, three times */
+  assert(on == 3 && !running); /* A on one frame of every two, three times */
   out_has(" 5 ok done\n");
 
   /* a file too long isn't run; one that can't be deleted isn't run, and is said once */

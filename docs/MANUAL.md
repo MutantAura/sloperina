@@ -551,6 +551,11 @@ They stay over the item wheel unless **hide over item wheel** is on.
 
 **hide over item wheel** (off at first): the same while the game's item wheel is up.
 
+**hide world overlays over item wheel** (off at first): the overlays drawn in the world (air walls, void out, save
+positions, the hookshot's hook, enemy health) also go while the game's item wheel is up. Off, they stay, so opening
+and closing the wheel quickly doesn't make them flash. They always go while the pause screen or map is open, which
+they'd be drawn over.
+
 **switch keyboard** (on at first): naming something (an archive, a folder, a watch's label) opens the Switch's own
 keyboard, with its controls: the left stick or D-pad between keys, **L** / **R** to move the cursor in the text, **B**
 to delete, **Y** for a space, **+** to finish (touch and a USB keyboard work too). The game waits while it's up.

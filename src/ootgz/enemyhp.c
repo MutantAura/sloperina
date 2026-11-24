@@ -10,6 +10,7 @@
 
 #include "gamedata.h"
 #include "link.h"
+#include "menus.h"
 #include "publish.h"
 #include "sys.h"
 #include "view.h"
@@ -198,7 +199,7 @@ void enemyhp_frame(bool gpu)
     log_hits(enemies, n_enemies);
     vec3f_t link;
     view_cam_t cam;
-    if (!gd_game_paused(0, 0) && link_drawn_pos(&link) && view_camera(&cam)) {
+    if (!world_overlays_hidden() && link_drawn_pos(&link) && view_camera(&cam)) {
       for (int i = 0; i < n_enemies; i++) {
         const enemy_t *e = &enemies[i];
         float dx = e->pos[0] - link.x, dy = e->pos[1] - link.y, dz = e->pos[2] - link.z;

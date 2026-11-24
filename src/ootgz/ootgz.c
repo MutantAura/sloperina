@@ -88,6 +88,14 @@ bool frame_advance_in_pause = false;
 bool pause_display = true;
 bool hide_in_game_menus = true;
 bool hide_over_item_wheel = false;
+bool hide_world_over_item_wheel = false;
+
+bool world_overlays_hidden(void)
+{
+  if (!gd_game_paused(0, 0))
+    return false;
+  return gd_game_menu_screen() || hide_world_over_item_wheel; /* the pause screen or map, or the wheel if asked */
+}
 
 /* settings > menu settings > hide in game menus: the game's own menus (Plus, Minus) are open, or opening (from the frame
  * after they start to fade in). settings > menu settings > hide over item wheel: the item wheel, which pauses the same way

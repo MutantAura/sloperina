@@ -11,6 +11,7 @@
  *   remote_control=0|1 (run the scripts written to remote/cmd.txt, remote.h)
  *   hide_in_game_menus=0|1 (no watches, input display or log while the game's pause screen or map is open)
  *   hide_over_item_wheel=0|1 (the same while its item wheel is up)
+ *   hide_world_over_item_wheel=0|1 (the world overlays hidden while the item wheel is up; off by default)
  *   save_backups=0|1 (copy the game's save folder to the SD card after every save, savebackup.h)
  *   save_backup_location=0|1 (the save's location after the date in their folder names)
  *   save_backup_kinds=0|1|2 (autosaves, hard saves, both)
@@ -138,6 +139,7 @@ typedef struct {
   int32_t menu_style;
   int32_t hide_in_game_menus;
   int32_t hide_over_item_wheel;
+  int32_t hide_world_over_item_wheel;
   int32_t save_backups;
   int32_t save_backup_location;
   int32_t save_backup_kinds;
@@ -231,6 +233,7 @@ static snapshot_t take_snapshot(void)
   s.menu_style = gfx_style;
   s.hide_in_game_menus = hide_in_game_menus;
   s.hide_over_item_wheel = hide_over_item_wheel;
+  s.hide_world_over_item_wheel = hide_world_over_item_wheel;
   s.save_backups = save_backup_enabled;
   s.save_backup_location = save_backup_location;
   s.save_backup_kinds = save_backup_kinds;
@@ -310,6 +313,7 @@ static void apply_snapshot(const snapshot_t *s)
     gfx_style = s->menu_style;
   hide_in_game_menus = s->hide_in_game_menus != 0;
   hide_over_item_wheel = s->hide_over_item_wheel != 0;
+  hide_world_over_item_wheel = s->hide_world_over_item_wheel != 0;
   save_backup_enabled = s->save_backups != 0;
   save_backup_location = s->save_backup_location != 0;
   if (s->save_backup_kinds >= SAVE_BACKUP_AUTO && s->save_backup_kinds <= SAVE_BACKUP_BOTH)
@@ -439,6 +443,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("menu_style", menu_style),
   INT_KEY("hide_in_game_menus", hide_in_game_menus),
   INT_KEY("hide_over_item_wheel", hide_over_item_wheel),
+  INT_KEY("hide_world_over_item_wheel", hide_world_over_item_wheel),
   INT_KEY("save_backups", save_backups),
   INT_KEY("save_backup_location", save_backup_location),
   INT_KEY("save_backup_kinds", save_backup_kinds),
@@ -692,8 +697,8 @@ static void save_settings_file(const snapshot_t *s)
                   (int)s->voidmap_shift, (int)s->voidmap_xray, (int)s->voidmap_areas, (int)s->voidmap_bounds,
                   (int)s->input_attach, s->archive_folder, (int)s->system_keyboard);
   if (n < (int)sizeof(buf))
-    n += snprintf(buf + n, sizeof(buf) - n, "save_backup_hard_numbered=%d\nremote_control=%d\n",
-                  (int)s->save_backup_numbered, (int)s->remote_control);
+    n += snprintf(buf + n, sizeof(buf) - n, "save_backup_hard_numbered=%d\nremote_control=%d\nhide_world_over_item_wheel=%d\n",
+                  (int)s->save_backup_numbered, (int)s->remote_control, (int)s->hide_world_over_item_wheel);
   for (int c = 0; c < CMD_COUNT && n < (int)sizeof(buf); c++) {
     char name[48];
     bind_name(s->binds[c], name, sizeof(name));

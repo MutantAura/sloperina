@@ -3225,6 +3225,16 @@ static void set_hide_over_item_wheel(menu_item_t *it, bool on)
   hide_over_item_wheel = on;
 }
 
+static bool get_hide_world_over_item_wheel(menu_item_t *it)
+{
+  return hide_world_over_item_wheel;
+}
+
+static void set_hide_world_over_item_wheel(menu_item_t *it, bool on)
+{
+  hide_world_over_item_wheel = on;
+}
+
 /* save management (savebackup.h): the backups after each save, archives, restoring */
 static menu_t m_save_backups;
 
@@ -4011,7 +4021,7 @@ static void set_switch_keyboard(menu_item_t *it, bool on)
 
 static void build_menu_settings(void)
 {
-  menu_init(&m_menu_settings, "menu settings", 9);
+  menu_init(&m_menu_settings, "menu settings", 10);
   menu_item_t *language = menu_add_option(&m_menu_settings, "language", 1, lang_names(), get_lang, set_lang, 0);
   if (language)
     language->hint = "files in sd:/sloperinaGZ/lang (see lang/template.json)";
@@ -4030,6 +4040,13 @@ static void build_menu_settings(void)
                                       set_hide_over_item_wheel, 0);
   if (wheel)
     wheel->hint = "no watches, input display or log while the game's item wheel is up";
+  menu_item_t *world_wheel = menu_add_check(&m_menu_settings, "hide world overlays over item wheel",
+                                            get_hide_world_over_item_wheel, set_hide_world_over_item_wheel, 0);
+  if (world_wheel) {
+    world_wheel->hint = "air walls, void out, save positions, hook and enemy health go while the item wheel is up "
+                        "(off: no flashing when it's opened and closed quickly)";
+    world_wheel->log_label = "hide world overlays over item wheel:";
+  }
   menu_item_t *keyboard = menu_add_check(&m_menu_settings, "switch keyboard", get_switch_keyboard,
                                          set_switch_keyboard, 0);
   if (keyboard) {

@@ -42,6 +42,7 @@ int frame_advance_button, levitate_speed = 5, levitate_move_speed = 5;
 /* The settings of features that need the game (their own files read its memory), as those files start them, so
  * settings.c and the menu see them as they would at boot. The command binds are the real binds.c (linked). */
 bool airwalls_xray, enemy_hp_xray, frame_advance_in_pause, hide_over_item_wheel, hide_in_game_menus = true;
+bool hide_world_over_item_wheel;
 bool flaglog_enabled, flaglog_status_enabled, flaglog_story_enabled, savepos_shown, savepos_load = true;
 bool save_backup_enabled, save_backup_location, save_backup_hard_numbered = true, swkbd_enabled = true;
 int save_backup_kinds = SAVE_BACKUP_BOTH;

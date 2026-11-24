@@ -4374,10 +4374,10 @@ static void build_debug(void)
     freecam->hint = "close the menu to fly: left stick move, right stick look, ZR up, ZL down, X fast";
     freecam->log_label = "free camera:";
   }
-  menu_item_t *to_title = menu_add_action(&m_debug, "return to title", act_return_to_title, 0);
+  menu_item_t *to_title = menu_add_action(&m_debug, "return to title screen", act_return_to_title, 0);
   if (to_title) {
-    to_title->hint = "L: back to the title screen, as game over's quit does (what isn't saved is lost)";
-    to_title->log_label = "return to title";
+    to_title->hint = "L: back to the title screen from anything: cutscenes, menus, game over (what isn't saved is lost)";
+    to_title->log_label = "return to title screen";
   }
   menu_item_t *actors = menu_add_submenu(&m_debug, "actors", actorsmenu_build());
   if (actors)

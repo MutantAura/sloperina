@@ -1899,7 +1899,7 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   param. The collision's user shape tag `Abyss` (bit 4, mask 0x10, PhiveConfig material presets `Floor_Abyss`,
   `Material_Sand_Abyss`, `Material_Metal_Spike_Abyss`) exists, but no code reading it was found yet.
 - Where a void-out puts Link back (`EventPlayerPostAbyss`, `main+0x26BA6F0`'s node) wasn't followed.
-### 9.26 Returning to the title screen (both builds; 1.0.0 addresses, 1.1.1 in brackets; checked in game on 1.0.0, 24th November 2026: the title screen, then Continue back into play)
+### 9.26 Returning to the title screen (both builds; 1.0.0 addresses, 1.1.1 in brackets; checked in game on both, 24th November 2026)
 - **No call does it:** the game reaches its title screen by a state change of the sequence graph
   (`romfs/Sequence/FormalSequence.root.ainb`, read with the `ainb` package 0.2.17; 0.2.18 doesn't import). Its
   `Title` state (node 0, `Title.module`) is entered by the transition named `Title` of two states only: `PlusMenu`
@@ -1939,19 +1939,36 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   the String16 type's hash table (manager `+0x4A0`, so the type entry is at manager `+0x488`) and queues the write
   (`+0x4B8`, `0x28`-byte entries, string copied), applied at the next flush like SetInt's. 1.0.0's was matched by
   masked signature over 64 instructions: one match, the same over 16 to 64, and its four callers line up with 1.1.1's.
-- **title.c** (remote `title`, **scene > return to title**): refuses while paused or a game menu is up, during an
-  event, while a map loads, while `System_IsSaveLoading` (`0xF5DEEF0A`) or a game over (or any of the three flags
-  above) is set, or with no Link; requests `DefaultParentEvent` through the same request as the warp (§5.18); once
-  it runs (current flow named `DefaultParentEvent`) writes `Title` with SetString16. When the event ends, AfterEvent
-  goes to the title screen. The result is only written while our event runs, so a refused or dropped request leaves
-  nothing; once no event has run for a second after ours, `Sequence_EventResult` is written `""` again (what
-  AfterEvent leaves it as), so a result that wasn't read can't wait for the next event. Another event starting first,
-  or ours not starting within 10 s (it waits until Link can join an event), gives up.
-- **Not checked in game yet:** that the request is accepted in ordinary play (the warp's is), how long it waits when
-  Link is mid-air or swimming (no `IgnoreDissentPlay`, unlike `Dm_SY_BancChangeGo`), that the title screen and a
-  continue afterwards behave as after the pause screen's Return to Title (the PlusMenu-only resets of the item
-  shortcuts and menu cursors are skipped, as after Game Over > Quit), and whether `System_IsSaveLoading` is the
-  right "saving" test.
+- **The other states lead to Event too** (from the graphs): a game over is an event (Main's `GameOver` branch runs
+  `BeforeGameOver`, which clears `IsGameOverTrig`, then `BeforeEvent`, then the state ends with `Event`), and so is a
+  cutscene, a dialogue or a chest. AfterEvent's string selector reads `Sequence_EventResult` as soon as it's entered,
+  so any running event whose end is reached with "Title" written takes the game to the title screen. The menus don't:
+  `PlusMenu` and `MinusMenu` end with `Event` only through `MenuToEvent.module`, on their own screens' choices (a warp
+  from the map, ...), never on a requested event; they go back to Main when closed.
+- **Starting whatever Link does:** `DefaultParentEvent` waits until Link can join an event. `RSDB/EventSetting` rows
+  with the component list `FlowchartWithIgnoreDissentPlay` (109 of 2380, `Dm_SY_BancChangeGo` among them) don't;
+  `DefaultBootEvent` (camera and player-state settling, base setting PlayerPos) is one with no lasting effect.
+- **Don't end a map change's event before its load:** ending `Dm_SY_BancChangeGo` two frames after it reserved the
+  map (`Sequence_ReservedNextBanc` set) reached the title screen, but Continue afterwards loaded the map and stayed
+  black with Link not in play (checked in game on 1.1.1, 24th November 2026). Waiting until `Sequence_IsLoadingBanc`
+  has come on (and gone off) first works: the load, then the arrival event (`Dm_SY_Ocarina_move_Ed` after a Bolero
+  warp), then the title screen, and Continue plays normally.
+- **title.c** (remote `title`, **debug > return to title screen**), every frame until Link has been gone for 10
+  frames with nothing loading (a minute at most):
+  - a map loading or reserved and not yet loaded (see above), the game saving or loading, the module's own warp or
+    memfile: wait (a warp armed for the next exit is cancelled);
+  - a game menu up (`gd_game_menu_screen`, or paused / pausing): B for 3 frames in every 6 (given to the game even
+    while the module's menu or free camera holds the controls);
+  - an event running: write "Title" with SetString16 every frame, and after 2 frames end it with the event
+    manager's cancel (eventskip.c), again every 20 frames while one runs; if the flow's name has `GameOver` in it,
+    `Sequence_ToTitleFromGameOver` is set too (EventToTitle then releases the game over's pause, as Quit does);
+  - otherwise: request `DefaultParentEvent`, then `DefaultBootEvent`, alternately every 30 frames.
+  "Title" is only written while an event runs, so AfterEvent is its only reader; it's written `""` at the end. Frame
+  advance doesn't hold the game meanwhile, and the free camera is turned off.
+- **Checked in game** (24th November 2026): ordinary play (1.1.1: 50 frames), the pause screen (1.1.1: 83 frames;
+  1.0.0: 96 frames, the first request not taken while the screen closed), a warp under way (1.1.1: through the load
+  and the arrival event), the game held by frame advance (1.1.1); Continue afterwards each time. **Not checked:** a
+  game over, a dialogue or chest, Link mid-air or swimming.
 - **Not used:** driving the pause screen (open it with `DebugParam.IsRequestedTransitionPlusMenu`, which
   `BeforeMinusMenu` clears, then pick System > Return to Title > Yes): it depends on the screens' cursors and
   animations.

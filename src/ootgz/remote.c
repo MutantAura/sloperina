@@ -874,12 +874,10 @@ static void run_line(char *line, bool held)
   } else if (same(verb, "title")) {
     if (*args)
       result(false, "title: nothing goes after it");
-    else if (held)
-      result(false, "title: the game is held (run first: the game has to start an event)");
-    else if ((problem = title_start()))
+    else if ((problem = title_start())) /* held: frame advance lets the game go (title_going) */
       result(false, "title: %s", problem);
     else
-      title_waiting = true; /* its result once the event runs, or not */
+      title_waiting = true; /* its result once Link is gone, or not */
   } else if (same(verb, "input")) {
     problem = run_input(args);
     if (problem)

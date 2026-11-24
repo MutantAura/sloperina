@@ -37,7 +37,7 @@ const command_info_t command_info[CMD_COUNT] = {
   [CMD_RESET_TIMER] = { "reset timer", CMD_GROUP_WATCHES, false },
   [CMD_RESET_LAG] = { "reset lag counter", CMD_GROUP_WATCHES, false },
   [CMD_RESET_JS] = { "reset jump height", CMD_GROUP_WATCHES, false },
-  [CMD_TITLE] = { "return to title", CMD_GROUP_DEBUG, false },
+  [CMD_TITLE] = { "return to title screen", CMD_GROUP_DEBUG, false },
   [CMD_FREECAM] = { "free camera on/off", CMD_GROUP_DEBUG, false },
 };
 

@@ -1,65 +1,78 @@
-/* Back to the title screen (title.h, FINDINGS 9.26).
+/* Back to the title screen, whatever the game is doing (title.h, FINDINGS 9.26).
  *
- * The game has no "go to the title" call: its sequence graphs (romfs/Sequence) change state. From play there are two
- * ways to the Title state of FormalSequence.root: the pause screen's System > Return to Title (PlusMenu ›
- * ConfirmationBackToTitle › PlusMenuToTitle, chosen by the screen's buttons), and the end of an event whose result
- * is "Title" (Event › AfterEvent reads the String16 Sequence_EventResult; "Title" runs EventToTitle). The second is
- * how Game Over's Quit leaves play: DmF_SY_GameOver's GameSystemActor.EventSetEventResult(EventResult=Title), an
- * AINB command that only writes Sequence_EventResult through OneShotSetNonStructGameDataString16.
+ * The game has no "go to the title" call: its sequence graphs (romfs/Sequence) change state. From play, the Title
+ * state of FormalSequence.root is reached only from PlusMenu (the pause screen's Return to Title, chosen by its
+ * buttons) and from Event: when no event plays any more, Event runs AfterEvent, which reads the String16
+ * Sequence_EventResult at once and, if it's "Title", runs EventToTitle (how Game Over's Quit leaves play). A game
+ * over is itself an event (Main › BeforeGameOver › BeforeEvent › Event), so is a cutscene, a dialogue, a chest.
  *
- * So: request DefaultParentEvent (a registered event whose flowchart is one 30-frame GameSystemActor.EventWait),
- * and once it runs, write "Title" with the game's own SetString16. When it ends, AfterEvent takes the game to the
- * title screen as it does after Game Over > Quit; Sequence_ToTitleFromGameOver / FromGameClear and
- * Sequence_RequestLastGameOverSave stay false, so EventToTitle saves nothing. The result is written only while our
- * event runs, so a refused or dropped request leaves nothing behind; once the event is gone, the result is set back
- * to "" (what AfterEvent leaves it as anyway). */
+ * So, every frame until Link is gone (EventToTitle unloads the map with him):
+ *   - a map loading (or reserved by an exit or warp's event: ending that event now leaves the load half begun), the
+ *     game saving or loading, a warp or memfile under way: wait for it to finish (a warp armed for the next exit is
+ *     cancelled instead);
+ *   - one of the game's menus up (pause screen, map, item wheel): press B for it until it has closed, as its own
+ *     screens go back to Main, never to Event, on anything but their own choices;
+ *   - an event running (any: a cutscene, a game over, ours): write "Title" while it runs, then end it with the event
+ *     manager's own cancel (eventskip.h), again every so often while one still runs (a chain goes on to the next);
+ *     during a game over, Sequence_ToTitleFromGameOver too, so EventToTitle releases the game over's pause as its
+ *     Quit does;
+ *   - none of these: ask for an event to carry the result: DefaultParentEvent (one 30-frame wait), or if the game
+ *     hasn't started it soon, DefaultBootEvent, whose setting ignores what Link is doing (in the air, swimming...).
+ * "Title" is written only while an event runs, so AfterEvent is the only reader; once Link is gone (or on giving
+ * up) it's set back to "", what AfterEvent leaves it as. Nothing is saved: Sequence_RequestLastGameOverSave and
+ * Sequence_ToTitleFromGameClear stay as they are (false outside the game's own flows). */
 #include "title.h"
 
 #include <stdint.h>
 
 #include "binds.h"
 #include "eventskip.h"
+#include "freecam.h"
 #include "gamedata.h"
 #include "gfx.h"
+#include "input.h"
 #include "link.h"
 #include "memfile.h"
 #include "sys.h"
 #include "warp.h"
 #include "z64hd.h"
 
-#define F_EVENT_RESULT         0x6000F875u /* Sequence_EventResult (String16): "Title" in AfterEvent */
-#define F_IS_LOADING_BANC      0xEF2B60C2u /* Sequence_IsLoadingBanc */
-#define F_IS_SAVE_LOADING      0xF5DEEF0Au /* System_IsSaveLoading */
-#define F_IS_GAME_OVER         0x2FD0BC6Cu /* IsGameOverTrig */
-#define F_FROM_GAME_OVER       0x53F4FC89u /* Sequence_ToTitleFromGameOver: EventToTitle's Game Over cleanup */
-#define F_FROM_GAME_CLEAR      0x04D31E64u /* Sequence_ToTitleFromGameClear: EventToTitle's game clear save */
-#define F_LAST_GAME_OVER_SAVE  0x2C095360u /* Sequence_RequestLastGameOverSave: EventToTitle's Game Over save */
+#define F_EVENT_RESULT     0x6000F875u /* Sequence_EventResult (String16): "Title" in AfterEvent */
+#define F_IS_LOADING_BANC  0xEF2B60C2u /* Sequence_IsLoadingBanc */
+#define F_IS_SAVE_LOADING  0xF5DEEF0Au /* System_IsSaveLoading */
+#define F_FROM_GAME_OVER   0x53F4FC89u /* Sequence_ToTitleFromGameOver: EventToTitle's Game Over cleanup */
 
-#define CARRIER_EVENT "DefaultParentEvent" /* also its flowchart's name, which the running flow carries */
+#define CARRIER_EVENT "DefaultParentEvent"     /* a 30-frame wait; waits until Link can join an event */
+#define CARRIER_ANYWAY "DefaultBootEvent"      /* FlowchartWithIgnoreDissentPlay: starts whatever Link does */
 #define RESULT_TITLE "Title"
-#define START_TIMEOUT_FRAMES (10 * GAME_FPS) /* the request is queued until Link can join an event */
-#define TIDY_FRAMES (1 * GAME_FPS)            /* no event this long after ours: AfterEvent has read the result */
+#define WRITE_FRAMES 2                         /* "Title" written this long in an event before it's ended */
+#define END_AGAIN_FRAMES 20                    /* an event still running this long after the end: end it again */
+#define REQUEST_AGAIN_FRAMES 30                /* no event this long after asking: ask again (the other carrier) */
+#define B_DOWN_FRAMES 3                        /* a menu up: B held this long, then let go as long again */
+#define LINK_GONE_FRAMES 10                    /* no Link this long, nothing loading: on the title screen */
+#define RESERVED_WAIT_FRAMES (10 * GAME_FPS)   /* a map change reserved but not loading this long: stale, go on */
+#define LOG_EVERY_FRAMES GAME_FPS
+#define GIVE_UP_FRAMES (60 * GAME_FPS)
 
 typedef void (*set_string16_t)(void *manager, const char *const *value, uint32_t hash);
 
-static enum { W_NONE, W_START, W_END } watch; /* what title_frame waits for */
+static bool going;
 static title_status_t status;
 static const char *status_text = "";
-static uint32_t deadline_frame;
-static int quiet_frames; /* W_END: frames in a row with no event running */
+static uint32_t frames_going;
+static uint32_t event_frames;   /* frames in a row an event has run */
+static uint32_t idle_frames;    /* frames in a row with nothing running, since the last request */
+static uint32_t requests;
+static uint32_t menu_frames;
+static uint32_t gone_frames;
+static bool ended_one;          /* an event was ended with "Title" written */
+static bool loaded;             /* a map load has been seen since title_start */
+static uint32_t reserved_frames; /* frames a map change has been reserved without loading */
+static bool set_game_over;      /* Sequence_ToTitleFromGameOver was set here: unset on giving up */
 
 bool title_known(void)
 {
   return z64hd_game && z64hd_game->gd_set_string16 && eventskip_known() && z64hd_game->event_req_submit;
-}
-
-static bool same(const char *a, const char *b)
-{
-  while (*a && *a == *b) {
-    a++;
-    b++;
-  }
-  return *a == *b;
 }
 
 static bool flag(uint32_t hash)
@@ -67,6 +80,18 @@ static bool flag(uint32_t hash)
   bool on = false;
   gd_get_bool(hash, &on);
   return on;
+}
+
+static bool contains(const char *s, const char *part)
+{
+  for (; *s; s++) {
+    const char *a = s, *b = part;
+    while (*a && *a == *b)
+      a++, b++;
+    if (!*b)
+      return true;
+  }
+  return false;
 }
 
 /* Sequence_EventResult = value, through the game's SetString16 (applied at the next GameData flush) */
@@ -80,42 +105,49 @@ static bool set_result(const char *value)
   return true;
 }
 
-static void fail(const char *why)
+static void stop(title_status_t how, const char *text)
 {
-  watch = W_NONE;
-  status = TITLE_FAILED;
-  status_text = why;
-  gfx_notice(why);
+  going = false;
+  input_title_buttons = 0;
+  set_result("");
+  if (how == TITLE_FAILED && set_game_over)
+    gd_set_bool(F_FROM_GAME_OVER, false);
+  set_game_over = false;
+  status = how;
+  status_text = text;
+  log_printf("title: %s (%u frames, %u requests)", text, (unsigned)frames_going, (unsigned)requests);
+  if (how == TITLE_FAILED)
+    gfx_notice(text);
 }
 
 const char *title_start(void)
 {
   if (!title_known())
-    return "return to title: not known for this game version";
-  if (watch != W_NONE)
+    return "return to title screen: not known for this game version";
+  if (going)
     return "already on the way to the title screen";
   if (!gd_ready() || !gd_manager())
-    return "can't return to title: game data not found";
-  if (!link_actor())
-    return "can't return to title: not in the game";
-  if (flag(F_IS_LOADING_BANC) || warp_pending() || memfile_busy())
-    return "can't return to title while a map is loading";
-  if (flag(F_IS_SAVE_LOADING))
-    return "can't return to title while the game saves or loads";
-  if (flag(F_IS_GAME_OVER) || flag(F_FROM_GAME_OVER) || flag(F_FROM_GAME_CLEAR) || flag(F_LAST_GAME_OVER_SAVE))
-    return "can't return to title during a game over";
-  if (eventskip_running())
-    return "can't return to title during a cutscene or event";
-  if (gd_game_pausing() || gd_game_paused(0, 0) || gd_game_menu_screen())
-    return "can't return to title while the game is paused";
-  if (!warp_request_event(CARRIER_EVENT))
-    return "can't return to title: the game refused the event";
-  watch = W_START;
+    return "can't return to title screen: game data not found";
+  if (!link_actor() && !flag(F_IS_LOADING_BANC) && !warp_pending() && !memfile_busy())
+    return "already at the title screen";
+  going = true;
+  frames_going = event_frames = menu_frames = gone_frames = requests = 0;
+  idle_frames = REQUEST_AGAIN_FRAMES; /* ask at once */
+  ended_one = loaded = false;
+  reserved_frames = 0;
+  if (freecam_on)
+    freecam_set(false); /* the camera it hooks goes with the map */
+  if (warp_pending() && !warp_requested())
+    warp_cancel(); /* armed for the next exit: nothing will load until Link takes one */
   status = TITLE_PENDING;
-  status_text = "waiting for the game to start the event";
-  deadline_frame = frame_counter() + START_TIMEOUT_FRAMES;
-  log_printf("title: requested %s", CARRIER_EVENT);
+  status_text = "on the way to the title screen";
+  log_printf("title: going");
   return 0;
+}
+
+bool title_going(void)
+{
+  return going;
 }
 
 void title_frame(void)
@@ -125,32 +157,76 @@ void title_frame(void)
     if (problem)
       gfx_notice(problem);
   }
-  if (watch == W_START) {
+  if (!going)
+    return;
+  input_title_buttons = 0;
+  if (++frames_going > GIVE_UP_FRAMES) {
+    stop(TITLE_FAILED, "can't return to title screen: the game didn't leave play within a minute");
+    return;
+  }
+  bool loading = flag(F_IS_LOADING_BANC) || flag(F_IS_SAVE_LOADING) || warp_pending() || memfile_busy();
+  if (flag(F_IS_LOADING_BANC))
+    loaded = true; /* the reserved map change has begun loading */
+  /* A map change reserved (an exit, a warp: Sequence_ReservedNextBanc) and not loaded yet: its event mustn't be ended
+   * now, or the load starts on the way out and never finishes (the game stays black with IsLoadingBanc set). It's
+   * let finish first; a reservation left over (no load within 10 s) is ignored. */
+  const char *next = gd_get_str(GD_STR_NEXT_MAP);
+  if (!loading && !loaded && next && *next && reserved_frames < RESERVED_WAIT_FRAMES) {
+    reserved_frames++;
+    loading = true;
+  }
+  if (frames_going % LOG_EVERY_FRAMES == 0)
+    log_printf("title: waiting: loading %d, next map %s, menu %d, paused %d, event %d, link %d", loading,
+               next && *next ? next : "-", gd_game_menu_screen(), gd_game_paused(0, 0), eventskip_running(),
+               link_actor() != 0);
+  if (!link_actor() && !loading) {
+    if (++gone_frames >= LINK_GONE_FRAMES)
+      stop(TITLE_DONE, ended_one ? "at the title screen" : "Link is gone: at the title screen");
+    return;
+  }
+  gone_frames = 0;
+  if (loading) { /* a map, a save: let it finish, then go on */
+    event_frames = 0;
+    idle_frames = 0;
+    return;
+  }
+  bool busy = false;
+  if (gd_game_menu_screen() || gd_game_paused(0, 0) || gd_game_pausing()) {
+    busy = true;
+    menu_frames++;
+    if (menu_frames % (2 * B_DOWN_FRAMES) < B_DOWN_FRAMES)
+      input_title_buttons = BTN_B;
+  } else {
+    menu_frames = 0;
+  }
+  if (eventskip_running()) {
+    busy = true;
     char name[EVENTSKIP_NAME_MAX];
-    if (eventskip_running() && eventskip_flow_name(name)) {
-      if (!same(name, CARRIER_EVENT)) {
-        log_printf("title: %s started instead of %s", name, CARRIER_EVENT);
-        fail("can't return to title: another event started first");
-      } else if (!set_result(RESULT_TITLE)) {
-        fail("can't return to title: game data not found");
-      } else {
-        watch = W_END;
-        quiet_frames = 0;
-        status = TITLE_DONE;
-        status_text = "on the way to the title screen";
-        log_printf("title: %s runs, %s set", CARRIER_EVENT, RESULT_TITLE);
-      }
-    } else if ((int32_t)(frame_counter() - deadline_frame) > 0) {
-      fail("can't return to title: the game didn't start the event");
+    if (event_frames == 0 && eventskip_flow_name(name)) {
+      log_printf("title: event %s running", name);
+      if (contains(name, "GameOver"))
+        set_game_over = gd_set_bool(F_FROM_GAME_OVER, true) || set_game_over;
     }
-  } else if (watch == W_END) {
-    if (eventskip_running()) {
-      quiet_frames = 0;
-    } else if (++quiet_frames >= TIDY_FRAMES) {
-      set_result(""); /* AfterEvent left it so if it read it; otherwise "Title" mustn't wait for another event */
-      watch = W_NONE;
-      log_printf("title: event over, result cleared");
+    set_result(RESULT_TITLE);
+    if (event_frames >= WRITE_FRAMES && (event_frames - WRITE_FRAMES) % END_AGAIN_FRAMES == 0) {
+      if (eventskip_end_now())
+        ended_one = true;
+      log_printf("title: ending the event (frame %u)", (unsigned)event_frames);
     }
+    event_frames++;
+  } else {
+    event_frames = 0;
+  }
+  if (busy) {
+    idle_frames = 0;
+    return;
+  }
+  if (++idle_frames >= REQUEST_AGAIN_FRAMES) {
+    idle_frames = 0;
+    const char *carrier = requests % 2 == 0 ? CARRIER_EVENT : CARRIER_ANYWAY;
+    bool taken = warp_request_event(carrier);
+    requests++;
+    log_printf("title: requested %s: %s", carrier, taken ? "taken" : "refused");
   }
 }
 

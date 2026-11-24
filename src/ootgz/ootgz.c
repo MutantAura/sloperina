@@ -311,6 +311,19 @@ static void fa_hold_game(void)
     }
     menu_controls();
     actorsmenu_frame();
+    /* return to title screen: chosen in the menu, by its bind or by a script, the game is let go to leave play */
+    if (cmd_pressed(CMD_TITLE)) {
+      const char *problem = title_start();
+      if (problem)
+        gfx_notice(problem);
+    }
+    if (title_going()) {
+      if (menu_current && !shown)
+        menu_close();
+      fa_paused = false;
+      gfx_pause_icon = 0;
+      break;
+    }
     fa_event_t event = fa_read_button();
     if (event == FA_RUN) {
       fa_paused = false;
@@ -374,7 +387,7 @@ static void fa_frame(void)
     input_hide_from_game |= cmd_mask(CMD_ADVANCE);
   if (!fa_paused)
     input_force_active = false;
-  if (!fa_paused && frame_advance && fa_read_button() == FA_TAP) {
+  if (!fa_paused && frame_advance && fa_read_button() == FA_TAP && !title_going()) {
     fa_paused = true;
     char advance[48], run[48], notice[128];
     bind_name(binds[CMD_ADVANCE], advance, sizeof(advance));

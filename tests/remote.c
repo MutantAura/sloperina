@@ -468,11 +468,11 @@ int main(void)
   assert(position_loads == 2);
   record = REC_READY;
 
-  /* title: refused at once with the reason; otherwise the script waits until the game has started the event (ok)
-   * or it failed (err), and goes on after it */
-  title_problem = "can't return to title while the game is paused";
+  /* title: refused at once with the reason; otherwise the script waits until Link is gone (ok) or it failed (err),
+   * and goes on after it */
+  title_problem = "already at the title screen";
   run_script("title\ntitle now\necho next\n");
-  out_has(" 1 err title: can't return to title while the game is paused\n");
+  out_has(" 1 err title: already at the title screen\n");
   out_has(" 2 err title: nothing goes after it\n");
   out_has(" 3 ok next\n");
   assert(!title_starts);
@@ -482,26 +482,30 @@ int main(void)
   send("title\necho after\n");
   for (int i = 0; i < POLL_CALLS + 3; i++)
     frame();
-  assert(title_starts == 1 && running && !strstr(out_file, "title")); /* the event hasn't started yet */
+  assert(title_starts == 1 && running && !strstr(out_file, "title")); /* not there yet */
   title_now = TITLE_DONE;
-  title_text = "on the way to the title screen";
+  title_text = "at the title screen";
   frame();
-  out_has(" 1 ok title: on the way to the title screen\n");
+  out_has(" 1 ok title: at the title screen\n");
   out_has(" 2 ok after\n");
   assert(!running);
   send("title\n");
   for (int i = 0; i < POLL_CALLS; i++)
     frame();
   title_now = TITLE_FAILED;
-  title_text = "can't return to title: the game didn't start the event";
+  title_text = "can't return to title screen: the game didn't leave play within a minute";
   frame();
-  out_has(" 1 err title: can't return to title: the game didn't start the event\n");
+  out_has(" 1 err title: can't return to title screen: the game didn't leave play within a minute\n");
   assert(title_starts == 2 && !running);
-  run_script("pause\ntitle\nrun\n"); /* held: no frames for the game to start an event in */
+  run_script("pause\ntitle\nrun\n"); /* held: it starts all the same (frame advance lets the game go) */
   assert(remote_take_pause());
   remote_frame(true);
-  out_has(" 2 err title: the game is held");
-  assert(title_starts == 2 && remote_take_run());
+  assert(title_starts == 3 && !strstr(out_file, " 2 "));
+  title_now = TITLE_DONE;
+  title_text = "at the title screen";
+  remote_frame(true);
+  out_has(" 2 ok title: at the title screen\n");
+  assert(remote_take_run());
   frame();
   out_has(" 3 ok running\n");
   assert(!running);

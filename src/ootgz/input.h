@@ -48,6 +48,8 @@ extern bool input_remote_active;
 extern uint32_t input_remote_buttons;
 extern bool input_remote_sticks[2];
 extern int32_t input_remote_stick[4];
+/* given to the game even while the above block it (title.c backing out of the game's menus with B) */
+extern uint32_t input_title_buttons;
 /* Point main's nn::hid imports at our wrappers (module init); returns 0 or a message. */
 const char *input_hook_game(uintptr_t main_base);
 

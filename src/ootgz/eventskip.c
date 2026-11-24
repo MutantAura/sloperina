@@ -209,6 +209,13 @@ bool eventskip_start(void)
   return true;
 }
 
+bool eventskip_end_now(void)
+{
+  if (!eventskip_known() || !eventskip_running())
+    return false;
+  return end_event() || skip_all(false) == SKIP_TAKEN;
+}
+
 void eventskip_frame(void)
 {
   if (cmd_pressed(CMD_END_CUTSCENE)) /* unbound unless given buttons (settings > rebind commands) */

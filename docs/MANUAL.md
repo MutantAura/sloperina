@@ -432,7 +432,7 @@ folder (on an emulator: right-click the game > *Open save data location*).
 
 ### 2.11 Debug
 
-**return to title**: back to the game's title screen, without the pause screen: the game plays a 30-frame event and leaves it the way Game Over > Quit does. Nothing is saved, so whatever isn't saved is lost, as with the pause screen's Return to Title. Not while the game is paused, in a cutscene or other event, loading a map, saving or in a game over. It can be given buttons in **settings > rebind commands** (under **debug**; unbound to start with).
+**return to title screen**: back to the game's title screen from anything: ordinary play, a cutscene or other event, a game over, the pause screen or map (it presses B for them until they've closed), the game held by frame advance (it lets the game go). A map change already on its way (an exit, a warp) is let finish first, and a save being written too; a warp waiting for the next exit is cancelled. It leaves play the way the game's own Game Over > Quit does, by ending an event with the result "Title", so it usually takes one to two seconds. Nothing is saved: whatever isn't saved is lost, as with the pause screen's Return to Title. It gives up, with a notice, if the game hasn't left play within a minute. The free camera is turned off on the way. It can be given buttons in **settings > rebind commands** (under **debug**; unbound to start with).
 
 **actors**: like gz's actors menu.
 
@@ -616,7 +616,7 @@ stay the game's. Settings from before the commands with frame advance on **R** b
 
 gz's **commands** menu, here **rebind commands**: each of sloperinaGZ's controls and the buttons it's bound to, under **menu**, **frame
 advance**, **link**, **scene**, **memfiles**, **watches and timer** and **debug**. The **scene** commands, **reload map** ([2.1.2](#212-scene-interaction)) and **end
-cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title** and **free camera on/off** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
+cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title screen** and **free camera on/off** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
 **right stick down**); letting go of one ends it, and pressing another button partway through cancels it. When one
 bind is part of another that's also held (**R + D-pad left** holds **D-pad left**), only the bigger one counts, so
 **R + A + D-pad right** resets jump height without also hiding the watches. **run again** takes its buttons in any
@@ -665,7 +665,7 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | `trace <frames>` / `trace off` | A line for each of the next frames, without holding the script up: `<line> t y= vy= hs= x= z= hand= zr= paused= lock= ground= act= wpn=`. |
 | `actors [metres]` | The running actors within that distance of Link (6 unless said), nearest first, by the game's names. |
 | `place <x> <y> <z> [facing]` | Puts Link on that spot of this map as **load position** does (wait some frames for it). With a facing (degrees, 0 = +z) he is turned to it; without, he faces as he did. |
-| `title` | Goes back to the game's title screen, the way the game's own Game Over > Quit leaves play (as **debug > return to title**). `ok` once the game is running the short event it leaves by (30 frames, then it fades to the title); `err` with the reason if it can't now: the game paused or a menu of its own up, a cutscene or other event, a map loading, the game saving or loading, a game over, or the game held (`run` first). Whatever isn't saved is lost, as with the pause screen's Return to Title. |
+| `title` | Goes back to the game's title screen from whatever the game is doing (as **debug > return to title screen**), also with the game held (it's let go). `ok` once Link is gone and the game is at (or fading to) its title screen; `err` with the reason if it couldn't start (already at the title screen) or the game didn't leave play within a minute. Whatever isn't saved is lost, as with the pause screen's Return to Title. |
 | `echo <text>` | Puts the text in `out.txt` (a marker). |
 | `id <word>` | The word that starts this script's lines in `out.txt` (otherwise `-`), to tell them from another's. |
 

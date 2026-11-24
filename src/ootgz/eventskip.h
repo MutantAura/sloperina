@@ -12,6 +12,9 @@ bool eventskip_running(void); /* an event is running */
 bool eventskip_flow_name(char out[EVENTSKIP_NAME_MAX]);
 /* game thread: skip or cancel the running event; false if none runs or it couldn't be done */
 bool eventskip_start(void);
+/* game thread: end the running event at once, quietly (title.c): the manager's cancel, or failing that the skip of
+ * its timelines; false if none runs or neither could be done */
+bool eventskip_end_now(void);
 /* game thread, once a frame: repeats a skip while the event (or the next one in its chain) still runs */
 void eventskip_frame(void);
 

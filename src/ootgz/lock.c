@@ -14,6 +14,7 @@
 
 static bool menu_axis[3]; /* the menu's locks, by lock_axis_t */
 static bool hold;         /* a position load is settling */
+static bool no_void;      /* link > no void outs: the same word's PATCH_BIT_NO_VOID */
 static char lock_map[64]; /* the map the menu's locks were set in */
 
 static bool same_str(const char *a, const char *b)
@@ -40,7 +41,21 @@ static void apply(void)
     word |= 1u << LOCK_BIT_Z;
   if (word)
     word |= 1u << LOCK_BIT_COLLISION;
+  if (no_void)
+    word |= 1u << PATCH_BIT_NO_VOID;
   *(volatile uint64_t *)MAIN(z64hd_game->lock_slot) = word;
+}
+
+bool lock_no_void_available(void) { return z64hd_game->lock_slot != 0 && z64hd_game->abyss_check != 0; }
+
+bool lock_no_void_is_set(void) { return no_void; }
+
+void lock_no_void_set(bool on)
+{
+  if (!lock_no_void_available() || no_void == on)
+    return;
+  no_void = on;
+  apply();
 }
 
 void lock_set(lock_axis_t axis, bool on)

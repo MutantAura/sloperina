@@ -28,6 +28,7 @@ struct z64hd_pair {
 #define LOCK_BIT_Y         1u /* body Y (height) */
 #define LOCK_BIT_Z         2u /* body Z (horizontal) */
 #define LOCK_BIT_COLLISION 3u /* the collision resolver's two stores; set whenever an axis is held */
+#define PATCH_BIT_NO_VOID  4u /* the same word: the void-out decision returns at once (link > no void outs) */
 
 /* One entry per supported game build (z64hd_builds.h). Every offset below is meant to be filled in for every
  * build: a feature reads its offsets from the running build's entry and stays off where one is 0, so a gap would
@@ -103,6 +104,9 @@ struct z64hd_build {
   /* bool (actor, const float pos[3], float out[3], const void *riding, bool, int): the load's search for a safe
    * place round SavePos (FINDINGS 9.7); 0: not known for this build */
   uint32_t safety_search;
+  /* void (player component): the void-out decision, the only store of a non-zero abyss type (FINDINGS 9.25). The
+   * patch gates its first instruction (pacibsp) with PATCH_BIT_NO_VOID; 0: not known for this build */
+  uint32_t abyss_check;
   /* the ground map the void check reads (voidmap.c, FINDINGS 9.8): the slot its owner is reached from, and the
    * table of its record formats; 0: not known for this build */
   uint32_t voxel_mgr_ptr;

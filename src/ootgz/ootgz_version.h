@@ -3,9 +3,10 @@
 #ifndef OOTGZ_VERSION_H
 #define OOTGZ_VERSION_H
 
-#define OOTGZ_PATCH_VERSION 5 /* 5: 1.0.0's patch has the lock stubs too */
+#define OOTGZ_PATCH_VERSION 6 /* 6: the no-void stub */
 #define OOTGZ_MARKER        "OOTGZ\0\0\0"  /* at cave_start, followed by u32 patch version and game revision */
 #define OOTGZ_STUB_OFF      0x40           /* stub at CAVE_START + this */
 #define OOTGZ_STORES_OFF    0x80           /* the lock stubs from here: the X+Y stub, then one per z64hd_store */
+#define OOTGZ_NO_VOID_OFF   0x200          /* the void-out decision's stub (after the lock stubs' 0xB0 bytes) */
 
 #endif

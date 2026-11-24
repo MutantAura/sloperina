@@ -1003,13 +1003,14 @@ point.
       - `+0x37C` bit 0 hit, `+0x510` distance;
       - `+0xBBC` bit 0 hit, `+0x115C` distance.
 
-      Bit 24 is set when the first hits 5 m or more away (or with no distance), or misses while the second hits
-      (and then bit 25 too when that one is 8 m or more away). On map floor both hit close by. On out-of-bounds
-      floor only the second hits, so the point stops following Link there. Out-of-bounds floor near valid
-      ground (within 5 m) is expected to keep it following (not tested).
-    - bit 20 (`main+0x5FB84C`), the same step's other branch: the first probe hits close by, but the cell's
-      attribute 8 (`[S+0x108]` vfunc `+0xB0`, arg 8, returns value and valid bytes) is set, or vfunc `+0xB8`
-      gives 1 or less. Seen holding the point out of bounds as young Link, where bit 24 wasn't set.
+      Bit 24 is set when the first hits 5 m or more away (or with no distance; not while P`+0x13D0` bit 18 is set),
+      or misses, whatever the second does (and then bit 25 too when the second hits 8 m or more away). On map
+      floor both hit close by. On out-of-bounds floor only the second hits, so the point stops following Link
+      there. Out-of-bounds floor near valid ground (within 5 m) is expected to keep it following (not tested).
+    - bit 20 (`main+0x5FB84C`), the same step's next part, after bit 24 is settled: the cell's attribute 8
+      (`[S+0x108]` vfunc `+0xB0`, arg 8, returns value and valid bytes) is set, or it isn't and vfunc `+0xB8` gives
+      1 or less (that value is only read when the first probe hits). Seen holding the point out of bounds as
+      young Link, where bit 24 wasn't set.
     - The bit-24 step is skipped while an event runs (`[[main+0x4E94840]+0x68]` ≠ 0, the same check as the update's),
       if `[actor+0x270]+0x460` `+0xA8` bit 1 is clear, or if P`+0x1C54` bit 0 is set.
     - **Putting the ocarina away** is an event. In the frame it ends, the flags are rebuilt while it's still running
@@ -1021,8 +1022,8 @@ point.
   and P`+0x18B0` = 1 (ready; P`+0x30` bit 11 is set too). On a body (a moving block, a platform) `main+0x2E7FE80`
   decides; a refusal sets the cooldown P`+0x18CC` = 35, which counts down and blocks the hand-off below; unsafe
   frames set it to 1. P`+0x1948` not NaN: an area sensor forces the point (P`+0x1950..0x1974`). A second copy at
-  P`+0x18B4`/`+0x18C8` is used while P`+0x1C34` bit 4. The void-out respawn (`main+0x2814620`) warps to the same
-  point; `main+0x30170E0` reads it too.
+  P`+0x18B4`/`+0x18C8` is used while P`+0x1C34` bit 4. The point is also read by `main+0x2814620`, the enter
+  of the AI node `ExecutePlayerUseWarpItem` (Farore's Wind), and by `main+0x30170E0`.
 - **The hand-off** at `main+0x60830C` (inside `main+0x6080C0`, which also writes `PlayerStatus.CurrentPos` /
   `CurrentDir` every frame) copies it to AutoSaveMgr (scene component 12, §9.3) slot B: yaw `+0x178`, position
   `+0x17C`, valid `+0x188` = 1, `+0x189`, `+0x18A`. Slot A (`+0x198` yaw, `+0x19C` position, valid `+0x1A8`) comes from
@@ -1798,3 +1799,87 @@ and **safety flags** watches read it (`safety.c`).
 - A memfile restores GameData through the deserializer alone, so the manager kept its stages: loading one taken
   after Ganondorf into the castle collapse on a fresh boot left Zelda standing. memfile.c (quests_on_load) now
   does what the save load does after WorldMgr's and NaviMgr's on-load: the selected quest, `+0x73`, then `+0x72`.
+
+### 9.25 Void-outs ("Abyss"): what triggers one (v131072; from the disassembly and game files; the grid's 8 m rule checked in game)
+The game calls a void-out an *abyss*. The player gets reaction `PreAbyss` (reaction type 1 of `None, PreAbyss,
+PreEvent, Guard, ...`), whose AI (`Player.scheduler.reactionpreabyss` / `Player.action.reactionpreabyss` in the
+Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDown` (fade, `EventPlayerAbyss`,
+`EventPlayerPostAbyss`, Navi's hint, `EventTriggerPlayerSetInvincibleAfterReturnAbyss`). The event branches on the
+**abyss type** P`+0x191C` (P = Link's player component, §9.7) with `EventQueryCheckPlayerAbyssType`.
+- **The decision** is `main+0x82C510(P)` (called from `main+0x82BBB0` and `main+0x27D4DD0`). It writes the type to
+  P`+0x191C` and to a global (`[[main+0x4C7FC80]]+0x2B30`, flag `+0x2B34` = 1). It's the only store of a non-zero
+  type; the other stores (`main+0xE5837C`, `0x11A73E0`, `0x26B0B0C`, `0x27935D4`) clear it. It fires when any of:
+  - **contact** (type 3): the decision takes the strongest abyss value among the sensor bodies Link touches (the
+    list at `L+0x40` with L = `[[[[[actor+0x270]+0x1B0]+0x18]+0x270]+0x198]`; each body: flags `+0x268` bit 2,
+    `+0x44 & 0x14` clear, byte `+0x35` bit 7 clear, value `+0x68` when `+0x6C` = 1, else 0) and `main+0x82C710`
+    compares it with a threshold param `+0x110`: contact when the value is at least the threshold, or, with a
+    threshold ≤ 0, when it's above 0.
+    These are the placed `Gimmick_AreaContact_FallDown*` / `*_FallDownMountian` / `*_FallDown_GanonCastle` logic
+    areas and similar prefabs (Water Temple whirlpool, Shadow/Spirit/Ganon's Castle rooms, StalfosStage), whose
+    graphs use `HoldSensorHitInfoGiveAbyssActor[Condition]`;
+  - **ground flags** P`+0x13D0` **bit 25 or bit 19** (`ldrh [P+0x13D2]; tst #0x208`), both from the VolumeStats
+    grid below;
+  - P`+0x13E8` bit 4, with exceptions by P`+0x13D0` bit 7:
+    - bit 7 clear: unless P`+0x13FB` bit 2;
+    - bit 7 set and P`+0x7E8` = 2: never;
+    - bit 7 set otherwise: always, and with P`+0x13D0` bit 8 and P`+0x1C30` bit 6 also when the height P`+0x16A0` is
+      above the float `*main+0xE13F70()` (or NaN) (not looked at further);
+  - P`+0x28` bit 2.
+
+  Without contact the type is 7 (P`+0x13D0` bit 7), 4/5/8/9 (P`+0x28` bits 3/4/5/6), else **1**.
+  It returns nothing; both callers read P`+0x191C` right after it and start the void-out when it isn't 0
+  (`main+0x27D4DD0` picks the reaction by type). 1.0.0 (v65536): `main+0x818640`, the same code but for branch
+  targets and its global (`+0x1DA8` / `+0x1DAC`); its callers are `main+0x817CE0` and `main+0x2783230`.
+- **The mod's link > no void outs** patches its first instruction (`pacibsp`) to a cave stub that returns at
+  once while bit 4 of the lock slot is set, so no type is ever stored (`mkips.c`, `lock.c`).
+- **The grid is VolumeStats** (PhiveConfig `VolumeStats*`): a baked sparse voxel octree per map in
+  `romfs/Phive/VolumeStats/<Map>/<Map>[_Xn_Zn][_presence_<state>].bpvsts.zs` (1065 files; field maps are tiled like
+  the static compounds; structures `Default1m`, `Dungeon1m`, `Field1m`, `Field4m`, ...). Attributes: `Intersect,
+  Material, WaterDepth_, WaterDist, WaterArea_, InWater, IsWaterSurface, WaterMat_, WaterFlow_, DungeonRoomId,
+  InDoor, OnGroundRoomArea, InHidingHole, HoleIndex, GlobalWindFlow, GlobalWaterFlow, IntersectForAir,
+  SixDirMaterials, buffer, IntersectWater, OutsideOuterBoundary, OuterBoundaryDist`. Its box per scene is in
+  `romfs/Game/VolumeStatsAABB/`. **Several maps have one grid per game state**, chosen by flags: `_presence_` files
+  for the Water Temple's water levels, Lake Hylia (`LakeHrl`, `IceDel`, `Dm_Awake_Water`), Forest Temple
+  (`Left`/`Right` corridors), Spirit Temple `Lift`, Gerudo Training Ground `Room04`, Dodongo's Cavern `Clear22`,
+  Bottom of the Well `Blow_Ocarina`, the Royal Family's Tomb `RFTomb_Open`, Zora's Domain/River water.
+  The `.bpvsts` format isn't decoded.
+- **The sensor** (`[actor+0x270]+0x460`, filled each frame by `main+0x38AEF0` from cells round Link's position
+  rounded to 1 m; the "grid lookups" of §9.7) holds two probes: probe 1 `+0x37C` hit / `+0x510` distance and probe 2
+  `+0xBBC` hit / `+0x115C` distance. The flag builder `main+0x5F90A0` turns them into:
+  - probe 1 hits within 5 m → valid ground, no bit 24.
+  - probe 1 hits 5 m or more away (or with no distance) → bit 24 (the restart point holds), unless P`+0x13D0` bit 18
+    is set. Probe 2 isn't read then.
+  - probe 1 misses → bit 24 whatever probe 2 does (a miss too); **probe 2 hitting at 8 m or more → bit 25 too
+    (void)**.
+  - Then, in every case, attribute 8 of the cell (`[S+0x108]` vfunc `+0xB0`, arg 8: value + valid byte) and its
+    value (vfunc `+0xB8`, a float; not read when probe 1 missed): set and value > 3 → **bit 19 (void)**; set → bit 20
+    (the restart point holds, §9.7) whatever the value; not set and value ≤ 1 → bit 20 too. Probably
+    `OutsideOuterBoundary` / `OuterBoundaryDist` (guess: attribute 8 isn't matched to a name).
+    If the sensor's `+0xA8` bit 18 is set, bit 19 is set at once. `main+0x38AEF0` sets that bit when Link is more
+    than 5 m outside the box at sensor `+0xEC..+0x100` (the VolumeStats AABB, by its shape).
+  - The whole step is skipped while an event runs (`[[main+0x4E94840]+0x68]` ≠ 0), when sensor `+0xA8` bit 1 is
+    clear, or when P`+0x1C54` bit 0 is set.
+  - Probe 2 isn't a plain value: `main+0x38AEF0` keeps a counter at `+0x1160` (counts to 9 while probe 2 hits) and
+    ramps something with it, so its result depends on the last frames, not only on where Link is (not followed:
+    the decompile stops at the no-return thunk).
+- **Checked in game** (Sacred Forest Meadow, child; a temporary void-out log, not in the repo, ~50 positions round
+  (-31..-28, 122..131, -121..-115), a ledge west of the grid's box, x min -29):
+  - Probe 2's distance is **how far the nearest valid grid ground is, not floor below Link.** Link stood on solid
+    ground at y 131.16 with 8.16 and fell 7 m down a slope with it going 7.78 → 8.74. It changes smoothly
+    with position (by up to 1.7 m over 0.6 m sideways), so it looks like an interpolated distance field.
+  - Probe 1 missed (bit 24) everywhere there. **Every void-out had probe 2 at 8.06–8.87; every position under 8
+    (7.06–7.98) held**, and that included standing for seconds at 7.85. Nothing else differed. Bit 25 comes on
+    one frame after the distance passes 8, and the void-out comes the frame after that.
+  - Teleporting there didn't void at random either: the same rule held.
+  - One void-out came from bit 19 with probe 1 hitting (levitating up at (-21.9, 120.8, -114.7)), the boundary
+    attribute case above.
+- **Why void-outs can seem random:**
+  - mostly, **the 8 m contour runs through places Link can stand**, so a few tenths of a metre in where he lands
+    or stops decides it, and in-game nothing marks where it is (seen above);
+  - field maps load their grid tile by tile, and dungeons swap whole grids with game state (above);
+  - the check doesn't run during events, so ending one (the ocarina, a text box) can let it fire later;
+  - the contact areas are logic graphs with their own conditions (`...Condition` nodes), not plain volumes.
+- **Not the trigger:** `Obj_Abyss_A_01` (placed in many dungeons) is only a dark bottom model with a dummy physics
+  param. The collision's user shape tag `Abyss` (bit 4, mask 0x10, PhiveConfig material presets `Floor_Abyss`,
+  `Material_Sand_Abyss`, `Material_Metal_Spike_Abyss`) exists, but no code reading it was found yet.
+- Where a void-out puts Link back (`EventPlayerPostAbyss`, `main+0x26BA6F0`'s node) wasn't followed.

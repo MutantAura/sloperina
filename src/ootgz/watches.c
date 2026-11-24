@@ -11,6 +11,7 @@
 #include "link.h"
 #include "safety.h"
 #include "sys.h"
+#include "timeofday.h"
 #include "z64hd.h"
 
 float atan2f(float y, float x); /* from sdk */
@@ -22,7 +23,7 @@ float hypotf(float x, float y);
 const char *const watch_labels[W_COUNT] = {
   "x", "y", "z", "facing", "move angle", "speed", "y speed", "camera angle", "camera pitch",
   "camera dist", "input", "stick", "lag", "timer", "frame", "map", "air wall", "jump height",
-  "safety", "safety flags",
+  "safety", "safety flags", "time of day",
 };
 const char *const watches_corner_names[GFX_NPLACES] = { "top-left", "top-right", "bottom-left", "bottom-right",
                                                        "top-centre", "bottom-centre", "custom" };
@@ -469,14 +470,14 @@ static const struct { uint32_t bit; const char *name; } button_names[] = {
 
 /* --- display types (gz's watch types, per watch: what suits its value) ---------------------- */
 
-typedef enum { DK_TEXT, DK_FLOAT, DK_ANGLE, DK_COUNT, DK_TIMER, DK_STICK, DK_F32, DK_FLAGS } dkind_t;
+typedef enum { DK_TEXT, DK_FLOAT, DK_ANGLE, DK_COUNT, DK_TIMER, DK_STICK, DK_F32, DK_FLAGS, DK_CLOCK } dkind_t;
 
 static const dkind_t kind_of[W_COUNT] = {
   [W_X] = DK_FLOAT, [W_Y] = DK_FLOAT, [W_Z] = DK_FLOAT, [W_FACING] = DK_ANGLE, [W_MOVE_ANGLE] = DK_ANGLE,
   [W_SPEED] = DK_FLOAT, [W_Y_SPEED] = DK_FLOAT, [W_CAMERA_ANGLE] = DK_ANGLE, [W_CAMERA_PITCH] = DK_ANGLE,
   [W_CAMERA_DIST] = DK_FLOAT, [W_INPUT] = DK_TEXT, [W_STICK] = DK_STICK, [W_LAG] = DK_COUNT,
   [W_TIMER] = DK_TIMER, [W_FRAME] = DK_COUNT, [W_MAP] = DK_TEXT, [W_AIRWALL] = DK_TEXT,
-  [W_JS_HEIGHT] = DK_F32, [W_SAFETY] = DK_TEXT, [W_SAFETY_FLAGS] = DK_FLAGS,
+  [W_JS_HEIGHT] = DK_F32, [W_SAFETY] = DK_TEXT, [W_SAFETY_FLAGS] = DK_FLAGS, [W_TIME_OF_DAY] = DK_CLOCK,
 };
 
 /* Each kind's types, in the order of its names below. A float: decimal (f32), whole number (s32) or the
@@ -488,6 +489,8 @@ enum { COUNT_AS_DEC, COUNT_AS_HEX, N_COUNT_TYPES };
 enum { TIMER_AS_MIN_SEC, TIMER_AS_SEC, N_TIMER_TYPES };
 enum { STICK_AS_PERCENT, STICK_AS_RAW, N_STICK_TYPES };
 enum { FLAGS_AS_HEX, FLAGS_AS_WORDS, N_FLAGS_TYPES };
+/* the time of day: 24-hour as a gossip stone tells it (21:05), 12-hour (9:05 PM), or the clock's seconds */
+enum { CLOCK_AS_24H, CLOCK_AS_12H, CLOCK_AS_SEC, N_CLOCK_TYPES };
 
 static const char *const names_float[N_FLOAT_TYPES] = { "f32", "s32", "x32" };
 static const char *const names_angle[N_ANGLE_TYPES] = { "deg", "hex", "s16", "rad" };
@@ -495,6 +498,7 @@ static const char *const names_count[N_COUNT_TYPES] = { "dec", "hex" };
 static const char *const names_timer[N_TIMER_TYPES] = { "m:s", "sec" };
 static const char *const names_stick[N_STICK_TYPES] = { "%", "raw" };
 static const char *const names_flags[N_FLAGS_TYPES] = { "hex", "flags" };
+static const char *const names_clock[N_CLOCK_TYPES] = { "24h", "12h", "sec" };
 
 #define ANGLE_UNITS_PER_TURN 65536.0f /* the game's binary angles */
 
@@ -510,6 +514,7 @@ const char *const *watch_type_names(watch_t watch, int *n)
     case DK_TIMER: *n = N_TIMER_TYPES; return names_timer;
     case DK_STICK: *n = N_STICK_TYPES; return names_stick;
     case DK_FLAGS: *n = N_FLAGS_TYPES; return names_flags;
+    case DK_CLOCK: *n = N_CLOCK_TYPES; return names_clock;
     default: *n = 0; return 0;
   }
 }
@@ -704,6 +709,19 @@ void watch_text(watch_t watch, char *buf, int len)
       } else {
         snprintf(buf, len, "0x%04x", (unsigned)flags);
       }
+      break;
+    }
+    case W_TIME_OF_DAY: {
+      uint32_t t;
+      if (!tod_get(&t))
+        snprintf(buf, len, "N/A");
+      else if (type == CLOCK_AS_SEC)
+        snprintf(buf, len, "%u", (unsigned)t);
+      else if (type == CLOCK_AS_12H)
+        snprintf(buf, len, "%u:%02u %s", (unsigned)((t / 3600 + 11) % 12 + 1), (unsigned)(t / 60 % 60),
+                 t < 12 * 3600 ? "AM" : "PM");
+      else
+        snprintf(buf, len, "%02u:%02u", (unsigned)(t / 3600), (unsigned)(t / 60 % 60));
       break;
     }
     default:

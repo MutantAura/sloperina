@@ -29,7 +29,8 @@
 
 _Static_assert(sizeof(uintptr_t) == 8 && sizeof(float) == 4, "requires a 64-bit host with f32");
 _Static_assert(W_X == 0 && W_AIRWALL == 16 && W_JS_HEIGHT == 17, "keep saved watch IDs stable");
-_Static_assert(W_SAFETY == 18 && W_SAFETY_FLAGS == 19 && W_COUNT == 20, "keep saved watch IDs stable");
+_Static_assert(W_SAFETY == 18 && W_SAFETY_FLAGS == 19 && W_TIME_OF_DAY == 20 && W_COUNT == 21,
+               "keep saved watch IDs stable");
 
 uintptr_t z64hd_main;
 static const struct z64hd_build test_build; /* no build: the version-specific paths stay off */
@@ -47,6 +48,7 @@ int save_backup_kinds = SAVE_BACKUP_BOTH;
 bool voidmap_shown, voidmap_ground, voidmap_deadly = true, voidmap_ring = true, voidmap_shift = true, voidmap_areas = true, voidmap_xray;
 bool hsstore_shown;
 bool remote_enabled;
+bool tod_get(uint32_t *seconds) { (void)seconds; return false; } /* no game clock here */
 static char archive_folder[SAVE_FOLDER_LEN];
 const char *savebackup_archive_folder(void) { return archive_folder; }
 void savebackup_set_archive_folder(const char *f) { snprintf(archive_folder, sizeof(archive_folder), "%s", f); }

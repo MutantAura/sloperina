@@ -43,6 +43,7 @@
 #include "savepos.h"
 #include "memfile.h"
 #include "ragdoll.h"
+#include "timeofday.h"
 #include "title.h"
 #include "tpose.h"
 #include "hsstore.h"
@@ -459,6 +460,7 @@ static void frame(void)
   warp_frame();
   title_frame();
   eventskip_frame();
+  tod_frame();
   age_frame();
   memfile_binds_frame(menu_current != 0);
   memfile_frame(); /* a memfile save/load: after the warp, Link moved the following frames */

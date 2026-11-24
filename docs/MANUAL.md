@@ -140,6 +140,7 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 |---|---|
 | **reload map** | Reloads the current map (at the age set in **link**). |
 | **end cutscene** | Ends the cutscene (or dialogue, chest opening or other event) that's playing. A played-back cutscene is skipped the way the game's own skip does; any other event is cancelled the way the game cancels one. Flags the rest of the event would have set aren't set, so it may play again. |
+| **time of day** | The game's clock: the time now (and whether it's day, 06:00 to 18:00, or night), **hour** and **minute** to set it, **freeze time** to hold it where it is, and **dawn**, **noon**, **dusk** and **midnight** to jump to. It sets the clock the way the game's own `ExecuteWmSetTime` does. Until the story has started the clock (early in a new game it stays at 06:00), setting it does nothing. Freezing isn't saved in the settings. |
 | *collision* | |
 | **environment** | See below. |
 | **void out** | See [2.3.3](#233-void-out). |
@@ -290,11 +291,13 @@ row of buttons:
 Under the list:
 
 - **📁 (known watches)**: the built-in watches: x, y, z, facing, move angle, speed, y speed, camera angle /
-  pitch / distance, input, stick, lag, timer, frame, map, air wall, jump height, safety, safety flags. Each can
-  be in the list once.
+  pitch / distance, input, stick, lag, timer, frame, map, air wall, jump height, safety, safety flags, time of
+  day. Each can be in the list once.
   **jump height** is the height your last jump set (takeoff + 0.7; FLT_MAX until you jump after a load), which
   the jumpslash launch is limited to. It's always in the list (hide it to keep it off screen).
   **safety** and **safety flags** show the game's safety section, below.
+  **time of day** is the game's clock: **24h** as a gossip stone tells it (`21:05`, the default), **12h**
+  (`9:05 PM`) or **sec**, the seconds into the day (0 to 86399). **N/A** while there's no clock (not in play).
 - **+ (custom watch)**: a watch of any memory address. Type the address (D-pad left / right: digit, up / down:
   change it), **L** to add. It starts from your last memory watch, as in gz. One watch per address. Changed your
   mind? **B**, or D-pad left past the first digit to the **x** that takes the folder's place and **L**: no watch is

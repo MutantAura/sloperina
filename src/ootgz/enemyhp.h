@@ -34,6 +34,9 @@ typedef struct {
   uint32_t state;
 } actor_near_t;
 int actors_near(float radius, actor_near_t *out, int max);
+/* actors.c: every actor in the actor manager, any state (not Link), in the manager's order, up to max (`more`: those
+ * that didn't fit); distance 0 where Link's position isn't known; game thread */
+int actors_all(actor_near_t *out, int max, int *more);
 
 /* actors.c: an actor found earlier, read again if it's still in the actor manager (false: gone); game thread */
 typedef struct {

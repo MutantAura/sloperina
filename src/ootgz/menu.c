@@ -21,7 +21,7 @@ static const char *with_binds(const char *text)
   return binds_expand(text, bufs[next], sizeof(bufs[next]));
 }
 
-#define POOL_ITEMS 1800 /* 1400, then save management's archive lists and menus */
+#define POOL_ITEMS 2200 /* 1400, then save management's archive lists and menus; 2200 for debug > actors' lists */
 
 static menu_item_t pool[POOL_ITEMS];
 static int pool_used;
@@ -187,6 +187,12 @@ void menu_refresh(menu_t *menu)
       move_selection(menu, -1);
     }
   }
+}
+
+int menu_pool_used(int *size)
+{
+  *size = POOL_ITEMS;
+  return pool_used;
 }
 
 void menu_reset(menu_t *menu)

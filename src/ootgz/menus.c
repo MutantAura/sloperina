@@ -4690,4 +4690,6 @@ void menus_build(void)
   build_log();
   build_about();
   build_root();
+  int pool_size, pool = menu_pool_used(&pool_size);
+  log_printf("menus: %d of %d items reserved", pool, pool_size);
 }

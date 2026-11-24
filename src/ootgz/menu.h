@@ -117,5 +117,7 @@ void menu_item_line(menu_item_t *it, char *buf, int len);
 void menu_refresh(menu_t *m);
 /* empty the menu to add its items again (its reserved items stay its own) */
 void menu_reset(menu_t *m);
+/* the shared pool's items reserved so far, and its size (for the log) */
+int menu_pool_used(int *size);
 
 #endif

@@ -371,6 +371,48 @@ int actors_near(float radius, actor_near_t *out, int max)
   return near.n;
 }
 
+/* --- every actor in the manager (debug > actors > browse) ------------------------------------------ */
+
+static struct {
+  actor_near_t *out;
+  int n, max, more;
+  bool link_known;
+} every;
+
+static void use_every(uintptr_t actor)
+{
+  if (!readable(actor, ACTOR_POS + 12) || actor == walk.link)
+    return;
+  uintptr_t name = *(uintptr_t *)(actor + ACTOR_NAME);
+  if (!name || !sys_mapped(name, 8, SYS_PERM_R))
+    return;
+  if (every.n >= every.max) {
+    every.more++;
+    return;
+  }
+  const float *pos = (const float *)(actor + ACTOR_POS);
+  every.out[every.n++] = (actor_near_t){ (const char *)name, every.link_known ? distance_to_link(actor) : 0, actor,
+                                         { pos[0], pos[1], pos[2] }, *(uint32_t *)(actor + ACTOR_STATE) };
+}
+
+int actors_all(actor_near_t *out, int max, int *more)
+{
+  *more = 0;
+  if (!z64hd_game || !z64hd_game->actor_mgr_ptr || max < 1)
+    return 0;
+  uintptr_t mgr = sys_ptr(MAIN(z64hd_game->actor_mgr_ptr));
+  if (!readable(mgr + MGR_TREE_ROOT, 8))
+    return 0;
+  walk.visits = 0;
+  walk.visit = use_every;
+  walk.link = link_actor();
+  every.link_known = link_drawn_pos(&walk.link_pos);
+  every.out = out, every.n = 0, every.max = max, every.more = 0;
+  walk_tree(*(uintptr_t *)(mgr + MGR_TREE_ROOT));
+  *more = every.more;
+  return every.n;
+}
+
 /* --- one actor, again (debug > actors) ----------------------------------------------------------- */
 
 static struct {

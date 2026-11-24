@@ -27,6 +27,7 @@
 #include "voidmap.h"
 #include "ragdoll.h"
 #include "title.h"
+#include "actorsmenu.h"
 #include "tpose.h"
 #include "hsstore.h"
 #include "remote.h"
@@ -4347,12 +4348,15 @@ static void build_debug(void)
 {
   build_pause_research();
   build_flaglog();
-  menu_init(&m_debug, "debug", 8);
+  menu_init(&m_debug, "debug", 9);
   menu_item_t *to_title = menu_add_action(&m_debug, "return to title", act_return_to_title, 0);
   if (to_title) {
     to_title->hint = "L: back to the title screen, as game over's quit does (what isn't saved is lost)";
     to_title->log_label = "return to title";
   }
+  menu_item_t *actors = menu_add_submenu(&m_debug, "actors", actorsmenu_build());
+  if (actors)
+    actors->hint = "the actors near Link: choose one, go to it";
   menu_add_submenu(&m_debug, "tests", &m_tests);
   menu_add_submenu(&m_debug, "heap", &m_heap);
   menu_add_submenu(&m_debug, "memory", &memview_menu);

@@ -27,8 +27,25 @@
 #define NEAR 1.0        /* units per axis: Link counts as there */
 
 static bool saved;
-static double sx, sy, sz, sfx, sfz; /* drawn position; facing as a unit (x, z) */
+static double sx, sy, sz, sfx, sfz; /* where a load puts Link: drawn position; facing as a unit (x, z), 0 0: as he is */
 static char smap[64];
+/* the saved position (save / set): a load copies it into the above, which position_goto uses for its own */
+static struct {
+  double x, y, z, fx, fz;
+  char map[64];
+} slot;
+
+static void keep_slot(void)
+{
+  slot.x = sx, slot.y = sy, slot.z = sz, slot.fx = sfx, slot.fz = sfz;
+  snprintf(slot.map, sizeof(slot.map), "%s", smap);
+}
+
+static void use_slot(void)
+{
+  sx = slot.x, sy = slot.y, sz = slot.z, sfx = slot.fx, sfz = slot.fz;
+  snprintf(smap, sizeof(smap), "%s", slot.map);
+}
 
 static bool pending;  /* load pressed: waiting for the buttons to be let go */
 static int settle;    /* frames left to see Link arrive */
@@ -68,6 +85,7 @@ void position_save(void)
   const char *m = gd_get_str(GD_STR_MAP);
   snprintf(smap, sizeof(smap), "%s", m ? m : "");
   saved = true;
+  keep_slot();
   log_printf("position saved: %.3f %.3f %.3f facing %.3f,%.3f in %s", sx, sy, sz, sfx, sfz, smap);
   gfx_notice("position saved");
 }
@@ -85,7 +103,29 @@ void position_set(double x, double y, double z, double facing_degrees)
   const char *m = gd_get_str(GD_STR_MAP);
   snprintf(smap, sizeof(smap), "%s", m ? m : "");
   saved = true;
+  keep_slot();
   log_printf("position set: %.3f %.3f %.3f facing %.1f in %s", sx, sy, sz, facing_degrees, smap);
+}
+
+bool position_goto(double x, double y, double z)
+{
+  if (pending || settle) {
+    gfx_notice("a position load is still under way");
+    return false;
+  }
+  if (link_record_status() != REC_READY) {
+    gfx_notice("go to: Link not found");
+    return false;
+  }
+  sx = x;
+  sy = y;
+  sz = z;
+  sfx = sfz = 0; /* he keeps facing as he does */
+  const char *m = gd_get_str(GD_STR_MAP);
+  snprintf(smap, sizeof(smap), "%s", m ? m : "");
+  pending = true;
+  log_printf("go to: %.3f %.3f %.3f in %s", sx, sy, sz, smap);
+  return true;
 }
 
 void position_load(void)
@@ -94,6 +134,7 @@ void position_load(void)
     gfx_notice("No position saved yet");
     return;
   }
+  use_slot();
   if (!in_saved_map()) {
     gfx_notice("the saved position is in another map");
     return;

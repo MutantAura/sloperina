@@ -345,7 +345,8 @@ static void use_near(uintptr_t actor)
     at = near.max - 1;
   for (; at > 0 && near.out[at - 1].distance > distance; at--) /* kept nearest first */
     near.out[at] = near.out[at - 1];
-  near.out[at] = (actor_near_t){ (const char *)name, distance };
+  const float *pos = (const float *)(actor + ACTOR_POS);
+  near.out[at] = (actor_near_t){ (const char *)name, distance, actor, { pos[0], pos[1], pos[2] }, state };
 }
 
 int actors_near(float radius, actor_near_t *out, int max)
@@ -361,11 +362,53 @@ int actors_near(float radius, actor_near_t *out, int max)
   if (!link_drawn_pos(&walk.link_pos))
     return 0;
   for (int i = 0; i < max; i++)
-    out[i] = (actor_near_t){ 0, 0 };
+    out[i] = (actor_near_t){ 0 };
   near.out = out;
   near.n = 0;
   near.max = max;
   near.radius = radius;
   walk_tree(*(uintptr_t *)(mgr + MGR_TREE_ROOT));
   return near.n;
+}
+
+/* --- one actor, again (debug > actors) ----------------------------------------------------------- */
+
+static struct {
+  uintptr_t want;
+  bool found;
+} again;
+
+static void find_again(uintptr_t actor)
+{
+  if (actor == again.want)
+    again.found = true;
+}
+
+bool actor_read(uintptr_t actor, actor_read_t *out)
+{
+  *out = (actor_read_t){ 0 };
+  if (!actor || !z64hd_game || !z64hd_game->actor_mgr_ptr)
+    return false;
+  uintptr_t mgr = sys_ptr(MAIN(z64hd_game->actor_mgr_ptr));
+  if (!readable(mgr + MGR_TREE_ROOT, 8))
+    return false;
+  again.want = actor; /* still in the manager's tree: its memory is still the actor's */
+  again.found = false;
+  walk.visits = 0;
+  walk.visit = find_again;
+  walk_tree(*(uintptr_t *)(mgr + MGR_TREE_ROOT));
+  if (!again.found || !readable(actor, ACTOR_POS + 12))
+    return false;
+  uintptr_t name = *(uintptr_t *)(actor + ACTOR_NAME);
+  out->name = name && sys_mapped(name, 8, SYS_PERM_R) ? (const char *)name : "?";
+  out->state = *(uint32_t *)(actor + ACTOR_STATE);
+  const float *pos = (const float *)(actor + ACTOR_POS);
+  out->pos[0] = pos[0], out->pos[1] = pos[1], out->pos[2] = pos[2];
+  out->running = out->state >= STATE_RUNNING && out->state <= STATE_RUNNING_LAST;
+  out->has_life = actor_life(actor, &out->life, &out->max_life) == LIFE_OK;
+  if (link_drawn_pos(&walk.link_pos)) {
+    out->distance = distance_to_link(actor);
+    out->distance_known = true;
+  }
+  return true;
 }

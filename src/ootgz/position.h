@@ -11,6 +11,9 @@ void position_load(void);
 /* the saved position given, not taken from where Link is: this map, facing in degrees (0 = +z); a load then
  * puts him there (remote.h's place) */
 void position_set(double x, double y, double z, double facing_degrees);
+/* Link to a spot of this map as a load puts him there, leaving the saved position alone (debug > actors > go
+ * to); false, with a notice, if he can't be moved now */
+bool position_goto(double x, double y, double z);
 /* frame hook, after levitate_frame: the shortcuts, and a load in progress */
 void position_frame(bool menu_open);
 

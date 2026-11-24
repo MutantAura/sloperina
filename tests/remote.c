@@ -73,7 +73,8 @@ void position_set(double x, double y, double z, double facing)
 {
   placed[0] = x, placed[1] = y, placed[2] = z, placed[3] = facing;
 }
-static actor_near_t actors_there[3] = { { "Npc_Kokiri", 2.5f }, { "Obj_Sign", 4.25f }, { "Npc_Far", 30 } };
+static actor_near_t actors_there[3] = { { .name = "Npc_Kokiri", .distance = 2.5f }, { .name = "Obj_Sign", .distance = 4.25f },
+                                        { .name = "Npc_Far", .distance = 30 } };
 int actors_near(float radius, actor_near_t *out, int max)
 {
   int n = 0;

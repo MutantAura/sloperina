@@ -29,8 +29,24 @@ int actors_named(const char *name, uintptr_t *out, int max);
 typedef struct {
   const char *name; /* the game's own, e.g. "Enemy_Wolfos" */
   float distance;
+  uintptr_t actor;  /* for actor_read: only good while the actor's still there */
+  float pos[3];
+  uint32_t state;
 } actor_near_t;
 int actors_near(float radius, actor_near_t *out, int max);
+
+/* actors.c: an actor found earlier, read again if it's still in the actor manager (false: gone); game thread */
+typedef struct {
+  const char *name;
+  float pos[3];
+  float distance;       /* from Link, if distance_known */
+  bool distance_known;
+  uint32_t state;       /* 4 and 5 running, 6 not yet appeared, 7 to 11 dying or gone (FINDINGS 9.5) */
+  bool running;
+  bool has_life;        /* life and max_life read from its Life component */
+  int32_t life, max_life;
+} actor_read_t;
+bool actor_read(uintptr_t actor, actor_read_t *out);
 
 /* the colours of the rectangles (nvn.c) */
 enum { EH_BACK, EH_FILL, EH_LOW, EH_TEXT, EH_NCOLORS };

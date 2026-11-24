@@ -46,6 +46,7 @@
 #include "title.h"
 #include "tpose.h"
 #include "hsstore.h"
+#include "actorsmenu.h"
 #include "remote.h"
 #include "eventskip.h"
 #include "position.h"
@@ -308,6 +309,7 @@ static void fa_hold_game(void)
       break;
     }
     menu_controls();
+    actorsmenu_frame();
     fa_event_t event = fa_read_button();
     if (event == FA_RUN) {
       fa_paused = false;
@@ -420,6 +422,7 @@ static void frame(void)
 
   fa_menu_was_open = menu_current != 0; /* an L that closes the menu isn't frame advance's */
   menu_controls();
+  actorsmenu_frame(); /* debug > actors reads the actors again when it's entered */
   if (menu_current) {
     watches_sync();
     menu_draw();

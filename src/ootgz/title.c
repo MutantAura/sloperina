@@ -17,6 +17,7 @@
 
 #include <stdint.h>
 
+#include "binds.h"
 #include "eventskip.h"
 #include "gamedata.h"
 #include "gfx.h"
@@ -119,6 +120,11 @@ const char *title_start(void)
 
 void title_frame(void)
 {
+  if (cmd_pressed(CMD_TITLE)) { /* unbound unless given buttons (settings > rebind commands) */
+    const char *problem = title_start();
+    if (problem)
+      gfx_notice(problem);
+  }
   if (watch == W_START) {
     char name[EVENTSKIP_NAME_MAX];
     if (eventskip_running() && eventskip_flow_name(name)) {

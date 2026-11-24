@@ -37,6 +37,7 @@ const command_info_t command_info[CMD_COUNT] = {
   [CMD_RESET_TIMER] = { "reset timer", CMD_GROUP_WATCHES, false },
   [CMD_RESET_LAG] = { "reset lag counter", CMD_GROUP_WATCHES, false },
   [CMD_RESET_JS] = { "reset jump height", CMD_GROUP_WATCHES, false },
+  [CMD_TITLE] = { "return to title", CMD_GROUP_DEBUG, false },
 };
 
 /* their keys: bind_<key>= in the settings file, {key} in menu text (not menu text) */
@@ -69,10 +70,11 @@ const char *const command_keys[CMD_COUNT] = {
   [CMD_RESET_TIMER] = "reset_timer", /* not menu text */
   [CMD_RESET_LAG] = "reset_lag", /* not menu text */
   [CMD_RESET_JS] = "reset_jump", /* not menu text */
+  [CMD_TITLE] = "title", /* not menu text */
 };
 
 const char *const command_group_names[CMD_GROUPS] = {
-  "menu", "frame advance", "link", "scene", "memfiles", "watches and timer",
+  "menu", "frame advance", "link", "scene", "memfiles", "watches and timer", "debug",
 };
 
 /* input.h's bit numbers */
@@ -107,6 +109,7 @@ static const uint32_t defaults[CMD_COUNT] = {
   [CMD_MEMFILE_NEXT] = BIND_NONE, [CMD_MEMFILE_PREV] = BIND_NONE,
   [CMD_WATCHES] = B2(B_R, B_DRIGHT), [CMD_TIMER] = B3(B_R, B_A, B_DLEFT), [CMD_RESET_TIMER] = B3(B_R, B_B, B_DLEFT),
   [CMD_RESET_LAG] = B3(B_R, B_B, B_DRIGHT), [CMD_RESET_JS] = B3(B_R, B_A, B_DRIGHT),
+  [CMD_TITLE] = BIND_NONE, /* leaves play: only for whoever gives it buttons */
 };
 
 uint32_t binds[CMD_COUNT];

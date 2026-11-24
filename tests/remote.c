@@ -26,10 +26,41 @@ bool gd_ready(void) { return true; }
 const char *gd_get_str(uint32_t hash) { return "KokiriForest"; }
 bool gd_game_paused(bool *is_pause, int32_t *pause_requests) { return false; }
 const char *warp_state(void) { return ""; }
+/* Link's actor and the player object, as status and trace read them at 1.1.1's offsets (z64hd.h): his velocity at
+ * +0x388, the item on ZR and in hand at the player object's +0x7D0 and +0x7D8 (the jump height's address is that
+ * object + 0x18E8), and his actions through three pointers to the action table. A build whose offsets aren't
+ * known (all 0) reads none of them. */
+static const struct z64hd_build build_1_1_1 = {
+  .link_velocity = 0x388, .player_zr_item = 0x7D0, .player_held_kind = 0x7D8, .player_lock_state = 0x1C74,
+  .player_on_ground = 0x13D0, .player_actions_1 = 0x18, .player_actions_2 = 0x270, .player_actions_3 = 0x188,
+  .action_main_slot = 0x1C0, .action_weapon_slot = 0x1C8, .action_id = 0x4C,
+};
+static const struct z64hd_build build_unknown = { .version = "1.0.0" };
+const struct z64hd_build *z64hd_game = &build_1_1_1;
+static _Alignas(8) uint8_t actor_mem[0x400], player_mem[0x1D00];
 static float facing_x = 1, facing_z = 0;
+uintptr_t link_actor(void) { return (uintptr_t)actor_mem; }
+static _Alignas(8) uint8_t hop1[0x280], hop2[0x190], action_table[0x1D0], main_action[0x50], weapon_action[0x50];
+uintptr_t sys_ptr(uintptr_t addr)
+{
+  uintptr_t p;
+  memcpy(&p, (const void *)addr, 8);
+  return p;
+}
+bool sys_read32(uintptr_t addr, uint32_t *out)
+{
+  memcpy(out, (const void *)addr, 4);
+  return true;
+}
+bool sys_mapped(uintptr_t addr, size_t size, uint32_t perm) { return true; }
 bool link_facing(double *fx, double *fz)
 {
   *fx = facing_x, *fz = facing_z;
+  return true;
+}
+bool js_height_address(uintptr_t *addr)
+{
+  *addr = (uintptr_t)player_mem + 0x18E8;
   return true;
 }
 /* load position's side: whether Link's record is known, and where a place put the saved position */
@@ -42,6 +73,16 @@ void position_set(double x, double y, double z, double facing)
 {
   placed[0] = x, placed[1] = y, placed[2] = z, placed[3] = facing;
 }
+static actor_near_t actors_there[3] = { { "Npc_Kokiri", 2.5f }, { "Obj_Sign", 4.25f }, { "Npc_Far", 30 } };
+int actors_near(float radius, actor_near_t *out, int max)
+{
+  int n = 0;
+  for (int i = 0; i < 3 && n < max; i++)
+    if (actors_there[i].distance <= radius)
+      out[n++] = actors_there[i];
+  return n;
+}
+
 bool input_remote_active;
 uint32_t input_remote_buttons;
 bool input_remote_sticks[2];
@@ -265,11 +306,11 @@ int main(void)
   out_has(" 2 | @3 action reload map\n");
   out_has(" 3 err list: not a menu\n");
 
-  /* status: the frame, the map, where Link is and which way he faces, whether the game is held, the menu, the
-   * game's pause, the warp */
+  /* status: the frame, the map, where Link is and which way he faces, how he moves (nothing yet), the game held */
   run_script("status\n");
   out_has(" 1 ok frame=");
-  out_has(" map=KokiriForest link=yes x=1.500 y=2.000 z=-3.000 facing=90.0 held=0 menu=0 game_paused=0 warp=-\n");
+  out_has(" map=KokiriForest link=yes x=1.500 y=2.000 z=-3.000 facing=90.0 vy=0.000 hs=0.000 hand=0 zr=0 lock=0 "
+          "ground=0 act=-1 wpn=-1 held=0 menu=0 game_paused=0 warp=-\n");
 
   /* pause, step and run, as frame advance takes them (ootgz.c), with input and a fire for the frames let through */
   out_size = 0;
@@ -300,7 +341,8 @@ int main(void)
   remote_frame(true);
   out_has(" 5 ok stepped\n");
   out_has(" 6 ok frame=");
-  out_has(" map=KokiriForest link=yes x=1.500 y=2.000 z=-3.000 facing=90.0 held=1 menu=0 game_paused=0 warp=-\n");
+  out_has(" map=KokiriForest link=yes x=1.500 y=2.000 z=-3.000 facing=90.0 vy=0.000 hs=0.000 ");
+  out_has(" act=-1 wpn=-1 held=1 menu=0 game_paused=0 warp=-\n");
   assert(remote_take_run() && !remote_take_run() && running);
   remote_frame(true);
   assert(!strstr(out_file, "after")); /* run waits until the game runs */
@@ -322,6 +364,63 @@ int main(void)
   assert(input_remote_active && input_remote_buttons == 3); /* for 0: until the next input */
   run_script("input off\n");
   assert(!input_remote_active);
+
+  /* status has how Link moves and what he holds; trace gives a line a frame, without holding the script up;
+   * actors lists who is near */
+  float velocity[3] = { 3, 6.125f, -4 };
+  int32_t zr_item = 0, held = -1;
+  memcpy(actor_mem + 0x388, velocity, sizeof(velocity));
+  memcpy(player_mem + 0x7D0, &zr_item, 4);
+  memcpy(player_mem + 0x7D8, &held, 4);
+  uint32_t lock_state = 2, on_ground = 0x101;
+  memcpy(player_mem + 0x1C74, &lock_state, 4);
+  memcpy(player_mem + 0x13D0, &on_ground, 4);
+  uintptr_t chain[5] = { (uintptr_t)hop2, (uintptr_t)action_table, (uintptr_t)main_action, (uintptr_t)weapon_action,
+                         (uintptr_t)hop1 };
+  memcpy(player_mem + 0x18, &chain[4], 8);
+  memcpy(hop1 + 0x270, &chain[0], 8);
+  memcpy(hop2 + 0x188, &chain[1], 8);
+  memcpy(action_table + 0x1C0, &chain[2], 8);
+  memcpy(action_table + 0x1C8, &chain[3], 8);
+  uint32_t walk = 1, drawn = 57;
+  memcpy(main_action + 0x4C, &walk, 4);
+  memcpy(weapon_action + 0x4C, &drawn, 4);
+  run_script("status\n");
+  out_has(" facing=90.0 vy=6.125 hs=5.000 hand=-1 zr=0 lock=2 ground=1 act=1 wpn=57 held=0 menu=0 game_paused=0 "
+          "warp=-\n");
+  out_size = 0;
+  send("trace 3\necho now\nwait 5\necho later\n");
+  for (int i = 0; i < POLL_CALLS; i++)
+    frame();
+  out_has(" 1 ok trace 3\n");
+  out_has(" 2 ok now\n");
+  assert(!strstr(out_file, " t y=")); /* from the next frame on */
+  held = 3;
+  memcpy(player_mem + 0x7D8, &held, 4);
+  for (int i = 0; i < 6; i++)
+    frame();
+  out_has(" 4 ok later\n");
+  int traced = 0;
+  for (const char *p = out_file; (p = strstr(p, " t y=2.000 vy=6.125 hs=5.000 x=1.500 z=-3.000 hand=3 zr=0 paused=0 lock=2 ground=1 act=1 wpn=57\n")); p++)
+    traced++;
+  assert(traced == 3);
+  run_script("trace 100\ntrace off\nwait 2\ntrace x\n");
+  assert(!strstr(out_file, " t y="));
+  out_has(" 4 err trace: a number of frames, or off\n");
+  /* where the build's offsets aren't known (1.0.0's), or no build is: none of it is read, and it says so */
+  for (int i = 0; i < 2; i++) {
+    z64hd_game = i ? 0 : &build_unknown;
+    run_script("status\ntrace 1\nwait 1\n");
+    out_has(" facing=90.0 vy=- hs=- hand=-1 zr=-1 lock=-1 ground=-1 act=-1 wpn=-1 held=0 ");
+    out_has(" t y=2.000 vy=- hs=- x=1.500 z=-3.000 hand=-1 zr=-1 paused=0 lock=-1 ground=-1 act=-1 wpn=-1\n");
+  }
+  z64hd_game = &build_1_1_1;
+  run_script("actors\nactors 3\nactors far\n");
+  out_has(" 1 | 2.50 Npc_Kokiri\n");
+  out_has(" 1 | 4.25 Obj_Sign\n");
+  out_has(" 1 ok 2 actors within 6 m\n");
+  out_has(" 2 ok 1 actors within 3 m\n");
+  out_has(" 3 err actors: a distance in metres\n");
 
   /* place: the saved position set and loaded; facing as now unless given; refused while Link's record isn't known */
   run_script("place -12.45 110.36 4.66 250\nplace 1 2.5 -3\nplace 1 2\nplace 1 2 x\n");

@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "binds.h"
+#include "enemyhp.h"
 #include "gamedata.h"
 #include "input.h"
 #include "link.h"
@@ -17,6 +18,8 @@
 #include "settings.h"
 #include "sys.h"
 #include "warp.h"
+#include "watches.h"
+#include "z64hd.h"
 
 #define REMOTE_DIR SD_DIR "/remote"
 #define CMD_FILE REMOTE_DIR "/cmd.txt"
@@ -52,6 +55,8 @@ static bool pause_waiting;          /* ... and until it holds the game */
 static int steps_left;              /* step: frames still to let through */
 static bool stepping;               /* ... and until the game is held again after them */
 static bool run_wanted, run_waiting; /* run: the same two */
+
+static int trace_left;               /* trace: frames it still reports */
 
 static uint16_t fire_pending[CMD_COUNT]; /* fire while the game is held: given on the next frame (1 + frames held) */
 static int input_frames;                 /* frames the script's input still lasts (0: until changed) */
@@ -536,16 +541,94 @@ static const char *run_input(char *args)
   return 0;
 }
 
+float hypotf(float x, float y); /* from sdk */
+
+/* Link's own state, for status and trace: his velocity (the actor's, units a second), what he holds and what's
+ * on ZR (the player object's: -1 nothing, 0 the Deku Stick, 3 the Boomerang...), whether ZL has a target (2 with
+ * one, 3 with none), whether he's on the ground, the ids of his main and weapon actions (the game's action table:
+ * 40 Wait, 1 Walk, 65 LockOnWait, 66 LockOnMove, 114 JumpAttack, 33 Fall, 32 Land; weapon 57 Drawn, 58 Sheathed,
+ * 56 PutAway) and which way he faces (degrees, 0 = +z). The offsets are the running build's (z64hd.h); where one
+ * isn't known (0) or can't be read, the value stays unknown: moving false, -1 for the rest. */
+#define PLAYER_JS_HEIGHT 0x18E8 /* watches.c: js_height_address gives the player object + this */
+#define OFFSET(field) (z64hd_game ? z64hd_game->field : 0)
+
+typedef struct {
+  bool moving; /* vx, vy, vz were read */
+  float vx, vy, vz, facing;
+  int32_t hand, zr, lock, ground, action, weapon;
+} link_state_t;
+
+/* the s32 at base + offset, or -1 where the offset isn't known or the word can't be read */
+static int32_t read_s32(uintptr_t base, uint32_t offset)
+{
+  uint32_t word;
+  return base && offset && sys_read32(base + offset, &word) ? (int32_t)word : -1;
+}
+
+/* the pointer at base + offset, or 0 */
+static uintptr_t read_ptr(uintptr_t base, uint32_t offset)
+{
+  return base && offset ? sys_ptr(base + offset) : 0;
+}
+
 float atan2f(float y, float x); /* from sdk */
 
-/* which way Link faces, in degrees (0 = +z, 90 = +x); 0 where it can't be read */
-static float facing_degrees(void)
+static void link_state(link_state_t *s)
 {
+  *s = (link_state_t){ false, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1 };
   double fx, fz;
-  if (!link_facing(&fx, &fz))
-    return 0;
-  float degrees = atan2f((float)fx, (float)fz) * (180.0f / 3.14159265f);
-  return degrees < 0 ? degrees + 360.0f : degrees;
+  if (link_facing(&fx, &fz)) {
+    s->facing = atan2f((float)fx, (float)fz) * (180.0f / 3.14159265f);
+    if (s->facing < 0)
+      s->facing += 360.0f;
+  }
+  uintptr_t link = link_actor();
+  uint32_t velocity = OFFSET(link_velocity);
+  if (link && velocity && sys_mapped(link + velocity, 12, SYS_PERM_R)) {
+    const float *v = (const float *)(link + velocity);
+    s->moving = true;
+    s->vx = v[0];
+    s->vy = v[1];
+    s->vz = v[2];
+  }
+  uintptr_t js;
+  if (!js_height_address(&js) || js < PLAYER_JS_HEIGHT)
+    return;
+  uintptr_t player = js - PLAYER_JS_HEIGHT;
+  s->zr = read_s32(player, OFFSET(player_zr_item));
+  s->hand = read_s32(player, OFFSET(player_held_kind));
+  s->lock = read_s32(player, OFFSET(player_lock_state));
+  s->ground = read_s32(player, OFFSET(player_on_ground));
+  if (s->ground != -1)
+    s->ground &= 1;
+  uintptr_t actions = read_ptr(read_ptr(read_ptr(player, OFFSET(player_actions_1)), OFFSET(player_actions_2)),
+                               OFFSET(player_actions_3));
+  s->action = read_s32(read_ptr(actions, OFFSET(action_main_slot)), OFFSET(action_id));
+  s->weapon = read_s32(read_ptr(actions, OFFSET(action_weapon_slot)), OFFSET(action_id));
+}
+
+/* "vy=6.125 hs=5.000", or "vy=- hs=-" where Link's velocity isn't known */
+static void motion_text(const link_state_t *s, char *buf, size_t cap)
+{
+  if (s->moving)
+    snprintf(buf, cap, "vy=%.3f hs=%.3f", (double)s->vy, (double)hypotf(s->vx, s->vz));
+  else
+    snprintf(buf, cap, "vy=- hs=-");
+}
+
+/* one frame of a trace: "<line> t y=... vy=... hs=... x=... z=... hand=... zr=... paused=..." */
+static void trace_line(void)
+{
+  vec3f_t pos = { 0, 0, 0 };
+  link_state_t s;
+  link_drawn_pos(&pos);
+  link_state(&s);
+  char motion[48], text[240];
+  motion_text(&s, motion, sizeof(motion));
+  snprintf(text, sizeof(text), "%d t y=%.3f %s x=%.3f z=%.3f hand=%d zr=%d paused=%d lock=%d ground=%d act=%d wpn=%d",
+           line_no, (double)pos.y, motion, (double)pos.x, (double)pos.z, (int)s.hand, (int)s.zr,
+           (int)(gd_ready() && gd_game_paused(0, 0)), (int)s.lock, (int)s.ground, (int)s.action, (int)s.weapon);
+  out_line(text);
 }
 
 /* "12.5", "-0.25", "110": a number with a decimal point */
@@ -587,23 +670,51 @@ static void run_place(char *args)
     result(false, "place: Link not found");
     return;
   }
-  if (n < 4)
-    v[3] = facing_degrees();
+  if (n < 4) {
+    link_state_t s;
+    link_state(&s);
+    v[3] = s.facing;
+  }
   position_set(v[0], v[1], v[2], v[3]);
   position_load();
   result(true, "place %.3f %.3f %.3f facing %.1f", v[0], v[1], v[2], v[3]);
 }
 
+#define ACTORS_MAX 24
+
+static void run_actors(const char *args)
+{
+  int32_t radius = 6;
+  if (*args && (!parse_int(args, &radius) || radius < 1)) {
+    result(false, "actors: a distance in metres");
+    return;
+  }
+  static actor_near_t near[ACTORS_MAX];
+  int n = actors_near((float)radius, near, ACTORS_MAX);
+  char text[160];
+  for (int i = 0; i < n; i++) {
+    snprintf(text, sizeof(text), "%d | %.2f %.80s", line_no, (double)near[i].distance, near[i].name);
+    out_line(text);
+  }
+  result(true, "%d actors within %d m", n, (int)radius);
+}
+
 static void run_status(bool held)
 {
+  link_state_t s;
+  link_state(&s);
   vec3f_t pos = { 0, 0, 0 };
   bool has_pos = link_drawn_pos(&pos);
   const char *map = gd_ready() ? gd_get_str(GD_STR_MAP) : 0;
   const char *warp = warp_state();
-  result(true, "frame=%u map=%s link=%s x=%.3f y=%.3f z=%.3f facing=%.1f held=%d menu=%d game_paused=%d warp=%s",
+  char motion[48];
+  motion_text(&s, motion, sizeof(motion));
+  result(true, "frame=%u map=%s link=%s x=%.3f y=%.3f z=%.3f facing=%.1f %s hand=%d zr=%d lock=%d ground=%d act=%d "
+               "wpn=%d held=%d menu=%d game_paused=%d warp=%s",
          (unsigned)frame_counter(), map && map[0] ? map : "?", has_pos ? "yes" : "no", (double)pos.x, (double)pos.y,
-         (double)pos.z, (double)facing_degrees(), (int)held, menu_current != 0,
-         (int)(gd_ready() && gd_game_paused(0, 0)), warp && warp[0] ? warp : "-");
+         (double)pos.z, (double)s.facing, motion, (int)s.hand, (int)s.zr, (int)s.lock, (int)s.ground,
+         (int)s.action, (int)s.weapon, (int)held, menu_current != 0, (int)(gd_ready() && gd_game_paused(0, 0)),
+         warp && warp[0] ? warp : "-");
 }
 
 /* Run one line. What it waits for, if anything, is left in the state above. */
@@ -645,6 +756,17 @@ static void run_line(char *line, bool held)
     run_status(held);
   } else if (same(verb, "place")) {
     run_place(args);
+  } else if (same(verb, "actors")) {
+    run_actors(args);
+  } else if (same(verb, "trace")) {
+    if (same(args, "off"))
+      number = 0;
+    else if (!parse_int(args, &number) || number < 1) {
+      result(false, "trace: a number of frames, or off");
+      return;
+    }
+    trace_left = number;
+    result(true, "trace %d", (int)number);
   } else if (same(verb, "wait")) {
     if (!parse_int(args, &number) || number < 0)
       result(false, "wait: a number of frames");
@@ -860,9 +982,14 @@ void remote_frame(bool held)
       input_off();
     if (wait_left > 0)
       wait_left--;
+    if (trace_left > 0) { /* this frame's, before any line of it runs */
+      trace_line();
+      trace_left--;
+    }
   }
   if (!running)
     poll();
+  size_t traced = out_len; /* more than the trace's lines after this: the sender is waiting to read it */
   for (int lines = 0; running && lines < LINES_PER_CALL && !waiting(held); lines++) {
     char *line = next_line();
     if (!line) {
@@ -872,7 +999,8 @@ void remote_frame(bool held)
     }
     run_line(line, held);
   }
-  if (out_len)
+  /* a trace alone is written a buffer at a time, not a file write a frame; its last frames at once */
+  if (out_len != traced || trace_left <= 0 || out_len > OUT_MAX - 512)
     out_flush();
 }
 

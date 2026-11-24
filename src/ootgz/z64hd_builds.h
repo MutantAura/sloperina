@@ -125,6 +125,10 @@ static const struct z64hd_build z64hd_builds[] = {
      * (0x33A95D0, v131072's 0x340A460) calls. The captions' values agree with #38's, found separately. */
     .voxel_mgr_ptr = 0x4C18258,
     .voxel_formats = 0x3E89420,
+    /* Phive world raycast (v131072's 0x5FF750 matched uniquely over 48 words) and its hit/filter vtables */
+    .phive_raycast = 0x582D00,
+    .vt_raycast_hit = 0x491B278,
+    .vt_raycast_filter = 0x4BCB868,
     .caption_mgr_ptr = 0x4E08A40,
     .caption_empty = 0x963FA0,
     .caption_request = 0xF41000,
@@ -256,6 +260,9 @@ static const struct z64hd_build z64hd_builds[] = {
     .safety_search = 0x945310,
     .voxel_mgr_ptr = 0x4C7DF00,
     .voxel_formats = 0x3EE8840,
+    .phive_raycast = 0x5FF750,
+    .vt_raycast_hit = 0x497FBA0,
+    .vt_raycast_filter = 0x4C31470,
     .event_state_ptr = 0x4E94840,
     .event_flows = 0xEB8,
     .ragdoll_controller = 0x5F88C0,

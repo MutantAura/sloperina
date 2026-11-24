@@ -639,7 +639,7 @@ static bool frame_depth_clear;
  * 1, 1, 1, coverage). A colour's layer is the same as drawing its lines straight onto the picture: over the
  * background B, a glow g then a line l of colour c give c (l + g - g l) + B (1 - g) (1 - l). */
 #define IMAGE_LAYER (-2)
-#define LAYER_COLOURS 12 /* the colours a frame's depth tested quads may have (the air walls' and the voids') */
+#define LAYER_COLOURS 16 /* the colours a frame's depth tested quads may have (the air walls' and the voids') */
 #define MASK_QUADS 4    /* Link's mask: three, and the far depth round him */
 #define MATERIAL_MASK 0xFF
 static gpu_occluder_t frame_only; /* gpuui_depth's: Link's box */

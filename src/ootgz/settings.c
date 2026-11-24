@@ -129,6 +129,7 @@ typedef struct {
   int32_t voidmap_ground;
   int32_t voidmap_deadly;
   int32_t voidmap_ring;
+  int32_t voidmap_shift;
   int32_t voidmap_xray;
   int32_t voidmap_areas;
   int32_t enemy_hp;
@@ -220,6 +221,7 @@ static snapshot_t take_snapshot(void)
   s.voidmap_ground = voidmap_ground;
   s.voidmap_deadly = voidmap_deadly;
   s.voidmap_ring = voidmap_ring;
+  s.voidmap_shift = voidmap_shift;
   s.voidmap_xray = voidmap_xray;
   s.voidmap_areas = voidmap_areas;
   s.enemy_hp = enemy_hp_shown;
@@ -329,6 +331,7 @@ static void apply_snapshot(const snapshot_t *s)
   voidmap_ground = s->voidmap_ground != 0;
   voidmap_deadly = s->voidmap_deadly != 0;
   voidmap_ring = s->voidmap_ring != 0;
+  voidmap_shift = s->voidmap_shift != 0;
   voidmap_xray = s->voidmap_xray != 0;
   voidmap_areas = s->voidmap_areas != 0;
   enemy_hp_shown = s->enemy_hp != 0;
@@ -424,6 +427,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("voids_ground", voidmap_ground),
   INT_KEY("voids_deadly", voidmap_deadly),
   INT_KEY("voids_ring", voidmap_ring),
+  INT_KEY("voids_shift", voidmap_shift),
   INT_KEY("voids_xray", voidmap_xray),
   INT_KEY("voids_areas", voidmap_areas),
   INT_KEY("enemy_health", enemy_hp),
@@ -677,11 +681,11 @@ static void save_settings_file(const snapshot_t *s)
                   (int)s->flag_log_status, (int)s->flag_log_story, (int)s->hook_shown);
   if (n < (int)sizeof(buf))
     n += snprintf(buf + n, sizeof(buf) - n,
-                  "voids_shown=%d\nvoids_ground=%d\nvoids_deadly=%d\nvoids_ring=%d\n"
+                  "voids_shown=%d\nvoids_ground=%d\nvoids_deadly=%d\nvoids_ring=%d\nvoids_shift=%d\n"
                   "voids_xray=%d\nvoids_areas=%d\ninput_display_attach=%d\narchive_folder=%s\nsystem_keyboard=%d\n",
                   (int)s->voidmap_shown, (int)s->voidmap_ground, (int)s->voidmap_deadly, (int)s->voidmap_ring,
-                  (int)s->voidmap_xray, (int)s->voidmap_areas, (int)s->input_attach, s->archive_folder,
-                  (int)s->system_keyboard);
+                  (int)s->voidmap_shift, (int)s->voidmap_xray, (int)s->voidmap_areas, (int)s->input_attach,
+                  s->archive_folder, (int)s->system_keyboard);
   if (n < (int)sizeof(buf))
     n += snprintf(buf + n, sizeof(buf) - n, "save_backup_hard_numbered=%d\nremote_control=%d\n",
                   (int)s->save_backup_numbered, (int)s->remote_control);

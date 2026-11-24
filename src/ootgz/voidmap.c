@@ -9,11 +9,18 @@
  * Other voids aren't in the map: the areas placed to void Link (airwall.c draws those, from data.c; the holes
  * down into grottos are among them) and floors tagged Abyss (not drawn).
  *
+ * How probe C (the 8-unit fence's anchor) moves (main+0x38AEF0, 1.0.0 main+0x4D8910):
+ *   Each frame, after probe A casts down, probe C computes the 3D distance from Link's query position Q to its
+ *   remembered point C, then shoots 64 Fibonacci-sphere rays (6-7 per frame across a 10-frame cycle) from Q
+ *   through the VolumeStats octree. A ray hits when it exits a mapped leaf cell across a face whose 6-bit
+ *   Intersect (field 0) or IntersectWater (field 19) bit is set. If any ray hits at a strictly smaller 3D
+ *   distance than |Q - C|, C shifts to that hit; otherwise C stays frozen.
+ *
  * Drawn: the edges of the mapped ground (past them probe A has nothing to hit); the deadly cells as columns,
- * from the cell up to the next mapped one over it (anywhere in one the cast lands on the cell); and a fence
- * of 8 round the point probe C holds now, which is where Link voids while off the map. The rule only
- * measures level, so the fence has no top or bottom: a few units of it are drawn at Link's height.
- * The cells round Link are read out of the octrees every so often, not every frame. */
+ * from the cell up to the next mapped one over it (anywhere in one the cast lands on the cell); a fence of 8
+ * round the point probe C holds now, which is where Link voids while off the map; and translucent green/red
+ * shading on the ground around Link showing where probe C's 64-ray check will shift the fence (green) or fail
+ * to move it (red). The cells round Link are read out of the octrees every so often, not every frame. */
 #include "voidmap.h"
 
 #include "lang.h"
@@ -27,7 +34,7 @@ float sqrtf(float x);
 
 bool voidmap_shown;
 bool voidmap_ground;
-bool voidmap_deadly = true, voidmap_ring = true;
+bool voidmap_deadly = true, voidmap_ring = true, voidmap_shift = true;
 bool voidmap_areas = true;
 bool voidmap_xray;
 
@@ -61,11 +68,19 @@ bool voidmap_xray;
 #define FORMAT_COUNT 7      /* a format past these reads as format 0, as the game does */
 #define FORMAT_PRESENT 0x04 /* + field: u8, 1 if the format has it */
 #define FORMAT_BIT 0x1C     /* + field * 4: i32, its first bit in a record */
+#define FIELD_INTERSECT 0       /* 6 bits: -X, +X, -Y, +Y, -Z, +Z faces touching solid ground */
+#define FIELD_INTERSECT_BITS 6
+#define FIELD_INTERSECT_WATER 19 /* 6 bits: same for water surfaces (ORed with field 0 in probe raycasts) */
 #define FIELD_DEADLY 20
 #define FIELD_DEADLY_BITS 1
 #define FIELD_DEPTH 21      /* times 2/3 */
 #define FIELD_DEPTH_BITS 4
 #define DEADLY_OVER 4       /* field 21 over 3.0 is 5 or more of its steps */
+
+/* packed per-cell flags in cells[]: bits 0..5 are (Intersect | IntersectWater) face mask */
+#define CELL_FACE_MASK 0x3Fu
+#define CELL_MAPPED 0x40u
+#define CELL_DEADLY 0x80u
 
 /* Link's: [[actor + 0x270] + ...] */
 #define ACTOR_PARTS 0x270
@@ -75,13 +90,23 @@ bool voidmap_xray;
 #define PLAYER_GROUND_FLAGS 0x13D0
 #define FLAG_DEADLY_CELL 0x80000u
 #define FLAG_FAR_FROM_GROUND 0x2000000u
+#define PROBE_OWNER 0xA0        /* [probe + 0xA0] -> +0x150: config with max ray length at +0x44 */
+#define PROBE_OWNER_CFG 0x150
+#define PROBE_CFG_RAY_LEN 0x44  /* f32; < 0 uses 5000.0 */
+#define PROBE_CFG_READY 0x65    /* u8 bit 0: direct config ready */
 #define PROBE_FLAGS 0xA8        /* u32 */
 #define PROBE_OUTSIDE 0x40000u  /* Link is more than 5 outside the probe's own box: sets the deadly flag too */
+#define PROBE_POS 0xE0          /* 3 x f32: live probe query origin */
 #define PROBE_A_POINT 0x360     /* where the cast down landed */
 #define PROBE_A_HIT 0x37C       /* u8 bit 0: mapped ground under Link */
 #define PROBE_C_POINT 0xBA0     /* the nearest cell found */
 #define PROBE_C_HIT 0xBBC       /* u8 bit 0 */
 #define PROBE_C_LEVEL 0x115C    /* f32: how far it is, level */
+#define PROBE_HEIGHT 0x1164     /* f32: multiplied by 0.6 for probe A's cast start height */
+#define PROBE_DEFAULT_RAY 5000.0f
+#define PROBE_DEFAULT_DY 0.585f /* Link's physics centre above his feet, fallback */
+#define PROBE_RAYS 64
+#define GOLDEN_ANGLE 3.8832221f /* 2*pi / phi (0x407886b6 in main) */
 #define VOID_DISTANCE 8.0f
 
 /* the cells kept: a box round Link. The cast down has no end to speak of (5000), so a deadly cell voids Link
@@ -111,12 +136,34 @@ bool voidmap_xray;
 #define RING_REACH 2.0f     /* the fence, this far over and under Link's feet */
 #define TWO_PI 6.2831853f
 
+/* Ground shift assessment grid around Link: 1x1 world-snapped tiles within SHIFT_RADIUS_F horizontally. */
+#define SHIFT_RADIUS 11
+#define SHIFT_GRID (2 * SHIFT_RADIUS + 1)
+#define SHIFT_RADIUS_SQ (11.5f * 11.5f)
+#define SHIFT_GROUND_LIFT 0.06f /* just over the collision surface so it stays crisp over slopes */
+#define SHIFT_WALK_NY 0.35f     /* minimum normal.y to count as walkable ground (skips sheer walls) */
+#define SHIFT_FLAT_NY 0.96f     /* normal.y above which neighbouring tiles merge into one flat quad */
+#define SHIFT_MERGE_DY 0.08f    /* max height step to merge adjacent flat tiles of the same shade */
+#define SHIFT_MAX_SLOPE 2.5f    /* clamp -nx/ny and -nz/ny on steep slopes */
+#define SHIFT_RINGS 4           /* distance rings for nearest-first face emission */
+#define PHIVE_LAYER_GROUND 0x1A /* player ground collision layer (main+0xA46364 / 0x27CB4F8) */
+
+enum { SHIFT_NONE = 0, SHIFT_FAIL = 1, SHIFT_OK = 2 };
+
 typedef struct { float a[3], b[3]; uint8_t colour; } edge_t;
+
+typedef struct {
+  float y, nx, ny, nz;
+  uint8_t sampled; /* 1: ground height sampled; 0: needs raycast */
+  uint8_t has_ground;
+  uint8_t state;   /* SHIFT_NONE, SHIFT_FAIL, SHIFT_OK */
+  uint8_t eval_ok; /* 1: Probe C check up to date for current box and anchor */
+} shift_cell_t;
 
 static const int box_size[3] = { BOX_X, BOX_Y, BOX_Z };
 static const int box_middle[3] = { BOX_X / 2, BOX_BELOW, BOX_Z / 2 }; /* where Link's cell is in it */
 
-static uint32_t mapped[BOX_CELLS / 32], deadly[BOX_CELLS / 32];
+static uint8_t cells[BOX_CELLS];
 static bool layer_mapped[BOX_Y], layer_deadly[BOX_Y]; /* whether a layer has any such cell */
 static int box_min[3];
 static bool box_valid;
@@ -132,6 +179,37 @@ static struct { bool on; uint8_t colour; float point[3], y; } fence; /* this fra
 static uint32_t frames, built_frame;
 static bool built_ground, built_deadly;
 static uint32_t void_flags_were;   /* voidmap_frame's: the void flags last frame */
+
+/* Probe C's 64 Fibonacci-sphere ray directions, built once */
+static float probe_rays[PROBE_RAYS][3];
+static bool probe_rays_ready;
+
+/* Cached ground heightmap and shift evaluation around Link */
+static shift_cell_t shift_grid[SHIFT_GRID][SHIFT_GRID];
+static shift_cell_t shift_tmp[SHIFT_GRID][SHIFT_GRID];
+static bool shift_grid_valid;
+static int shift_ox, shift_oz; /* world integer cell at shift_grid[SHIFT_RADIUS][SHIFT_RADIUS] */
+static float shift_ref_y;      /* Link's feet y when the heightmap was built */
+static uint32_t shift_height_frame;
+static bool shift_anchor_had;
+static float shift_anchor[3];  /* Probe C anchor when shift_grid was last evaluated */
+static float shift_eval_dy;    /* probe vertical offset used for last evaluation */
+static aw_face_t shift_quads[SHIFT_GRID * SHIFT_GRID];
+static int n_shift_quads;
+static bool shift_quads_dirty;
+
+static inline float absf(float x)
+{
+  return x < 0 ? -x : x;
+}
+
+/* Single AArch64 hardware fsqrt without GCC's errno fallback call to libm sqrtf. */
+static inline float fsqrtf(float x)
+{
+  float r;
+  __asm__("fsqrt %s0, %s1" : "=w"(r) : "w"(x));
+  return r;
+}
 
 /* --- reading the ground map ----------------------------------------------------------------------- */
 
@@ -159,6 +237,7 @@ typedef struct {
 
 typedef struct {
   uintptr_t nodes[LEVELS];
+  field_t intersect, intersect_water;
   field_t deadly, depth;
   int deadly_level, depth_level; /* the deepest level whose records have the field */
   int origin[3];
@@ -188,6 +267,9 @@ static bool open_chunk(uintptr_t addr, chunk_t *chunk)
     chunk->origin[i] = ((const int32_t *)addr)[i];
   for (int level = 0; level < LEVELS; level++)
     chunk->nodes[level] = ((const uintptr_t *)(addr + CHUNK_NODES))[level];
+  /* Probe A and Probe C read Intersect (0) and IntersectWater (19) at leaf level 7 (main+0x3209720). */
+  chunk->intersect = level_field(addr, LEVELS - 1, FIELD_INTERSECT, FIELD_INTERSECT_BITS);
+  chunk->intersect_water = level_field(addr, LEVELS - 1, FIELD_INTERSECT_WATER, FIELD_INTERSECT_BITS);
   chunk->deadly_level = chunk->depth_level = -1;
   for (int level = LEVELS - 1; level >= 0; level--) {
     if (chunk->deadly_level < 0 &&
@@ -210,18 +292,11 @@ static uint32_t field_bits(const field_t *f, uint32_t index, uint32_t width)
   return ((uint32_t)bytes[0] | (uint32_t)bytes[1] << 8) >> (bit & 7) & ((1u << width) - 1);
 }
 
-static void set_cell(uint32_t *cells, int x, int y, int z)
-{
-  int i = (y * BOX_Z + z) * BOX_X + x;
-  cells[i >> 5] |= 1u << (i & 31);
-}
-
-static bool cell(const uint32_t *cells, int x, int y, int z)
+static bool cell_has(int x, int y, int z, uint8_t flag)
 {
   if (x < 0 || y < 0 || z < 0 || x >= BOX_X || y >= BOX_Y || z >= BOX_Z)
     return false;
-  int i = (y * BOX_Z + z) * BOX_X + x;
-  return cells[i >> 5] >> (i & 31) & 1;
+  return (cells[(y * BOX_Z + z) * BOX_X + x] & flag) != 0;
 }
 
 /* whether the cube of `size` cells at corner[] (cells of the chunk) has any of the box in it */
@@ -243,14 +318,19 @@ static void keep_cell(const chunk_t *chunk, const int corner[3], const uint32_t 
       return;
   int x = chunk->origin[0] + corner[0] - box_min[0], y = chunk->origin[1] + corner[1] - box_min[1];
   int z = chunk->origin[2] + corner[2] - box_min[2];
-  set_cell(mapped, x, y, z);
-  layer_mapped[y] = true;
+  uint8_t mask = CELL_MAPPED;
+  if (chunk->intersect.present)
+    mask |= (uint8_t)field_bits(&chunk->intersect, path[LEVELS - 1], FIELD_INTERSECT_BITS);
+  if (chunk->intersect_water.present)
+    mask |= (uint8_t)field_bits(&chunk->intersect_water, path[LEVELS - 1], FIELD_INTERSECT_BITS);
   if (chunk->deadly_level >= 0 && chunk->depth_level >= 0 &&
       field_bits(&chunk->deadly, path[chunk->deadly_level], FIELD_DEADLY_BITS) &&
       field_bits(&chunk->depth, path[chunk->depth_level], FIELD_DEPTH_BITS) > DEADLY_OVER) {
-    set_cell(deadly, x, y, z);
+    mask |= CELL_DEADLY;
     layer_deadly[y] = true;
   }
+  cells[(y * BOX_Z + z) * BOX_X + x] |= mask;
+  layer_mapped[y] = true;
 }
 
 /* The node `index` of `level`, whose corner is at at[] (cells of the chunk): its children that reach into the
@@ -294,8 +374,7 @@ static void read_cells(const int middle[3])
 {
   for (int axis = 0; axis < 3; axis++)
     box_min[axis] = middle[axis] - box_middle[axis];
-  memset(mapped, 0, sizeof(mapped));
-  memset(deadly, 0, sizeof(deadly));
+  memset(cells, 0, sizeof(cells));
   memset(layer_mapped, 0, sizeof(layer_mapped));
   memset(layer_deadly, 0, sizeof(layer_deadly));
   box_valid = false;
@@ -340,12 +419,12 @@ typedef struct { int y, along, row, side; } row_side_t;
 /* mapped ground: a mapped cell with none under it */
 static bool is_ground(int x, int y, int z)
 {
-  return cell(mapped, x, y, z) && !cell(mapped, x, y - 1, z);
+  return cell_has(x, y, z, CELL_MAPPED) && !cell_has(x, y - 1, z, CELL_MAPPED);
 }
 
 static bool is_deadly(int x, int y, int z)
 {
-  return cell(deadly, x, y, z);
+  return cell_has(x, y, z, CELL_DEADLY);
 }
 
 /* the same kind of cell next door, level or a step up or down: the ground goes on there */
@@ -392,7 +471,7 @@ static void add_post(int x, int z, int y0, int y1, uint8_t colour)
 static int column_top(int x, int y, int z)
 {
   int top = y + 1;
-  while (top < BOX_Y && !cell(mapped, x, top, z))
+  while (top < BOX_Y && !cell_has(x, top, z, CELL_MAPPED))
     top++;
   return top;
 }
@@ -458,6 +537,14 @@ static void outline(const outline_t *o)
   }
 }
 
+static void invalidate_shift_eval(void)
+{
+  for (int gz = 0; gz < SHIFT_GRID; gz++)
+    for (int gx = 0; gx < SHIFT_GRID; gx++)
+      shift_grid[gz][gx].eval_ok = 0;
+  shift_quads_dirty = true;
+}
+
 static void rebuild(const int middle[3])
 {
   read_cells(middle);
@@ -478,12 +565,16 @@ static void rebuild(const int middle[3])
   built_frame = frames;
   built_ground = voidmap_ground;
   built_deadly = voidmap_deadly;
+  invalidate_shift_eval();
 }
 
 /* --- Link ---------------------------------------------------------------------------------------- */
 
 typedef struct {
   float pos[3];
+  float probe_pos[3]; /* live probe query origin (probe + 0xE0) */
+  float probe_h;      /* probe + 0x1164 (0.6x for probe A cast start) */
+  float ray_len;      /* max probe ray length ([cfg + 0x44], or 5000.0) */
   uint32_t flags;
   bool on_map;      /* mapped ground under Link */
   float landed[3];  /* on_map: where the cast down landed */
@@ -499,9 +590,21 @@ static bool link_state(link_state_t *s)
   uintptr_t player = parts ? sys_ptr(parts + PARTS_PLAYER) : 0, probe = parts ? sys_ptr(parts + PARTS_PROBE) : 0;
   if (!player || !probe || !sys_mapped(actor + ACTOR_POS, sizeof(s->pos), SYS_PERM_R) ||
       !sys_read32(player + PLAYER_GROUND_FLAGS, &s->flags) ||
-      !sys_mapped(probe + PROBE_FLAGS, PROBE_C_LEVEL + sizeof(float) - PROBE_FLAGS, SYS_PERM_R))
+      !sys_mapped(probe + PROBE_FLAGS, PROBE_HEIGHT + sizeof(float) - PROBE_FLAGS, SYS_PERM_R))
     return false;
   memcpy(s->pos, (const void *)(actor + ACTOR_POS), sizeof(s->pos));
+  memcpy(s->probe_pos, (const void *)(probe + PROBE_POS), sizeof(s->probe_pos));
+  memcpy(&s->probe_h, (const void *)(probe + PROBE_HEIGHT), sizeof(s->probe_h));
+  s->ray_len = PROBE_DEFAULT_RAY;
+  uintptr_t owner = sys_ptr(probe + PROBE_OWNER);
+  uintptr_t cfg = owner ? sys_ptr(owner + PROBE_OWNER_CFG) : 0;
+  if (cfg && sys_mapped(cfg + PROBE_CFG_RAY_LEN, PROBE_CFG_READY + 1 - PROBE_CFG_RAY_LEN, SYS_PERM_R) &&
+      (*(const uint8_t *)(cfg + PROBE_CFG_READY) & 1)) {
+    float rl;
+    memcpy(&rl, (const void *)(cfg + PROBE_CFG_RAY_LEN), sizeof(rl));
+    if (rl > 0.0f && rl <= PROBE_DEFAULT_RAY)
+      s->ray_len = rl;
+  }
   s->outside = *(const uint32_t *)(probe + PROBE_FLAGS) & PROBE_OUTSIDE;
   s->on_map = *(const uint8_t *)(probe + PROBE_A_HIT) & 1;
   memcpy(s->landed, (const void *)(probe + PROBE_A_POINT), sizeof(s->landed));
@@ -515,6 +618,477 @@ static int to_cell(float v)
 {
   int i = (int)v;
   return v < (float)i ? i - 1 : i;
+}
+
+/* --- Probe C 64-ray simulation & ground shift assessment ----------------------------------------- */
+
+/* Build the 64 Fibonacci-sphere unit directions used by main+0x38B668..0x38B720. */
+static void init_probe_rays(void)
+{
+  if (probe_rays_ready)
+    return;
+  for (int i = 0; i < PROBE_RAYS; i++) {
+    float y = 1.0f - (float)(2 * i + 1) / (float)PROBE_RAYS;
+    float r2 = 1.0f - y * y;
+    float r = r2 > 0.0f ? fsqrtf(r2) : 0.0f;
+    float theta = (float)i * GOLDEN_ANGLE;
+    float dx = r * cosf(theta), dy = y, dz = r * sinf(theta);
+    float len = fsqrtf(dx * dx + dy * dy + dz * dz);
+    if (len > 1e-6f) {
+      probe_rays[i][0] = dx / len;
+      probe_rays[i][1] = dy / len;
+      probe_rays[i][2] = dz / len;
+    }
+  }
+  probe_rays_ready = true;
+}
+
+/* Exact 3D DDA through our local VolumeStats cell box, matching main+0x543240 + filter main+0x3209720:
+ * a ray hits when it exits a mapped leaf cell across a face whose (Intersect | IntersectWater) bit is set,
+ * at distance <= max_dist. Face bits: 0=-X, 1=+X, 2=-Y, 3=+Y, 4=-Z, 5=+Z. */
+static bool voxel_raycast(const float origin[3], const float dir[3], float max_dist, float *hit_t, int hit_cell[3])
+{
+  if (!box_valid || max_dist <= 0.0f)
+    return false;
+  float o[3] = {
+    origin[0] - (float)box_min[0] + 1e-4f,
+    origin[1] - (float)box_min[1] + 1e-4f,
+    origin[2] - (float)box_min[2] + 1e-4f,
+  };
+  float t_min = 0.0f, t_max = max_dist;
+  for (int a = 0; a < 3; a++) {
+    if (absf(dir[a]) < 1e-7f) {
+      if (o[a] < 0.0f || o[a] >= (float)box_size[a])
+        return false;
+    } else {
+      float inv = 1.0f / dir[a];
+      float t0 = -o[a] * inv, t1 = ((float)box_size[a] - o[a]) * inv;
+      if (t0 > t1) {
+        float tmp = t0;
+        t0 = t1;
+        t1 = tmp;
+      }
+      if (t0 > t_min)
+        t_min = t0;
+      if (t1 < t_max)
+        t_max = t1;
+      if (t_min > t_max)
+        return false;
+    }
+  }
+  int ix = to_cell(o[0] + dir[0] * t_min);
+  int iy = to_cell(o[1] + dir[1] * t_min);
+  int iz = to_cell(o[2] + dir[2] * t_min);
+  if (ix < 0) ix = 0; else if (ix >= BOX_X) ix = BOX_X - 1;
+  if (iy < 0) iy = 0; else if (iy >= BOX_Y) iy = BOX_Y - 1;
+  if (iz < 0) iz = 0; else if (iz >= BOX_Z) iz = BOX_Z - 1;
+
+  int step_x = dir[0] > 0.0f ? 1 : -1, face_x = dir[0] > 0.0f ? 1 : 0;
+  int step_y = dir[1] > 0.0f ? 1 : -1, face_y = dir[1] > 0.0f ? 3 : 2;
+  int step_z = dir[2] > 0.0f ? 1 : -1, face_z = dir[2] > 0.0f ? 5 : 4;
+  float tx, ty, tz, dtx, dty, dtz;
+  if (absf(dir[0]) < 1e-7f) {
+    tx = dtx = 1e30f;
+  } else {
+    dtx = absf(1.0f / dir[0]);
+    tx = ((dir[0] > 0.0f ? (float)(ix + 1) : (float)ix) - o[0]) / dir[0];
+    if (tx < t_min) tx = t_min;
+  }
+  if (absf(dir[1]) < 1e-7f) {
+    ty = dty = 1e30f;
+  } else {
+    dty = absf(1.0f / dir[1]);
+    ty = ((dir[1] > 0.0f ? (float)(iy + 1) : (float)iy) - o[1]) / dir[1];
+    if (ty < t_min) ty = t_min;
+  }
+  if (absf(dir[2]) < 1e-7f) {
+    tz = dtz = 1e30f;
+  } else {
+    dtz = absf(1.0f / dir[2]);
+    tz = ((dir[2] > 0.0f ? (float)(iz + 1) : (float)iz) - o[2]) / dir[2];
+    if (tz < t_min) tz = t_min;
+  }
+
+  for (int step = 0; step < BOX_X + BOX_Y + BOX_Z; step++) {
+    float t_next;
+    int face, axis;
+    if (tx <= ty && tx <= tz) {
+      t_next = tx; face = face_x; axis = 0;
+    } else if (ty <= tz) {
+      t_next = ty; face = face_y; axis = 1;
+    } else {
+      t_next = tz; face = face_z; axis = 2;
+    }
+    if (t_next > max_dist)
+      return false;
+    uint8_t c = cells[(iy * BOX_Z + iz) * BOX_X + ix];
+    if ((c & CELL_MAPPED) && (c & (1u << face))) {
+      if (hit_t)
+        *hit_t = t_next;
+      if (hit_cell) {
+        hit_cell[0] = box_min[0] + ix;
+        hit_cell[1] = box_min[1] + iy;
+        hit_cell[2] = box_min[2] + iz;
+      }
+      return true;
+    }
+    if (axis == 0) {
+      ix += step_x;
+      if (ix < 0 || ix >= BOX_X) return false;
+      tx += dtx;
+    } else if (axis == 1) {
+      iy += step_y;
+      if (iy < 0 || iy >= BOX_Y) return false;
+      ty += dty;
+    } else {
+      iz += step_z;
+      if (iz < 0 || iz >= BOX_Z) return false;
+      tz += dtz;
+    }
+  }
+  return false;
+}
+
+/* Probe A's downward cast at one column (filter main+0x32099A0): hits on -Y (bit 2), stops on +Y (bit 3)
+ * after the starting cell. */
+static bool probe_a_column(float wx, float wy_start, float wz, int out_cell[3])
+{
+  int ix = to_cell(wx + 1e-4f) - box_min[0];
+  int iy = to_cell(wy_start + 1e-4f) - box_min[1];
+  int iz = to_cell(wz + 1e-4f) - box_min[2];
+  if (ix < 0 || ix >= BOX_X || iz < 0 || iz >= BOX_Z)
+    return false;
+  if (iy >= BOX_Y)
+    iy = BOX_Y - 1;
+  bool first = true;
+  for (; iy >= 0; iy--) {
+    uint8_t c = cells[(iy * BOX_Z + iz) * BOX_X + ix];
+    if (c & CELL_MAPPED) {
+      if (c & (1u << 2)) { /* -Y floor face */
+        out_cell[0] = box_min[0] + ix;
+        out_cell[1] = box_min[1] + iy;
+        out_cell[2] = box_min[2] + iz;
+        return true;
+      }
+      if (!first && (c & (1u << 3))) /* +Y ceiling blocks the cast */
+        return false;
+    }
+    first = false;
+  }
+  return false;
+}
+
+/* Probe A's 9-point downward check (centre, then 8 offsets at +/-0.6 in X/Z, main+0x38AF50..0x38AFFC). */
+static bool probe_a_sim(const float pq[3], float probe_h, int out_cell[3])
+{
+  static const float off[9][2] = {
+    { 0.0f, 0.0f },   { -0.6f, 0.0f },  { 0.6f, 0.0f },
+    { 0.0f, -0.6f },  { 0.0f, 0.6f },   { -0.6f, -0.6f },
+    { -0.6f, 0.6f },  { 0.6f, -0.6f },  { 0.6f, 0.6f },
+  };
+  float y_start = pq[1] + 0.6f * probe_h;
+  for (int k = 0; k < 9; k++)
+    if (probe_a_column(pq[0] + off[k][0], y_start, pq[2] + off[k][1], out_cell))
+      return true;
+  return false;
+}
+
+/* True if standing at ground position (wx, wy, wz) satisfies Probe C's update condition:
+ * at least one of the 64 Fibonacci-sphere rays hits an (Intersect | IntersectWater) face strictly closer
+ * in 3D than Probe C's current remembered point `s->point` (and within `s->ray_len`). */
+static bool will_ring_shift(const link_state_t *s, float dy_probe, float wx, float wy, float wz)
+{
+  float q[3] = { wx, wy + dy_probe, wz };
+  /* Pre-pass (main+0x38B374..0x38B554): when Probe A hits, cast from A's cell centre toward Q; if that
+   * encounters an intervening voxel face, Q snaps to that hit cell's centre. */
+  int acell[3];
+  if (probe_a_sim(q, s->probe_h, acell)) {
+    float ac[3] = { (float)acell[0] + 0.5f, (float)acell[1] + 0.5f, (float)acell[2] + 0.5f };
+    float vx = q[0] - ac[0], vy = q[1] - ac[1], vz = q[2] - ac[2];
+    float len = fsqrtf(vx * vx + vy * vy + vz * vz);
+    if (len > 1e-4f) {
+      float dir[3] = { vx / len, vy / len, vz / len };
+      float ht;
+      int hcell[3];
+      if (voxel_raycast(ac, dir, len, &ht, hcell) && ht <= len) {
+        q[0] = (float)hcell[0] + 0.5f;
+        q[1] = (float)hcell[1] + 0.5f;
+        q[2] = (float)hcell[2] + 0.5f;
+      }
+    }
+  }
+  float limit = s->ray_len;
+  if (s->has_point) {
+    float dx = q[0] - s->point[0], dy = q[1] - s->point[1], dz = q[2] - s->point[2];
+    float cur = fsqrtf(dx * dx + dy * dy + dz * dz) - 1e-3f; /* strictly < current 3D distance */
+    if (cur <= 0.0f)
+      return false;
+    if (cur < limit)
+      limit = cur;
+  }
+  /* Test from ray 63 downward first: rays 56..63 point steepest down and hit floor directly underfoot on the
+   * very first iteration when on mapped ground, avoiding the remaining rays. */
+  for (int i = PROBE_RAYS - 1; i >= 0; i--) {
+    float ht;
+    if (voxel_raycast(q, probe_rays[i], limit, &ht, 0))
+      return true;
+  }
+  return false;
+}
+
+/* Single downward Phive collision raycast (main+0x5FF750 / 1.0.0 main+0x582D00) on player ground layer 0x1A. */
+typedef bool (*phive_raycast_fn)(const float from[3], const float to[3], void *hit, const void *ignore, int layer,
+                                 int unk);
+
+static bool phive_raycast_ready(void)
+{
+  if (!z64hd_game || !z64hd_game->phive_raycast || !z64hd_game->vt_raycast_hit || !z64hd_game->vt_raycast_filter ||
+      !z64hd_game->phive_mgr_ptr)
+    return false;
+  uintptr_t mgr = sys_ptr(sys_ptr(MAIN(z64hd_game->phive_mgr_ptr)));
+  uintptr_t sub = mgr ? sys_ptr(mgr + 0x18) : 0;
+  return sub && sys_ptr(sub + 0x48);
+}
+
+static bool phive_ground_cast(const float from[3], const float to[3], float out_pos[3], float out_norm[3])
+{
+  uint64_t hit_buf[0x180 / 8];
+  uint8_t *hit = (uint8_t *)hit_buf;
+  memset(hit, 0, 0x180);
+  *(uintptr_t *)(hit + 0x000) = MAIN(z64hd_game->vt_raycast_hit);
+  *(float *)(hit + 0x03C) = -1.0f;
+  *(uintptr_t *)(hit + 0x060) = (uintptr_t)(hit + 0x128);
+  *(uint32_t *)(hit + 0x090) = 1u;
+  *(uint32_t *)(hit + 0x114) = 1u;
+  *(uintptr_t *)(hit + 0x128) = MAIN(z64hd_game->vt_raycast_filter);
+  *(uint32_t *)(hit + 0x130) = 3u;
+  *(uint64_t *)(hit + 0x138) = 0x003FFFFFull;
+  *(uint64_t *)(hit + 0x140) = 0x07FFFFFFEEFFFFFFull;
+  *(uint64_t *)(hit + 0x148) = 0x003FFFFFull;
+  *(uint64_t *)(hit + 0x150) = 0x07FFFFFFEEFFFFFFull;
+  *(uint64_t *)(hit + 0x158) = 1ull;
+  phive_raycast_fn fn = (phive_raycast_fn)MAIN(z64hd_game->phive_raycast);
+  if (!fn(from, to, hit, 0, PHIVE_LAYER_GROUND, 0))
+    return false;
+  memcpy(out_pos, hit + 0x24, sizeof(float) * 3);
+  memcpy(out_norm, hit + 0x30, sizeof(float) * 3);
+  return true;
+}
+
+/* Sample walkable collision ground at (wx, wz) near Link's height ref_y. Two-stage cast: first from just above
+ * Link's head (stays under dungeon ceilings/bridges), then higher up if missed (catches steep uphill slopes). */
+static void sample_ground_cell(const link_state_t *s, bool use_phive, float ref_y, float wx, float wz,
+                               shift_cell_t *c)
+{
+  c->sampled = 1;
+  c->has_ground = 0;
+  c->state = SHIFT_NONE;
+  c->eval_ok = 0;
+  if (use_phive) {
+    float pos[3], norm[3];
+    float from1[3] = { wx, ref_y + 2.8f, wz }, to1[3] = { wx, ref_y - 12.0f, wz };
+    bool ok = phive_ground_cast(from1, to1, pos, norm) && norm[1] > SHIFT_WALK_NY && pos[1] < ref_y + 2.75f;
+    /* Avoid landing on Link's own collision capsule right at his feet. */
+    if (ok && absf(wx - s->pos[0]) < 0.65f && absf(wz - s->pos[2]) < 0.65f && pos[1] > s->pos[1] + 0.25f) {
+      float from_low[3] = { wx, s->pos[1] + 0.15f, wz };
+      ok = phive_ground_cast(from_low, to1, pos, norm) && norm[1] > SHIFT_WALK_NY;
+      if (!ok) {
+        pos[1] = s->pos[1];
+        norm[0] = 0.0f; norm[1] = 1.0f; norm[2] = 0.0f;
+        ok = true;
+      }
+    }
+    if (!ok) {
+      float from2[3] = { wx, ref_y + 9.0f, wz }, to2[3] = { wx, ref_y + 2.2f, wz };
+      ok = phive_ground_cast(from2, to2, pos, norm) && norm[1] > SHIFT_WALK_NY && pos[1] < ref_y + 8.95f;
+    }
+    if (ok) {
+      c->y = pos[1];
+      c->nx = norm[0];
+      c->ny = norm[1];
+      c->nz = norm[2];
+      c->has_ground = 1;
+    }
+    return;
+  }
+  /* Fallback if Phive raycast isn't available on this build: highest mapped ground cell near Link. */
+  int ix = to_cell(wx) - box_min[0], iz = to_cell(wz) - box_min[2];
+  if (ix < 0 || ix >= BOX_X || iz < 0 || iz >= BOX_Z)
+    return;
+  int best = -1, best_d = BOX_Y;
+  int mid_y = to_cell(ref_y) - box_min[1];
+  for (int iy = 1; iy < BOX_Y; iy++) {
+    if (is_ground(ix, iy, iz)) {
+      int d = iy > mid_y ? iy - mid_y : mid_y - iy;
+      if (d < best_d) {
+        best_d = d;
+        best = iy;
+      }
+    }
+  }
+  if (best >= 0) {
+    c->y = (float)(box_min[1] + best);
+    c->nx = 0.0f; c->ny = 1.0f; c->nz = 0.0f;
+    c->has_ground = 1;
+  }
+}
+
+/* Rebuild the merged ground quads from shift_grid[][], ordered by distance ring from Link (nearest first). */
+static void build_shift_quads(void)
+{
+  n_shift_quads = 0;
+  const float ring_w = (float)(SHIFT_RADIUS + 1) / (float)SHIFT_RINGS;
+  for (int ring_no = 0; ring_no < SHIFT_RINGS; ring_no++) {
+    for (int gz = 0; gz < SHIFT_GRID; gz++) {
+      int dz = gz - SHIFT_RADIUS;
+      float wz0 = (float)(shift_oz + dz);
+      for (int gx = 0; gx < SHIFT_GRID; ) {
+        shift_cell_t *c = &shift_grid[gz][gx];
+        int dx = gx - SHIFT_RADIUS;
+        if (c->state == SHIFT_NONE || (float)(dx * dx + dz * dz) > SHIFT_RADIUS_SQ) {
+          gx++;
+          continue;
+        }
+        /* Flat tiles of the same colour and height along +X merge into one quad (saves GPU quads). */
+        if (c->ny > SHIFT_FLAT_NY) {
+          int run_end = gx + 1;
+          float sum_y = c->y;
+          while (run_end < SHIFT_GRID) {
+            shift_cell_t *n = &shift_grid[gz][run_end];
+            int ndx = run_end - SHIFT_RADIUS;
+            if (n->state != c->state || n->ny <= SHIFT_FLAT_NY ||
+                (float)(ndx * ndx + dz * dz) > SHIFT_RADIUS_SQ || absf(n->y - c->y) > SHIFT_MERGE_DY)
+              break;
+            sum_y += n->y;
+            run_end++;
+          }
+          int len = run_end - gx;
+          float mid_dx = (float)dx + (float)len * 0.5f - 0.5f;
+          int r = (int)(fsqrtf(mid_dx * mid_dx + (float)(dz * dz)) / ring_w);
+          if (r >= SHIFT_RINGS) r = SHIFT_RINGS - 1;
+          if (r == ring_no && n_shift_quads < SHIFT_GRID * SHIFT_GRID) {
+            float y = sum_y / (float)len + SHIFT_GROUND_LIFT;
+            uint8_t col = c->state == SHIFT_OK ? AW_VOID_SHIFT_OK : AW_VOID_SHIFT_FAIL;
+            shift_quads[n_shift_quads++] = (aw_face_t){
+              { (float)(shift_ox + dx), y, wz0 },
+              { (float)len, 0.0f, 0.0f },
+              { 0.0f, 0.0f, 1.0f },
+              col, true
+            };
+          }
+          gx = run_end;
+        } else {
+          int r = (int)(fsqrtf((float)(dx * dx + dz * dz)) / ring_w);
+          if (r >= SHIFT_RINGS) r = SHIFT_RINGS - 1;
+          if (r == ring_no && n_shift_quads < SHIFT_GRID * SHIFT_GRID) {
+            float sx = -c->nx / c->ny, sz = -c->nz / c->ny;
+            if (sx < -SHIFT_MAX_SLOPE) sx = -SHIFT_MAX_SLOPE;
+            else if (sx > SHIFT_MAX_SLOPE) sx = SHIFT_MAX_SLOPE;
+            if (sz < -SHIFT_MAX_SLOPE) sz = -SHIFT_MAX_SLOPE;
+            else if (sz > SHIFT_MAX_SLOPE) sz = SHIFT_MAX_SLOPE;
+            float base_y = c->y - 0.5f * (sx + sz) + SHIFT_GROUND_LIFT;
+            uint8_t col = c->state == SHIFT_OK ? AW_VOID_SHIFT_OK : AW_VOID_SHIFT_FAIL;
+            shift_quads[n_shift_quads++] = (aw_face_t){
+              { (float)(shift_ox + dx), base_y, wz0 },
+              { 1.0f, sx, 0.0f },
+              { 0.0f, sz, 1.0f },
+              col, true
+            };
+          }
+          gx++;
+        }
+      }
+    }
+  }
+  shift_quads_dirty = false;
+}
+
+static void update_shift_grid(const link_state_t *s, const int here[3])
+{
+  init_probe_rays();
+  if (!box_valid) {
+    shift_grid_valid = false;
+    n_shift_quads = 0;
+    return;
+  }
+  float dy_probe = s->probe_pos[1] - s->pos[1];
+  if (!(dy_probe >= -0.5f && dy_probe <= 3.0f))
+    dy_probe = PROBE_DEFAULT_DY;
+
+  bool need_full = !shift_grid_valid || (frames - shift_height_frame >= REBUILD_FRAMES) ||
+                   absf(s->pos[1] - shift_ref_y) > 2.5f;
+  int dgx = here[0] - shift_ox, dgz = here[2] - shift_oz;
+  if (!need_full && (dgx != 0 || dgz != 0)) {
+    if (dgx < -4 || dgx > 4 || dgz < -4 || dgz > 4) {
+      need_full = true;
+    } else {
+      /* Shift cached ground samples and only raycast the newly exposed border cells. */
+      memset(shift_tmp, 0, sizeof(shift_tmp));
+      for (int gz = 0; gz < SHIFT_GRID; gz++) {
+        int oz = gz + dgz;
+        if (oz < 0 || oz >= SHIFT_GRID) continue;
+        for (int gx = 0; gx < SHIFT_GRID; gx++) {
+          int ox = gx + dgx;
+          if (ox < 0 || ox >= SHIFT_GRID) continue;
+          shift_tmp[gz][gx] = shift_grid[oz][ox];
+        }
+      }
+      memcpy(shift_grid, shift_tmp, sizeof(shift_grid));
+      shift_ox = here[0];
+      shift_oz = here[2];
+      shift_quads_dirty = true;
+    }
+  }
+  if (need_full) {
+    memset(shift_grid, 0, sizeof(shift_grid));
+    shift_ox = here[0];
+    shift_oz = here[2];
+    shift_ref_y = s->pos[1];
+    shift_height_frame = frames;
+    shift_grid_valid = true;
+    shift_quads_dirty = true;
+  }
+
+  /* If Probe C's anchor moved (or appeared/disappeared) or dy changed noticeably, re-evaluate all cells. */
+  bool anchor_changed = s->has_point != shift_anchor_had || absf(dy_probe - shift_eval_dy) > 0.15f;
+  if (!anchor_changed && s->has_point) {
+    float adx = s->point[0] - shift_anchor[0], ady = s->point[1] - shift_anchor[1],
+          adz = s->point[2] - shift_anchor[2];
+    if (adx * adx + ady * ady + adz * adz > 0.05f * 0.05f)
+      anchor_changed = true;
+  }
+  if (anchor_changed) {
+    invalidate_shift_eval();
+    shift_anchor_had = s->has_point;
+    memcpy(shift_anchor, s->point, sizeof(shift_anchor));
+    shift_eval_dy = dy_probe;
+  }
+
+  bool use_phive = phive_raycast_ready();
+  for (int gz = 0; gz < SHIFT_GRID; gz++) {
+    int dz = gz - SHIFT_RADIUS;
+    float wz = (float)(shift_oz + dz) + 0.5f;
+    for (int gx = 0; gx < SHIFT_GRID; gx++) {
+      int dx = gx - SHIFT_RADIUS;
+      if ((float)(dx * dx + dz * dz) > SHIFT_RADIUS_SQ)
+        continue;
+      shift_cell_t *c = &shift_grid[gz][gx];
+      float wx = (float)(shift_ox + dx) + 0.5f;
+      if (!c->sampled) {
+        sample_ground_cell(s, use_phive, shift_ref_y, wx, wz, c);
+        shift_quads_dirty = true;
+      }
+      if (c->has_ground && !c->eval_ok) {
+        uint8_t next = will_ring_shift(s, dy_probe, wx, c->y, wz) ? SHIFT_OK : SHIFT_FAIL;
+        if (next != c->state)
+          shift_quads_dirty = true;
+        c->state = next;
+        c->eval_ok = 1;
+      }
+    }
+  }
+  if (shift_quads_dirty)
+    build_shift_quads();
 }
 
 /* --- lines ---------------------------------------------------------------------------------------- */
@@ -617,11 +1191,14 @@ int voidmap_lines(float ends[][2][3], uint8_t colours[], int max)
   max_out = max;
   if (voidmap_ring && s.has_point)
     ring(&s);
-  if (voidmap_ground || voidmap_deadly) {
+  if (voidmap_ground || voidmap_deadly || voidmap_shift) {
     int here[3] = { to_cell(s.pos[0]), to_cell(s.pos[1]), to_cell(s.pos[2]) };
     if (rebuild_due(here))
       rebuild(here);
-    nearest_edges(&s, max - n_out);
+    if (voidmap_ground || voidmap_deadly)
+      nearest_edges(&s, max - n_out);
+    if (voidmap_shift)
+      update_shift_grid(&s, here);
   }
   return n_out;
 }
@@ -636,6 +1213,17 @@ static int fence_faces(aw_face_t faces[], int max)
     fence_corner(j + 1, &x1, &z1);
     faces[n++] = (aw_face_t){ { x0, fence.y - RING_REACH, z0 }, { x1 - x0, 0, z1 - z0 }, { 0, 2 * RING_REACH, 0 },
                               fence.colour, !voidmap_xray };
+  }
+  return n;
+}
+
+/* the translucent green/red ground tiles showing where the 8-unit fence will or won't move */
+static int shift_faces(aw_face_t faces[], int max)
+{
+  int n = n_shift_quads < max ? n_shift_quads : max;
+  for (int i = 0; i < n; i++) {
+    faces[i] = shift_quads[i];
+    faces[i].scene = !voidmap_xray;
   }
   return n;
 }
@@ -663,6 +1251,8 @@ int voidmap_faces(aw_face_t faces[], int max)
   if (!voidmap_shown || !map_manager() || !link_state(&s))
     return 0;
   int n = fence.on && voidmap_ring ? fence_faces(faces, max) : 0;
+  if (voidmap_shift && shift_grid_valid && box_valid)
+    n += shift_faces(faces + n, max - n);
   if (voidmap_deadly && box_valid)
     n += column_faces(&s, faces + n, max - n);
   return n;

@@ -703,6 +703,12 @@ static bool game_is_paused(void)
 
 /* --- frame ---------------------------------------------------------------------------------------- */
 
+#define FADE_FRAMES 20 /* a third of a second to fade out or in (game_is_paused) */
+#define FADE_STEP (1.0f / FADE_FRAMES)
+volatile float airwall_fade = 1;
+static float fade = 1;
+static bool fade_started; /* a frame has been built since the module started */
+
 static int16_t near_order[MAX_WALLS];  /* walls within AW_RANGE of the camera, nearest first */
 static float near_distance[MAX_WALLS];
 
@@ -779,14 +785,30 @@ void airwall_frame(bool gpu)
   frame_number++;
   if (airwalls_shown || void_areas_shown())
     check_now();
+  /* The game paused (its pause screen, map or item wheel): the frame published last stays, as it was, and the scene
+   * depth it was drawn with (the game's camera moves for the wheel and the world's depth isn't copied meanwhile).
+   * It fades out where the overlays are hidden (game_is_paused), and they fade in again after: never on and off
+   * from one frame to the next, so opening and closing the wheel quickly doesn't make them flash. */
+  bool hide = game_is_paused();
+  if (gd_game_paused(0, 0) && fade_started) {
+    fade = hide ? (fade > FADE_STEP ? fade - FADE_STEP : 0) : (fade + FADE_STEP < 1 ? fade + FADE_STEP : 1);
+    airwall_fade = fade;
+    scenedepth_keep_last = fade > 0;
+    if (fade <= 0)
+      publish_set(&published, -1);
+    return;
+  }
+  scenedepth_keep_last = false;
+  fade = fade_started ? (fade + FADE_STEP < 1 ? fade + FADE_STEP : 1) : 1;
+  fade_started = true;
+  airwall_fade = fade;
   int f = publish_next(&published), n = 0, nl = 0;
   n_faces[f] = 0;
   n_near = 0;
   n_air_walls_near = 0;
   link_boxes[f].ok = false;
   bool walls = (airwalls_shown || void_areas_shown()) && current_map;
-  bool draw = (walls || savepos_shown || voidmap_shown || hsstore_shown) && !game_is_paused();
-  scenedepth_keep_last = draw && gd_game_paused(0, 0); /* the item wheel: the world isn't drawn, its depth stays */
+  bool draw = walls || savepos_shown || voidmap_shown || hsstore_shown;
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
     /* the save position's markers (savepos.c) first: a few lines the walls' budget never cuts */

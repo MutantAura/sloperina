@@ -11,7 +11,7 @@
  *   remote_control=0|1 (run the scripts written to remote/cmd.txt, remote.h)
  *   hide_in_game_menus=0|1 (no watches, input display or log while the game's pause screen or map is open)
  *   hide_over_item_wheel=0|1 (the same while its item wheel is up)
- *   hide_world_over_item_wheel=0|1 (the world overlays hidden while the item wheel is up; off by default)
+ *   hide_world_over_item_wheel=0|1 (the world overlays fade out while the item wheel is up; on by default)
  *   save_backups=0|1 (copy the game's save folder to the SD card after every save, savebackup.h)
  *   save_backup_location=0|1 (the save's location after the date in their folder names)
  *   save_backup_kinds=0|1|2 (autosaves, hard saves, both)

@@ -88,7 +88,7 @@ bool frame_advance_in_pause = false;
 bool pause_display = true;
 bool hide_in_game_menus = true;
 bool hide_over_item_wheel = false;
-bool hide_world_over_item_wheel = false;
+bool hide_world_over_item_wheel = true;
 
 bool world_overlays_hidden(void)
 {

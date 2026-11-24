@@ -82,6 +82,9 @@ static bool draw_lines(float w, float h, float px, int budget)
   const aw_face_t *faces = airwall_faces(&n_faces, &cam);
   if ((!lines || !n) && (!faces || !n_faces))
     return false;
+  float fade = airwall_fade; /* fading as the game pauses and unpauses (airwall.c) */
+  if (fade <= 0)
+    return false;
   /* the see-through faces first, under the lines: in the world, with the camera the game thread used */
   n_faces = n_faces < budget ? n_faces : budget;
   if (n_faces)
@@ -89,7 +92,7 @@ static bool draw_lines(float w, float h, float px, int budget)
   for (int i = 0; i < n_faces; i++) {
     uint8_t ci = faces[i].color < AW_NCOLORS ? faces[i].color : 0;
     gpu_colour_t c = line_colours[ci];
-    c.a = (ci == AW_VOID_SHIFT_OK || ci == AW_VOID_SHIFT_FAIL) ? GROUND_FACE_ALPHA : FACE_ALPHA;
+    c.a = ((ci == AW_VOID_SHIFT_OK || ci == AW_VOID_SHIFT_FAIL) ? GROUND_FACE_ALPHA : FACE_ALPHA) * fade;
     gpuui_face(faces[i].corner, faces[i].u, faces[i].v, c, faces[i].scene);
   }
   budget -= n_faces;
@@ -107,7 +110,7 @@ static bool draw_lines(float w, float h, float px, int budget)
       float far = (l->near - FADE_FROM) / FADE_OVER;
       far = far < 0 ? 0 : far > 1 ? 1 : far;
       float a = 1 - (1 - FADE_TO) * far;
-      c.a = pass ? a : a * GLOW_ALPHA;
+      c.a = (pass ? a : a * GLOW_ALPHA) * fade;
       if (l->scene) /* hidden where anything of the scene is nearer */
         gpuui_line_scene(l->x0 * w, l->y0 * h, l->d0, l->x1 * w, l->y1 * h, l->d1, (pass ? LINE_W : GLOW_W) * px, c);
       else if (airwalls_xray)

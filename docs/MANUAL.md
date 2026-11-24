@@ -551,10 +551,12 @@ They stay over the item wheel unless **hide over item wheel** is on.
 
 **hide over item wheel** (off at first): the same while the game's item wheel is up.
 
-**hide world overlays over item wheel** (off at first): the overlays drawn in the world (air walls, void out, save
-positions, the hookshot's hook, enemy health) also go while the game's item wheel is up. Off, they stay, so opening
-and closing the wheel quickly doesn't make them flash. They always go while the pause screen or map is open, which
-they'd be drawn over.
+**hide world overlays over item wheel** (on at first): the overlays drawn in the world (air walls, void out, save
+positions, the hookshot's hook) fade out while the game's item wheel is up, as they do for the pause screen and map,
+and fade in again when it closes. They fade over a third of a second rather than going and coming back at once, so
+opening and closing the wheel quickly doesn't make them flash. Off, they stay over the wheel as they were the moment
+it opened (the game turns its camera for the wheel, so they no longer line up with the picture behind it). Enemy
+health bars still go and come back at once.
 
 **switch keyboard** (on at first): naming something (an archive, a folder, a watch's label) opens the Switch's own
 keyboard, with its controls: the left stick or D-pad between keys, **L** / **R** to move the cursor in the text, **B**

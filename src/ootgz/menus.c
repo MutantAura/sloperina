@@ -4043,8 +4043,8 @@ static void build_menu_settings(void)
   menu_item_t *world_wheel = menu_add_check(&m_menu_settings, "hide world overlays over item wheel",
                                             get_hide_world_over_item_wheel, set_hide_world_over_item_wheel, 0);
   if (world_wheel) {
-    world_wheel->hint = "air walls, void out, save positions, hook and enemy health go while the item wheel is up "
-                        "(off: no flashing when it's opened and closed quickly)";
+    world_wheel->hint = "air walls, void out, save positions and hook fade out while the item wheel is up (off: they "
+                        "stay as they were when it opened)";
     world_wheel->log_label = "hide world overlays over item wheel:";
   }
   menu_item_t *keyboard = menu_add_check(&m_menu_settings, "switch keyboard", get_switch_keyboard,

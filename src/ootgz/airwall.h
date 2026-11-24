@@ -35,6 +35,8 @@ void airwall_frame(bool gpu);
 /* render thread: once a frame, before the calls after it, takes the newest frame the game thread made (publish.h);
  * airwall_release when done with it */
 void airwall_take(void);
+/* the opacity the render thread draws the lines and faces at: 0 to 1, fading as the game pauses and unpauses */
+extern volatile float airwall_fade;
 const aw_dot_t *airwall_published(int *n);
 const aw_line_t *airwall_lines(int *n);
 void airwall_release(void);

@@ -14,6 +14,7 @@ extern bool voidmap_deadly; /* the cells that void Link whatever is near */
 extern bool voidmap_ring;   /* the fence round the ground point the game remembers */
 extern bool voidmap_shift;  /* green / red ground: where the fence will or won't move */
 extern bool voidmap_areas;  /* the areas placed in the map that void Link inside them (airwall.c draws them) */
+extern bool voidmap_bounds; /* the ground map's outer bounding box (+5m margin on X/Z and -5m floor on Y) */
 extern bool voidmap_xray;   /* also where the scenery is in front of it (else hidden behind it) */
 
 /* game thread, once a frame: logs each void the ground map causes, as its flag is set */

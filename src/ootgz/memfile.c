@@ -198,13 +198,19 @@ typedef struct {
   int32_t           life, magic;
   bool              have_nayru;
   float             nayru_left, nayru_total; /* Nayru's Love: frames left and its length; 0 when off */
-  bool              have_vel, have_fall, have_savepos, have_restart, have_rng;
+  bool              have_vel, have_fall, have_savepos, have_restart, have_rng, have_void_ring;
   vec3f_t           vel;                     /* Link's CCT linear velocity (body +0xE0) */
   float             fall[6];                 /* player +0x18D4/+0x18E0/+0x18E8/+0x190C, base +0x1898/+0x189C */
   uint8_t           savepos_a[SAVEPOS_SLOT_BYTES];
   uint8_t           savepos_b[SAVEPOS_SLOT_BYTES];
   uint8_t           player_restart[PLAYER_RESTART_BYTES];
   uint32_t          rng[4];                  /* sead::GlobalRandom xorshift128 state */
+  uint8_t           void_ring_hit;           /* Probe C +0xBBC bit 0 (has_point) */
+  float             void_ring_point[3];      /* Probe C +0xBA0 (8-unit ring anchor) */
+  float             void_ring_origin[3];     /* Probe C +0xB94 (chunk origin) */
+  int32_t           void_ring_cell[3];       /* Probe C +0xBAC (chunk cell index) */
+  int32_t           void_ring_face;          /* Probe C +0xBB8 (hit face 0..5) */
+  uint32_t          void_ring_phase;         /* Probe C +0x1160 (Fibonacci ray phase 0..9) */
   uint32_t          time;
   int               child;
   bool              have_camera, have_component;
@@ -1155,8 +1161,28 @@ static const uint8_t main_ainb_reset_plug[12] = { 0x0f, 0, 0, 0, 0x07, 0, 0, 0, 
 #define PLAYER_FALL_PEAK 0x18E0u
 #define PLAYER_JS_HEIGHT 0x18E8u
 #define PLAYER_FALL_DIST 0x190Cu
-#define BASE_FALL_ORIG   0x1898u
-#define BASE_FALL_DIST   0x189Cu
+#define BASE_FALL_ORIG    0x1898u
+#define BASE_FALL_DIST    0x189Cu
+#define PROBE_COMPONENT   0x460u  /* [[actor + 0x270] + 0x460]: VolumeStats ground/void sensor (1.0.0 & 1.1.1) */
+#define PROBE_POS         0xE0u   /* 3 x f32: live probe query origin */
+#define PROBE_C_RECORDS   0x950u  /* 8 x 0x48 VolumeStatsHit level records (vtable at +0x948 stays intact) */
+#define PROBE_C_REC_BYTES 0x240u
+#define PROBE_C_MAX_LEVEL 0xB90u  /* i32: -1 when level records empty */
+#define PROBE_C_ORIGIN    0xB94u  /* 3 x f32: chunk origin */
+#define PROBE_C_POINT     0xBA0u  /* 3 x f32: 8-unit fence anchor point */
+#define PROBE_C_CELL      0xBACu  /* 3 x i32: cell index within chunk */
+#define PROBE_C_FACE      0xBB8u  /* i32: hit face (0..5) */
+#define PROBE_C_HIT       0xBBCu  /* u8: bit 0 = has_point */
+#define PROBE_C_EXTRA_FLG 0xBC0u  /* u32 */
+#define PROBE_C_EXTRA_CNT 0xD48u  /* i32: -1 when none */
+#define PROBE_C_DIST3     0x1158u /* f32: 3D distance |Q - C| */
+#define PROBE_C_DIST2     0x115Cu /* f32: horizontal distance (compared against 8.0 for void) */
+#define PROBE_C_PHASE     0x1160u /* u32: 10-frame Fibonacci ray rotation counter (0..9) */
+#define PROBE_MAP_SIZE    0x1168u
+#define PROBE_DEFAULT_DY  0.585f
+#define PROBE_FLT_MAX     0x7F7FFFFFu
+#define PLAYER_GND_FLAGS  0x13D0u
+#define PLAYER_GND_FAR    0x2000000u /* bit 25: FLAG_FAR_FROM_GROUND (8-unit void) */
 
 static uintptr_t find_autosave_mgr(void)
 {
@@ -1188,6 +1214,120 @@ static bool player_and_base_components(uintptr_t *player_out, uintptr_t *base_ou
   *player_out = player;
   *base_out = base;
   return true;
+}
+
+static inline float fsqrtf(float x)
+{
+#ifdef __aarch64__
+  float r;
+  __asm__("fsqrt %s0, %s1" : "=w"(r) : "w"(x));
+  return r;
+#else
+  return sqrtf(x);
+#endif
+}
+
+static bool finite_vec3(const float v[3]);
+
+static uintptr_t probe_component(void)
+{
+  uintptr_t link = link_actor();
+  uintptr_t comps = link ? sys_ptr(link + 0x270) : 0;
+  uintptr_t probe = comps ? sys_ptr(comps + PROBE_COMPONENT) : 0;
+  return probe && !(probe & 7u) && sys_mapped(probe, PROBE_MAP_SIZE, SYS_PERM_R | SYS_PERM_W) ? probe : 0;
+}
+
+static bool near_saved_pos(const memfile_t *st)
+{
+  vec3f_t p;
+  if (!st->have_pos || !link_drawn_pos(&p))
+    return false;
+  double dx = p.x - st->x, dy = p.y - st->y, dz = p.z - st->z;
+  return dx * dx + dy * dy + dz * dz <= 4.0;
+}
+
+static void clear_far_flag(void)
+{
+  uintptr_t player = 0, base = 0;
+  if (player_and_base_components(&player, &base))
+    *(volatile uint32_t *)(player + PLAYER_GND_FLAGS) &= ~PLAYER_GND_FAR;
+}
+
+/* Clear Probe C's held anchor (pointer-free). Setting has_point=0 makes the game's Probe C update
+ * (main+0x38AEF0) run all 64 Fibonacci rays in a single frame on its next tick instead of keeping a stale point. */
+static void clear_void_ring(void)
+{
+  uintptr_t probe = probe_component();
+  if (probe) {
+    memset((void *)(probe + PROBE_C_RECORDS), 0, PROBE_C_REC_BYTES);
+    *(volatile int32_t *)(probe + PROBE_C_MAX_LEVEL) = -1;
+    *(volatile uint8_t *)(probe + PROBE_C_HIT) = 0;
+    *(volatile uint32_t *)(probe + PROBE_C_EXTRA_FLG) = 0;
+    *(volatile int32_t *)(probe + PROBE_C_EXTRA_CNT) = -1;
+    *(volatile uint32_t *)(probe + PROBE_C_DIST3) = PROBE_FLT_MAX;
+    *(volatile uint32_t *)(probe + PROBE_C_DIST2) = PROBE_FLT_MAX;
+    *(volatile uint32_t *)(probe + PROBE_C_PHASE) = 0;
+  }
+  clear_far_flag();
+}
+
+/* Restore Probe C's saved 8-unit fence state without touching its vtable (+0x948) or copying heap pointers:
+ * max_level=-1 and extra_count=-1 make every VolumeStatsHit reader skip record bitstreams safely across reloads.
+ * For older memfiles without saved ring data, clear Probe C so the game rescans all 64 rays at Link's new spot. */
+static void restore_void_ring(const memfile_t *st)
+{
+  if (!st->have_void_ring) {
+    clear_void_ring();
+    return;
+  }
+  uintptr_t probe = probe_component();
+  if (!probe)
+    return;
+  memset((void *)(probe + PROBE_C_RECORDS), 0, PROBE_C_REC_BYTES);
+  *(volatile int32_t *)(probe + PROBE_C_MAX_LEVEL) = -1;
+  *(volatile uint32_t *)(probe + PROBE_C_EXTRA_FLG) = 0;
+  *(volatile int32_t *)(probe + PROBE_C_EXTRA_CNT) = -1;
+  if (st->void_ring_hit && finite_vec3(st->void_ring_point)) {
+    memcpy((void *)(probe + PROBE_C_ORIGIN), st->void_ring_origin, sizeof(st->void_ring_origin));
+    memcpy((void *)(probe + PROBE_C_POINT), st->void_ring_point, sizeof(st->void_ring_point));
+    memcpy((void *)(probe + PROBE_C_CELL), st->void_ring_cell, sizeof(st->void_ring_cell));
+    *(volatile int32_t *)(probe + PROBE_C_FACE) = st->void_ring_face;
+    *(volatile uint8_t *)(probe + PROBE_C_HIT) = 1;
+    *(volatile uint32_t *)(probe + PROBE_C_PHASE) = st->void_ring_phase % 10u;
+    float q[3];
+    if (!st->have_pos || near_saved_pos(st)) {
+      memcpy(q, (const void *)(probe + PROBE_POS), sizeof(q));
+    } else {
+      q[0] = (float)st->x;
+      q[1] = (float)st->y + PROBE_DEFAULT_DY;
+      q[2] = (float)st->z;
+    }
+    float dx = q[0] - st->void_ring_point[0];
+    float dy = q[1] - st->void_ring_point[1];
+    float dz = q[2] - st->void_ring_point[2];
+    float d2_sq = dx * dx + dz * dz;
+    float d3_sq = d2_sq + dy * dy;
+    *(volatile float *)(probe + PROBE_C_DIST3) = fsqrtf(d3_sq);
+    *(volatile float *)(probe + PROBE_C_DIST2) = fsqrtf(d2_sq);
+  } else {
+    *(volatile uint8_t *)(probe + PROBE_C_HIT) = 0;
+    *(volatile uint32_t *)(probe + PROBE_C_DIST3) = PROBE_FLT_MAX;
+    *(volatile uint32_t *)(probe + PROBE_C_DIST2) = PROBE_FLT_MAX;
+    *(volatile uint32_t *)(probe + PROBE_C_PHASE) = 0;
+  }
+  clear_far_flag();
+}
+
+static void sync_void_ring_during_load(const memfile_t *st, bool on_move_start)
+{
+  if (st->have_void_ring) {
+    if (near_saved_pos(st))
+      restore_void_ring(st);
+    else if (on_move_start)
+      clear_void_ring();
+  } else if (on_move_start) {
+    clear_void_ring();
+  }
 }
 
 typedef void (*gd_changed_t)(uintptr_t component, const void *change_bits);
@@ -1258,6 +1398,16 @@ static void capture_link_extra(memfile_t *st)
     memcpy(st->rng, (const void *)rng, sizeof(st->rng));
     st->have_rng = (st->rng[0] | st->rng[1] | st->rng[2] | st->rng[3]) != 0;
   }
+  uintptr_t probe = probe_component();
+  if (probe) {
+    st->void_ring_hit = (*(const volatile uint8_t *)(probe + PROBE_C_HIT)) & 1u;
+    memcpy(st->void_ring_point, (const void *)(probe + PROBE_C_POINT), sizeof(st->void_ring_point));
+    memcpy(st->void_ring_origin, (const void *)(probe + PROBE_C_ORIGIN), sizeof(st->void_ring_origin));
+    memcpy(st->void_ring_cell, (const void *)(probe + PROBE_C_CELL), sizeof(st->void_ring_cell));
+    st->void_ring_face = *(const volatile int32_t *)(probe + PROBE_C_FACE);
+    st->void_ring_phase = *(const volatile uint32_t *)(probe + PROBE_C_PHASE) % 10u;
+    st->have_void_ring = !st->void_ring_hit || (finite_vec3(st->void_ring_point) && finite_vec3(st->void_ring_origin));
+  }
 }
 
 static void restore_link_extra(const memfile_t *st)
@@ -1287,6 +1437,7 @@ static void restore_link_extra(const memfile_t *st)
     if (rng)
       memcpy((void *)rng, st->rng, sizeof(st->rng));
   }
+  restore_void_ring(st);
   if (st->have_vel && link)
     cct_set_velocity(link, &st->vel);
 }
@@ -2024,6 +2175,7 @@ static void begin_actors_or_camera(const memfile_t *st)
 static void begin_move_or_camera(const memfile_t *st)
 {
   if (st->have_pos && move_link(st)) {
+    sync_void_ring_during_load(st, true);
     set_phase(L_MOVING);
   } else if (st->have_pos) {
     log_printf("memfile %d load: Link couldn't be moved to its position", active_slot + 1); /* not menu text */
@@ -2349,6 +2501,7 @@ static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
       resync_scene_mgrs();
       restore_vitals_and_gear(st);
       if (st->have_pos && move_link(st)) {
+        sync_void_ring_during_load(st, true);
         snprintf(status, sizeof(status), TF("loading memfile %d: placing Link"), active_slot + 1);
         set_phase(L_FAST_MOVE_PRE);
       } else {
@@ -2356,6 +2509,8 @@ static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
       }
       break;
     case L_FAST_MOVE_PRE:
+      if (st->have_void_ring)
+        sync_void_ring_during_load(st, false);
       if (link_at(st, phase_frames) || phase_frames >= FAST_MOVE_TIMEOUT) {
         trigger_reset_gimmick();
       } else if (phase_frames % FAST_MOVE_RETRY == 0) {
@@ -2363,6 +2518,8 @@ static void step_fast_load(const memfile_t *st, const uint8_t *desc0)
       }
       break;
     case L_FAST_WAIT_RESET: {
+      if (st->have_void_ring && near_saved_pos(st))
+        restore_void_ring(st);
       bool req = false;
       gd_get_bool(F_REQ_RESET_GIMMICK, &req);
       if (req)
@@ -2442,6 +2599,8 @@ static void step_full_load(const memfile_t *st, uint8_t *mgr, const uint8_t *des
       const char *map = gd_get_str(GD_STR_MAP);
       if (!loading && map && str_equal(map, st->map) && link_actor() && (link_actor() != old_actor || saw_unload)) {
         clear_overrides();
+        if (st->have_void_ring && near_saved_pos(st))
+          restore_void_ring(st);
         snprintf(status, sizeof(status), TF("loading memfile %d: placing Link"), active_slot + 1);
         set_phase(L_WAIT_SETTLE);
       } else if (phase_frames > ARRIVAL_TIMEOUT) {
@@ -2454,6 +2613,8 @@ static void step_full_load(const memfile_t *st, uint8_t *mgr, const uint8_t *des
         quiet_frames = 0;
         break;
       }
+      if (st->have_void_ring && near_saved_pos(st))
+        restore_void_ring(st);
       quiet_frames = eventskip_known() && eventskip_running() ? 0 : quiet_frames + 1;
       if (quiet_frames >= QUIET_FRAMES || phase_frames > SETTLE_TIMEOUT) {
         if (quiet_frames < QUIET_FRAMES)
@@ -2479,8 +2640,11 @@ static void step_post_move(const memfile_t *st)
       begin_actors_or_camera(st);
     } else if (phase_frames > MOVE_TIMEOUT) {
       fail("memfile loaded, but Link couldn't be moved to its position");
-    } else if (phase_frames % MOVE_RETRY_EVERY == 0) {
-      move_link(st);
+    } else {
+      if (st->have_void_ring)
+        sync_void_ring_during_load(st, false);
+      if (phase_frames % MOVE_RETRY_EVERY == 0)
+        move_link(st);
     }
     return;
   }
@@ -2644,7 +2808,7 @@ void memfile_frame(void)
 #define SZM_CAMERA      SZM_TAG('C', 'A', 'M', 'R') /* the player camera and its AI action nodes */
 #define SZM_ACTORS      SZM_TAG('A', 'C', 'T', 'R') /* scene actors: { u8 flags, u32 record_size, records } */
 #define SZM_ACTOR_BB    SZM_TAG('A', 'B', 'B', 'D') /* per-actor Blackboard primitive pool */
-#define SZM_EXTRA       SZM_TAG('X', 'T', 'R', 'A') /* Link velocity, fall/JS history, AutoSaveMgr SavePos */
+#define SZM_EXTRA       SZM_TAG('X', 'T', 'R', 'A') /* Link velocity, fall/JS history, SavePos, RNG, 8-unit ring */
 #define SZM_SCALAR_SIZE 18u /* format 2's records; a file's own are at least this */
 #define SZM_STRING_SIZE (4u + GD_STR_LEN)
 #define SZM_ACTOR_SIZE  78u /* + u32 bb_off, u32 bb_len after name_hash */
@@ -2654,7 +2818,7 @@ void memfile_frame(void)
 #define SZM_PATH_LEN    (sizeof(SZM_DIR) + MEMFILE_FOLDER_LEN + MEMFILE_NAME_MAX + 8)
 
 enum { STATE_POS = 1, STATE_LIFE = 2, STATE_MAGIC = 4, STATE_TIME = 8, STATE_NAYRU = 16 };
-enum { EXTRA_VEL = 1, EXTRA_FALL = 2, EXTRA_SAVEPOS = 4, EXTRA_RESTART = 8, EXTRA_RNG = 16 };
+enum { EXTRA_VEL = 1, EXTRA_FALL = 2, EXTRA_SAVEPOS = 4, EXTRA_RESTART = 8, EXTRA_RNG = 16, EXTRA_VOID_RING = 32 };
 enum { CAM_STATE = 1, CAM_COMPONENT = 2 };
 enum { ACTORS_TRUNCATED = 1 };
 
@@ -2843,11 +3007,11 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
     out_end(&o, at);
   }
 
-  if (st->have_vel || st->have_fall || st->have_savepos || st->have_restart || st->have_rng) {
+  if (st->have_vel || st->have_fall || st->have_savepos || st->have_restart || st->have_rng || st->have_void_ring) {
     at = out_begin(&o, SZM_EXTRA);
     uint8_t xflags = (st->have_vel ? EXTRA_VEL : 0) | (st->have_fall ? EXTRA_FALL : 0) |
                      (st->have_savepos ? EXTRA_SAVEPOS : 0) | (st->have_restart ? EXTRA_RESTART : 0) |
-                     (st->have_rng ? EXTRA_RNG : 0);
+                     (st->have_rng ? EXTRA_RNG : 0) | (st->have_void_ring ? EXTRA_VOID_RING : 0);
     OUT(&o, xflags);
     OUT(&o, st->vel);
     OUT(&o, st->fall);
@@ -2855,6 +3019,12 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
     out_bytes(&o, st->savepos_b, SAVEPOS_SLOT_BYTES);
     out_bytes(&o, st->player_restart, PLAYER_RESTART_BYTES);
     OUT(&o, st->rng);
+    OUT(&o, st->void_ring_hit);
+    OUT(&o, st->void_ring_point);
+    OUT(&o, st->void_ring_origin);
+    OUT(&o, st->void_ring_cell);
+    OUT(&o, st->void_ring_face);
+    OUT(&o, st->void_ring_phase);
     out_end(&o, at);
   }
 
@@ -3046,6 +3216,14 @@ static void szm_extra(szm_in_t *in, memfile_t *st)
     st->have_restart = true;
   if (IN(in, st->rng) && (xflags & EXTRA_RNG) && (st->rng[0] | st->rng[1] | st->rng[2] | st->rng[3]))
     st->have_rng = true;
+  if (IN(in, st->void_ring_hit) && IN(in, st->void_ring_point) && IN(in, st->void_ring_origin) &&
+      IN(in, st->void_ring_cell) && IN(in, st->void_ring_face) && IN(in, st->void_ring_phase) &&
+      (xflags & EXTRA_VOID_RING)) {
+    st->void_ring_hit &= 1u;
+    st->void_ring_phase %= 10u;
+    if (!st->void_ring_hit || (finite_vec3(st->void_ring_point) && finite_vec3(st->void_ring_origin)))
+      st->have_void_ring = true;
+  }
 }
 
 /* read a .szm file's bytes into st (zeroed; free_memfile it either way): 0, or why it can't be used */

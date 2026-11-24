@@ -2040,7 +2040,7 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   `Pack/Actor/<name>.pack` itself (asynchronously, shared with any copy already loaded), and queues the request for
   the actor workers. So any actor with a pack can be made on any map. The result code: 0 queued, 1 the manager isn't
   taking any (a map change), 2 no name, 3 no template, 4 setup failed, 5 no pack name, 6 no heap, 7 and 8 out of
-  memory. A name with no ActorInfo row takes a template slot for good, so spawn by name only offers the 1856 enemies,
+  memory. A name with no ActorInfo row takes a template slot for good, so spawn actor by name or type only offers the 1856 enemies,
   NPCs, objects and items both versions have a pack for (`tools/actornames.py` writes `src/ootgz/actornames.c` from
   the dumps' romfs).
 - **Checked in game** (24th November 2026, Lichii): a copy of a guidepost in Kokiri Forest (1.1.1), of a Deku Baba in

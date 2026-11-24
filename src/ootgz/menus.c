@@ -4381,7 +4381,7 @@ static void build_debug(void)
   }
   menu_item_t *actors = menu_add_submenu(&m_debug, "actors", actorsmenu_build());
   if (actors)
-    actors->hint = "the actors near Link: choose one, go to it";
+    actors->hint = "browse the actors loaded in the scene (go to, copy or kill one), or spawn any actor";
   menu_add_submenu(&m_debug, "tests", &m_tests);
   menu_add_submenu(&m_debug, "heap", &m_heap);
   menu_add_submenu(&m_debug, "memory", &memview_menu);

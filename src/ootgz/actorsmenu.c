@@ -1,11 +1,10 @@
 /* debug > actors (actorsmenu.h): gz's actors menu for this game.
  *
- * The menu itself: the running actors near Link, nearest first, read through actors.c when the menu is entered or
- * refresh is chosen. browse: every actor in the actor manager, any state, in folders by kind (with their counts),
- * filtered by a piece of their names; a folder groups its actors under their names, or sorts them by distance.
- * In either list L chooses an actor, which can then be gone to, copied (actor_spawn: the game's create request) or
- * killed (actor_kill: the game's death request, or its delete request for an NPC or thing with no death). spawn by
- * name makes any enemy, NPC, object or item the game has a pack for (actornames.c), loading it if it must.
+ * browse current actors: every actor in the actor manager, any state, in folders by kind (with their counts),
+ * filtered by a piece of their names; a folder groups its actors under their names, or sorts them by distance. L on
+ * one opens it: where it is and its state, go to it, spawn one like it (actor_spawn: the game's create request), kill
+ * it (actor_kill: the game's death request, or its delete request for an NPC or thing with no death). spawn actor by
+ * name or type makes any enemy, NPC, object or item the game has a pack for (actornames.c), loading it if it must.
  *
  * The lists are copies: an actor in them may have gone since, so the chosen one is looked for again in the actor
  * manager (actor_read) every time it's shown or used, and is never touched once it isn't there. */
@@ -22,28 +21,16 @@
 #include "position.h"
 #include "sys.h"
 
-#define ROWS 24          /* the near list's rows */
-#define WALK_MAX 96      /* the nearest this many are read, then filtered by kind */
 #define ALL_MAX 1536     /* browse: the actors read (a busy map has about 850) */
 #define FOLDER_ROWS 120  /* a folder's rows */
 #define FOLDER_HEADS 60  /* ... and its names over them */
 #define FILTER_MAX 31
 
-static menu_t m_actors, m_browse, m_folder, m_spawn;
-
-static const char *const range_names[] = { "5 m", "10 m", "20 m", "50 m", "100 m" };
-static const float ranges[] = { 5, 10, 20, 50, 100 };
-static int range_choice = 2;
+static menu_t m_actors, m_browse, m_folder, m_chosen, m_spawn;
 
 /* what a list shows, by the start of the actor's name */
 enum { KIND_ALL, KIND_ENEMIES, KIND_NPCS, KIND_OBJECTS, KIND_SCENERY, KIND_OTHER, N_KINDS };
 static const char *const kind_names[N_KINDS] = { "all", "enemies", "npcs", "objects", "scenery", "other" };
-static int kind_choice = KIND_ALL;
-
-static actor_near_t found[WALK_MAX];
-static actor_near_t rows[ROWS];
-static int n_rows, n_more; /* shown, and the matches that didn't fit */
-static char row_labels[ROWS][72];
 
 static uintptr_t chosen;
 static char chosen_name[64];
@@ -93,9 +80,8 @@ static int compare_names(const char *a, const char *b)
   return (unsigned char)*a - (unsigned char)*b;
 }
 
-/* --- the chosen actor: shown and used from both lists ------------------------------------------- */
+/* --- the chosen actor: its own menu, opened from a folder's row ---------------------------------- */
 
-static void fill(void);
 static void fill_folder(void);
 
 static void choose(const actor_near_t *row)
@@ -229,11 +215,11 @@ static void text_chosen(menu_item_t *it, char *buf, int len)
   actor_read_t a;
   bool there = chosen && actor_read(chosen, &a);
   if (!chosen) {
-    snprintf(buf, len, it->data == 0 ? "chosen: none (L on a row)" : "");
+    snprintf(buf, len, it->data == 0 ? "none chosen" : "");
   } else if (!there) {
-    snprintf(buf, len, it->data == 0 ? "chosen: %s (gone)" : "", chosen_name);
+    snprintf(buf, len, it->data == 0 ? "%s: gone" : "", chosen_name);
   } else if (it->data == 0) {
-    snprintf(buf, len, "chosen: %s", a.name);
+    snprintf(buf, len, "%s", a.name);
   } else if (it->data == 1) {
     if (a.distance_known)
       snprintf(buf, len, "%.2f m away at %.2f %.2f %.2f", (double)a.distance, (double)a.pos[0], (double)a.pos[1],
@@ -248,107 +234,25 @@ static void text_chosen(menu_item_t *it, char *buf, int len)
   }
 }
 
-/* under a list: the chosen actor's lines, go to, kill, return; how many items that was */
-static int add_chosen_items(menu_t *menu)
+/* the chosen actor's menu: its lines, go to, spawn one like it, kill, return */
+static void fill_chosen(void)
 {
-  int before = menu->n_items;
-  menu_end_group(menu);
+  m_chosen.title = chosen_name;
+  menu_reset(&m_chosen);
   for (int line = 0; line < 3; line++)
-    menu_add_text(menu, text_chosen, line);
-  menu_item_t *item = menu_add_action(menu, "go to", act_goto, 0);
+    menu_add_text(&m_chosen, text_chosen, line);
+  menu_end_group(&m_chosen);
+  menu_item_t *item = menu_add_action(&m_chosen, "go to", act_goto, 0);
   if (item)
-    item->hint = "L: Link to the chosen actor (load position's way; the saved position stays)";
-  item = menu_add_action(menu, "spawn one like it", act_spawn, 0);
+    item->hint = "L: Link to this actor (load position's way; the saved position stays)";
+  item = menu_add_action(&m_chosen, "spawn one like it", act_spawn, 0);
   if (item)
-    item->hint = "L: the game makes another of the chosen actor, in front of Link (its pack loads if it must)";
-  item = menu_add_action(menu, "kill", act_kill, 0);
+    item->hint = "L: the game makes another of this actor, in front of Link (its pack loads if it must)";
+  item = menu_add_action(&m_chosen, "kill", act_kill, 0);
   if (item)
     item->hint = "L: the game's death request, as a fall into the void; npcs and things with none are deleted";
-  menu_add_return(menu);
-  return menu->n_items - before;
-}
-
-/* --- the actors near Link ----------------------------------------------------------------------- */
-
-/* the list read again: the nearest WALK_MAX within range, then those of the kind shown */
-static void refresh(void)
-{
-  int n = actors_near(ranges[range_choice], found, WALK_MAX);
-  n_rows = n_more = 0;
-  for (int i = 0; i < n; i++) {
-    if (kind_choice != KIND_ALL && kind_of(found[i].name) != kind_choice)
-      continue;
-    if (n_rows < ROWS)
-      rows[n_rows++] = found[i];
-    else
-      n_more++;
-  }
-  fill();
-}
-
-static void act_refresh(menu_item_t *it) { refresh(); }
-
-static int get_range(menu_item_t *it) { return range_choice; }
-static void set_range(menu_item_t *it, int choice)
-{
-  range_choice = choice;
-  refresh();
-}
-static int get_kind(menu_item_t *it) { return kind_choice; }
-static void set_kind(menu_item_t *it, int choice)
-{
-  kind_choice = choice;
-  refresh();
-}
-
-static void act_choose(menu_item_t *it)
-{
-  choose(&rows[it->data]);
-  fill(); /* its row's mark */
-}
-
-static void text_count(menu_item_t *it, char *buf, int len)
-{
-  if (!n_rows)
-    snprintf(buf, len, "none within %s", range_names[range_choice]);
-  else if (n_more)
-    snprintf(buf, len, "the nearest %d (%d more further away)", n_rows, n_more);
-  else
-    snprintf(buf, len, "%d within %s, nearest first", n_rows, range_names[range_choice]);
-}
-
-/* the menu's items, from the list as it is */
-static void fill(void)
-{
-  menu_reset(&m_actors);
-  menu_item_t *item = menu_add_submenu(&m_actors, "browse", &m_browse);
-  if (item)
-    item->hint = "every actor in the scene, in folders by kind, at any distance";
-  item = menu_add_submenu(&m_actors, "spawn by name", &m_spawn);
-  if (item)
-    item->hint = "any enemy, npc, object or item the game has: it loads what it needs";
-  item = menu_add_action(&m_actors, "refresh", act_refresh, 0);
-  if (item)
-    item->hint = "L: read the actors near Link again (also on entering this menu)";
-  item = menu_add_option(&m_actors, "range", 5, range_names, get_range, set_range, 0);
-  if (item)
-    item->hint = "how far from Link to look";
-  item = menu_add_option(&m_actors, "show", N_KINDS, kind_names, get_kind, set_kind, 0);
-  if (item)
-    item->hint = "by the start of their names: Enemy_, Npc_, Obj_ and Item_, Land_, the rest";
-  menu_add_text(&m_actors, text_count, 0);
-  for (int i = 0; i < n_rows; i++) {
-    snprintf(row_labels[i], sizeof(row_labels[i]), "%s%5.1f  %s", rows[i].actor == chosen ? "> " : "  ",
-             (double)rows[i].distance, rows[i].name ? rows[i].name : "?");
-    item = menu_add_action(&m_actors, row_labels[i], act_choose, i);
-    if (item) {
-      item->hint = "L: choose it (below: where it is, go to, kill)";
-      item->log_label = "";
-    }
-  }
-  m_actors.pinned = 6; /* browse, spawn by name, refresh, range, show and the count stay at the top */
-  m_actors.pinned_end = add_chosen_items(&m_actors);
-  menu_refresh(&m_actors);
+  menu_add_return(&m_chosen);
+  menu_refresh(&m_chosen);
 }
 
 /* --- browse: every actor, in folders ------------------------------------------------------------ */
@@ -394,8 +298,7 @@ static void browse_refresh(void)
   n_all = actors_all(all, ALL_MAX, &all_more);
   count_kinds();
   fill_browse();
-  if (menu_current == &m_folder)
-    fill_folder();
+  fill_folder();
 }
 
 static void act_browse_refresh(menu_item_t *it) { browse_refresh(); }
@@ -484,12 +387,6 @@ static void set_sort(menu_item_t *it, int choice)
   fill_folder();
 }
 
-static void act_choose_folder(menu_item_t *it)
-{
-  choose(&frows[it->data]);
-  fill_folder(); /* its row's mark */
-}
-
 static void text_folder(menu_item_t *it, char *buf, int len)
 {
   if (!n_frows)
@@ -498,6 +395,17 @@ static void text_folder(menu_item_t *it, char *buf, int len)
     snprintf(buf, len, "%d shown, %d more", n_frows, n_fmore);
   else
     snprintf(buf, len, "%d %s", n_frows, sort_choice ? "nearest first" : "by name, nearest first in each");
+}
+
+/* L on a row: that actor's own menu */
+static void act_open_row(menu_item_t *it)
+{
+  if (it->data < 0 || it->data >= n_frows)
+    return;
+  choose(&frows[it->data]);
+  fill_chosen();
+  m_chosen.parent = &m_folder;
+  menu_goto(&m_chosen);
 }
 
 /* the folder's items: the actors of its kind with the filter in their names, in the order chosen */
@@ -545,25 +453,28 @@ static void fill_folder(void)
                (unsigned)a->state);
     else
       snprintf(frow_labels[n_frows], sizeof(frow_labels[n_frows]), "%s%6.1f  %s", mark, (double)a->distance, a->name);
-    item = menu_add_action(&m_folder, frow_labels[n_frows], act_choose_folder, n_frows);
+    item = menu_add_action(&m_folder, frow_labels[n_frows], act_open_row, n_frows);
     if (item) {
-      item->hint = "L: choose it (below: where it is, go to, kill)";
+      item->hint = "L: open it: where it is, go to, spawn one like it, kill";
       item->log_label = "";
     }
     n_frows++;
   }
   m_folder.pinned = 3; /* folder, sort and the count stay at the top */
-  m_folder.pinned_end = add_chosen_items(&m_folder);
+  menu_end_group(&m_folder);
+  menu_add_return(&m_folder);
+  m_folder.pinned_end = 1;
   menu_refresh(&m_folder);
 }
 
-/* --- spawn by name: the actors the game has a pack for (actornames.c) ------------------------------- */
+/* --- spawn actor by name or type: the actors the game has a pack for (actornames.c) ------------------- */
 
 #define SPAWN_ROWS 40
 
 static char spawn_filter[FILTER_MAX + 1];
 static char spawn_filter_label[FILTER_MAX + 24];
 static int spawn_rows[SPAWN_ROWS], n_spawn_rows, n_spawn_matches;
+static int spawn_kind = KIND_ALL;
 
 static void fill_spawn(void);
 
@@ -580,10 +491,19 @@ static void act_spawn_filter(menu_item_t *it)
 
 static void act_spawn_row(menu_item_t *it) { spawn_named(actor_names[spawn_rows[it->data]]); }
 
+static int get_spawn_kind(menu_item_t *it) { return spawn_kind; }
+static void set_spawn_kind(menu_item_t *it, int choice)
+{
+  spawn_kind = choice;
+  fill_spawn();
+}
+
 static void text_spawn_count(menu_item_t *it, char *buf, int len)
 {
-  if (!n_spawn_matches)
-    snprintf(buf, len, "no actor's name has \"%s\"", spawn_filter);
+  if (!n_spawn_matches && spawn_filter[0])
+    snprintf(buf, len, "no %s with \"%s\" in the name", kind_names[spawn_kind], spawn_filter);
+  else if (!n_spawn_matches)
+    snprintf(buf, len, "none");
   else if (n_spawn_matches > n_spawn_rows)
     snprintf(buf, len, "%d match: the first %d (type more of the name)", n_spawn_matches, n_spawn_rows);
   else
@@ -594,7 +514,7 @@ static void fill_spawn(void)
 {
   n_spawn_rows = n_spawn_matches = 0;
   for (int i = 0; i < actor_names_count; i++)
-    if (has_piece(actor_names[i], spawn_filter)) {
+    if ((spawn_kind == KIND_ALL || kind_of(actor_names[i]) == spawn_kind) && has_piece(actor_names[i], spawn_filter)) {
       if (n_spawn_rows < SPAWN_ROWS)
         spawn_rows[n_spawn_rows++] = i;
       n_spawn_matches++;
@@ -606,6 +526,9 @@ static void fill_spawn(void)
     item->hint = "L: type a piece of the name (any case), e.g. wolfos, tsubo, rupee";
     item->log_label = "";
   }
+  item = menu_add_option(&m_spawn, "type", N_KINDS, kind_names, get_spawn_kind, set_spawn_kind, 0);
+  if (item)
+    item->hint = "by the start of their names: Enemy_, Npc_, Obj_ and Item_, Land_, the rest";
   menu_add_text(&m_spawn, text_spawn_count, 0);
   for (int i = 0; i < n_spawn_rows; i++) {
     item = menu_add_action(&m_spawn, actor_names[spawn_rows[i]], act_spawn_row, i);
@@ -614,7 +537,7 @@ static void fill_spawn(void)
       item->log_label = "";
     }
   }
-  m_spawn.pinned = 2;
+  m_spawn.pinned = 3; /* name has, type and the count stay at the top */
   m_spawn.pinned_end = 1;
   menu_add_return(&m_spawn);
   menu_refresh(&m_spawn);
@@ -624,14 +547,22 @@ static void fill_spawn(void)
 
 menu_t *actorsmenu_build(void)
 {
-  menu_init(&m_actors, "actors", ROWS + 17);
-  menu_init(&m_spawn, "spawn by name", SPAWN_ROWS + 4);
+  menu_init(&m_actors, "actors", 3);
+  menu_init(&m_spawn, "spawn actor by name or type", SPAWN_ROWS + 5);
   fill_spawn();
-  menu_init(&m_browse, "browse", N_KINDS + 6);
-  menu_init(&m_folder, "all", 3 + FOLDER_ROWS + FOLDER_HEADS + 10);
+  menu_init(&m_browse, "browse current actors", N_KINDS + 6);
+  menu_init(&m_folder, "all", 3 + FOLDER_ROWS + FOLDER_HEADS + 3);
+  menu_init(&m_chosen, "actor", 8);
   fill_browse();
   fill_folder();
-  fill(); /* last: its browse item makes it browse's parent */
+  fill_chosen();
+  menu_item_t *item = menu_add_submenu(&m_actors, "browse current actors", &m_browse);
+  if (item)
+    item->hint = "every actor loaded in the scene, in folders by kind: open one to go to it, copy it or kill it";
+  item = menu_add_submenu(&m_actors, "spawn actor by name or type", &m_spawn);
+  if (item)
+    item->hint = "any enemy, npc, object or item the game has: it loads what it needs";
+  menu_add_return(&m_actors);
   return &m_actors;
 }
 
@@ -640,13 +571,13 @@ void actorsmenu_frame(void)
   spawn_frame();
   static menu_t *was;
   if (menu_current != was) {
-    if (menu_current == &m_actors && was != &m_browse)
-      refresh(); /* entered: the actors as they are now */
-    else if (menu_current == &m_browse && was != &m_folder)
-      browse_refresh();
-    else if (menu_current == &m_folder && m_browse.selected < m_browse.n_items) {
+    if (menu_current == &m_browse && was != &m_folder)
+      browse_refresh(); /* entered: the actors as they are now */
+    else if (menu_current == &m_folder && was == &m_browse && m_browse.selected < m_browse.n_items) {
       folder_kind = (int)m_browse.items[m_browse.selected].data; /* the folder it was entered by */
       fill_folder();
+    } else if (menu_current == &m_folder && was == &m_chosen) {
+      fill_folder(); /* the chosen row's mark */
     }
   }
   was = menu_current;

@@ -46,6 +46,7 @@ bool save_backup_enabled, save_backup_location, save_backup_hard_numbered = true
 int save_backup_kinds = SAVE_BACKUP_BOTH;
 bool voidmap_shown, voidmap_ground, voidmap_deadly = true, voidmap_ring = true, voidmap_areas = true, voidmap_xray;
 bool hsstore_shown;
+bool remote_enabled;
 static char archive_folder[SAVE_FOLDER_LEN];
 const char *savebackup_archive_folder(void) { return archive_folder; }
 void savebackup_set_archive_folder(const char *f) { snprintf(archive_folder, sizeof(archive_folder), "%s", f); }

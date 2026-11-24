@@ -2381,6 +2381,16 @@ static void set_voids_areas(menu_item_t *it, bool on)
   voidmap_areas = on;
 }
 
+static bool get_voids_bounds(menu_item_t *it)
+{
+  return voidmap_bounds;
+}
+
+static void set_voids_bounds(menu_item_t *it, bool on)
+{
+  voidmap_bounds = on;
+}
+
 static bool get_voids_xray(menu_item_t *it)
 {
   return voidmap_xray;
@@ -2402,7 +2412,7 @@ static menu_t m_voids;
 
 static void build_voids(void)
 {
-  menu_init(&m_voids, "void out", 9);
+  menu_init(&m_voids, "void out", 10);
   menu_item_t *show = menu_add_check(&m_voids, "show", get_voids_shown, set_voids_shown, 0);
   if (show) {
     show->hint = "where the game's ground map voids link, round link";
@@ -2437,6 +2447,12 @@ static void build_voids(void)
     areas->hint = "purple: placed in the map, link voids inside one   red: link is in it";
     areas->log_label = "void out, areas:";
     areas->indent = 2;
+  }
+  menu_item_t *bounds = menu_add_check(&m_voids, "map's outer box", get_voids_bounds, set_voids_bounds, 0);
+  if (bounds) {
+    bounds->hint = "cyan: 5 units past the ground map's box (sides and floor) link voids";
+    bounds->log_label = "void out, outer box:";
+    bounds->indent = 2;
   }
   menu_item_t *xray = menu_add_check(&m_voids, "through the scenery", get_voids_xray, set_voids_xray, 0);
   if (xray) {

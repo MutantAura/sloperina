@@ -1373,6 +1373,7 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_VOID_SHIFT_OK] = { 0.18f, 0.92f, 0.32f, 1.0f },   /* green: the 8-unit fence updates here */
   [AW_VOID_SHIFT_FAIL] = { 0.96f, 0.18f, 0.16f, 1.0f }, /* red: the 8-unit fence stays stuck here */
   [AW_VOID_AREA] = { 0.70f, 0.34f, 1.0f, 1.0f },    /* purple: an area that voids Link inside it */
+  [AW_VOID_BOUNDS] = { 0.16f, 0.88f, 1.0f, 1.0f },  /* cyan: the ground map's outer bounding box (+5m margin) */
   [AW_OCARINA] = { 0.08f, 0.58f, 0.22f, 1.0f },  /* dark green: slot B if the ocarina were put away (savepos.c) */
   [AW_OCARINA_LOAD] = { 1.0f, 1.0f, 0.68f, 1.0f },   /* pale yellow: where a load puts Link from it */
   [AW_HOOK] = { 1.0f, 0.85f, 0.10f, 1.0f },         /* gold: the hookshot's hook out (hsstore.c) */

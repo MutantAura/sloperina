@@ -44,7 +44,7 @@ bool airwalls_xray, enemy_hp_xray, frame_advance_in_pause, hide_over_item_wheel,
 bool flaglog_enabled, flaglog_status_enabled, flaglog_story_enabled, savepos_shown, savepos_load = true;
 bool save_backup_enabled, save_backup_location, save_backup_hard_numbered = true, swkbd_enabled = true;
 int save_backup_kinds = SAVE_BACKUP_BOTH;
-bool voidmap_shown, voidmap_ground, voidmap_deadly = true, voidmap_ring = true, voidmap_shift = true, voidmap_areas = true, voidmap_xray;
+bool voidmap_shown, voidmap_ground, voidmap_deadly = true, voidmap_ring = true, voidmap_shift = true, voidmap_areas = true, voidmap_bounds = true, voidmap_xray;
 bool hsstore_shown;
 bool remote_enabled;
 static char archive_folder[SAVE_FOLDER_LEN];

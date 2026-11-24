@@ -35,7 +35,7 @@ float sqrtf(float x);
 bool voidmap_shown;
 bool voidmap_ground;
 bool voidmap_deadly = true, voidmap_ring = true, voidmap_shift = true;
-bool voidmap_areas = true;
+bool voidmap_areas = true, voidmap_bounds = true;
 bool voidmap_xray;
 
 /* the ground map: [[[[main + voxel_mgr_ptr]] + this] + this] is its manager */
@@ -97,6 +97,9 @@ bool voidmap_xray;
 #define PROBE_FLAGS 0xA8        /* u32 */
 #define PROBE_OUTSIDE 0x40000u  /* Link is more than 5 outside the probe's own box: sets the deadly flag too */
 #define PROBE_POS 0xE0          /* 3 x f32: live probe query origin */
+#define PROBE_AABB_MAX 0xEC     /* 3 x f32: VolumeStats AABB max (X/Z checked +5m; Y not checked) */
+#define PROBE_AABB_MIN 0xF8     /* 3 x f32: VolumeStats AABB min (X/Y/Z checked -5m) */
+#define PROBE_BOX_MARGIN 5.0f   /* main+0x38CE24: > 5 units past AABB min(X/Y/Z) or max(X/Z) sets PROBE_OUTSIDE */
 #define PROBE_A_POINT 0x360     /* where the cast down landed */
 #define PROBE_A_HIT 0x37C       /* u8 bit 0: mapped ground under Link */
 #define PROBE_C_POINT 0xBA0     /* the nearest cell found */
@@ -134,6 +137,10 @@ bool voidmap_xray;
 #define RING_SEGMENTS 32
 #define RING_POST_EVERY 4   /* an upright at every 4th segment: eight in all */
 #define RING_REACH 2.0f     /* the fence, this far over and under Link's feet */
+#define DEADLY_PAD 0.6f     /* Probe A casts a 3x3 grid at +/-0.6 in X/Z when centre ray misses (main+0x38AF50) */
+#define BOUNDS_SHOW_RANGE 28.0f /* draw any side/floor of the map's outer AABB within this distance of Link */
+#define BOUNDS_PATCH_HALF 12.0f /* half-width of the drawn wall/floor patch along the boundary plane */
+#define BOUNDS_WALL_HALF 4.0f   /* vertical half-height of drawn outer-box side walls around Link */
 #define TWO_PI 6.2831853f
 
 /* Ground shift assessment grid around Link: 1x1 world-snapped tiles within SHIFT_RADIUS_F horizontally. */
@@ -165,6 +172,8 @@ static const int box_middle[3] = { BOX_X / 2, BOX_BELOW, BOX_Z / 2 }; /* where L
 
 static uint8_t cells[BOX_CELLS];
 static bool layer_mapped[BOX_Y], layer_deadly[BOX_Y]; /* whether a layer has any such cell */
+static int16_t below_y[BOX_Z][BOX_X];     /* highest mapped cell below box_min[1], matching Probe A's 5000m cast */
+static uint8_t below_flags[BOX_Z][BOX_X]; /* CELL_MAPPED / CELL_DEADLY of that deepest-visible cell */
 static int box_min[3];
 static bool box_valid;
 static edge_t edges[MAX_EDGES];
@@ -172,10 +181,12 @@ static uint8_t edge_step[MAX_EDGES]; /* nearest_edges' */
 static int n_edges;
 static aw_face_t walls[MAX_WALLS];
 static int n_walls;
-static uint32_t posts[POST_SLOTS]; /* the uprights made this rebuild; 0: free (a post's x is never 0) */
+static uint32_t posts[POST_SLOTS]; /* the uprights made this rebuild; 0: free */
 static int n_posts;
 static bool full_logged;           /* the log has said the edges or walls ran out, for this map's stretch */
 static struct { bool on; uint8_t colour; float point[3], y; } fence; /* this frame's (ring) */
+static aw_face_t bounds_faces[5];  /* this frame's nearby outer-box walls (up to 4) + minY-5 floor */
+static int n_bounds_faces;
 static uint32_t frames, built_frame;
 static bool built_ground, built_deadly;
 static uint32_t void_flags_were;   /* voidmap_frame's: the void flags last frame */
@@ -206,9 +217,13 @@ static inline float absf(float x)
 /* Single AArch64 hardware fsqrt without GCC's errno fallback call to libm sqrtf. */
 static inline float fsqrtf(float x)
 {
+#ifdef __aarch64__
   float r;
   __asm__("fsqrt %s0, %s1" : "=w"(r) : "w"(x));
   return r;
+#else
+  return sqrtf(x);
+#endif
 }
 
 /* --- reading the ground map ----------------------------------------------------------------------- */
@@ -299,13 +314,17 @@ static bool cell_has(int x, int y, int z, uint8_t flag)
   return (cells[(y * BOX_Z + z) * BOX_X + x] & flag) != 0;
 }
 
-/* whether the cube of `size` cells at corner[] (cells of the chunk) has any of the box in it */
+/* whether the cube of `size` cells at corner[] (cells of the chunk) has any of the box (or deep column below it) */
 static bool reaches_box(const chunk_t *chunk, const int corner[3], int size)
 {
   for (int axis = 0; axis < 3; axis++) {
     int low = chunk->origin[axis] + corner[axis] - box_min[axis];
-    if (low + size <= 0 || low >= box_size[axis])
+    if (axis == 1) {
+      if (low >= box_size[1] || low + size <= -5000)
+        return false;
+    } else if (low + size <= 0 || low >= box_size[axis]) {
       return false;
+    }
   }
   return true;
 }
@@ -318,6 +337,8 @@ static void keep_cell(const chunk_t *chunk, const int corner[3], const uint32_t 
       return;
   int x = chunk->origin[0] + corner[0] - box_min[0], y = chunk->origin[1] + corner[1] - box_min[1];
   int z = chunk->origin[2] + corner[2] - box_min[2];
+  if (x < 0 || x >= BOX_X || z < 0 || z >= BOX_Z || y >= BOX_Y)
+    return;
   uint8_t mask = CELL_MAPPED;
   if (chunk->intersect.present)
     mask |= (uint8_t)field_bits(&chunk->intersect, path[LEVELS - 1], FIELD_INTERSECT_BITS);
@@ -327,7 +348,20 @@ static void keep_cell(const chunk_t *chunk, const int corner[3], const uint32_t 
       field_bits(&chunk->deadly, path[chunk->deadly_level], FIELD_DEADLY_BITS) &&
       field_bits(&chunk->depth, path[chunk->depth_level], FIELD_DEPTH_BITS) > DEADLY_OVER) {
     mask |= CELL_DEADLY;
-    layer_deadly[y] = true;
+    if (y >= 0)
+      layer_deadly[y] = true;
+  }
+  if (y < 0) {
+    int wy = chunk->origin[1] + corner[1];
+    if (wy > -32768 && wy < 32767) {
+      if (wy > below_y[z][x]) {
+        below_y[z][x] = (int16_t)wy;
+        below_flags[z][x] = mask;
+      } else if (wy == below_y[z][x]) {
+        below_flags[z][x] |= mask;
+      }
+    }
+    return;
   }
   cells[(y * BOX_Z + z) * BOX_X + x] |= mask;
   layer_mapped[y] = true;
@@ -377,6 +411,11 @@ static void read_cells(const int middle[3])
   memset(cells, 0, sizeof(cells));
   memset(layer_mapped, 0, sizeof(layer_mapped));
   memset(layer_deadly, 0, sizeof(layer_deadly));
+  for (int z = 0; z < BOX_Z; z++)
+    for (int x = 0; x < BOX_X; x++) {
+      below_y[z][x] = -32768;
+      below_flags[z][x] = 0;
+    }
   box_valid = false;
   uintptr_t mgr = map_manager();
   int32_t node_offset;
@@ -398,6 +437,16 @@ static void read_cells(const int middle[3])
       }
     node = sys_ptr(node + NODE_NEXT);
   }
+  /* Project any deep deadly cell (> BOX_BELOW below Link, unoccluded by safe mapped ground) into layer 1
+   * (without setting CELL_MAPPED) so its red void column still rises up to Link's height. */
+  if (box_valid)
+    for (int z = 1; z < BOX_Z - 1; z++)
+      for (int x = 1; x < BOX_X - 1; x++)
+        if ((below_flags[z][x] & CELL_DEADLY) && !cell_has(x, 0, z, CELL_MAPPED) &&
+            !cell_has(x, 1, z, CELL_MAPPED)) {
+          cells[(1 * BOX_Z + z) * BOX_X + x] |= CELL_DEADLY;
+          layer_deadly[1] = true;
+        }
 }
 
 /* --- the outlines ------------------------------------------------------------------------------- */
@@ -433,30 +482,52 @@ static bool goes_on(kind_t kind, int x, int y, int z)
   return kind(x, y - 1, z) || kind(x, y, z) || kind(x, y + 1, z);
 }
 
-/* a line between two corners of cells of the box; y in cells too, lifted */
-static void add_edge(int x0, int y0, int z0, int x1, int y1, int z1, uint8_t colour)
+/* True if Probe A's centre downward cast at (x, z) from below `top` finds no safe mapped ground
+ * (meaning Probe A falls through to its 8 outer +/-0.6 rays, expanding an adjacent deadly cell by 0.6). */
+static bool col_unmapped(int x, int z, int top)
+{
+  if (x < 0 || x >= BOX_X || z < 0 || z >= BOX_Z)
+    return false;
+  if (top > BOX_Y)
+    top = BOX_Y;
+  for (int iy = top - 1; iy >= 0; iy--) {
+    uint8_t c = cells[(iy * BOX_Z + z) * BOX_X + x];
+    if (c & CELL_MAPPED)
+      return (c & CELL_DEADLY) != 0;
+  }
+  if (below_flags[z][x] & CELL_MAPPED)
+    return (below_flags[z][x] & CELL_DEADLY) != 0;
+  return true;
+}
+
+/* a line between two points in box-cell coordinates; y in cells too, lifted */
+static void add_edge_f(float x0, int y0, float z0, float x1, int y1, float z1, uint8_t colour)
 {
   if (n_edges >= MAX_EDGES)
     return;
   edges[n_edges++] = (edge_t){
-    { (float)(box_min[0] + x0), (float)(box_min[1] + y0) + LIFT, (float)(box_min[2] + z0) },
-    { (float)(box_min[0] + x1), (float)(box_min[1] + y1) + LIFT, (float)(box_min[2] + z1) }, colour };
+    { (float)box_min[0] + x0, (float)(box_min[1] + y0) + LIFT, (float)box_min[2] + z0 },
+    { (float)box_min[0] + x1, (float)(box_min[1] + y1) + LIFT, (float)box_min[2] + z1 }, colour };
 }
 
-/* a column's side as a face: from the line (x0, z0)-(x1, z1) at y0 up to y1, in cells of the box */
-static void add_wall(int x0, int z0, int x1, int z1, int y0, int y1, uint8_t colour)
+/* a column's side as a face: from (x0, z0)-(x1, z1) at y0 up to y1, in box-cell coordinates */
+static void add_wall_f(float x0, float z0, float x1, float z1, int y0, int y1, uint8_t colour)
 {
   if (n_walls >= MAX_WALLS)
     return;
   walls[n_walls++] = (aw_face_t){
-    { (float)(box_min[0] + x0), (float)(box_min[1] + y0) + LIFT, (float)(box_min[2] + z0) },
-    { (float)(x1 - x0), 0, (float)(z1 - z0) }, { 0, (float)(y1 - y0), 0 }, colour, true };
+    { (float)box_min[0] + x0, (float)(box_min[1] + y0) + LIFT, (float)box_min[2] + z0 },
+    { x1 - x0, 0, z1 - z0 }, { 0, (float)(y1 - y0), 0 }, colour, true };
 }
 
-/* an upright, once: two sides of a column meet in one */
-static void add_post(int x, int z, int y0, int y1, uint8_t colour)
+/* an upright, once: two sides of a column meet in one (quantized to 0.1 cell so +/-0.6 corners dedupe) */
+static void add_post_f(float x, float z, int y0, int y1, uint8_t colour)
 {
-  uint32_t key = (uint32_t)x | (uint32_t)z << 8 | (uint32_t)y0 << 16 | (uint32_t)y1 << 24;
+  uint32_t qx = (uint32_t)(int)(x * 10.0f + 100.5f) & 0x3FFu;
+  uint32_t qz = (uint32_t)(int)(z * 10.0f + 100.5f) & 0x3FFu;
+  uint32_t key = (qx << 22) | (qz << 12) | ((uint32_t)(y0 & 0x3F) << 6) | (uint32_t)(y1 & 0x3F);
+  if (!key)
+    key = 1;
   uint32_t slot = key * HASH_MULTIPLIER >> (32 - POST_SLOT_BITS);
   while (posts[slot] && posts[slot] != key)
     slot = (slot + 1) & (POST_SLOTS - 1);
@@ -464,7 +535,7 @@ static void add_post(int x, int z, int y0, int y1, uint8_t colour)
     return;
   posts[slot] = key;
   n_posts++;
-  add_edge(x, y0, z, x, y1, z, colour);
+  add_edge_f(x, y0, z, x, y1, z, colour);
 }
 
 /* where the column over a cell ends: the next mapped cell up, or the box's top */
@@ -476,40 +547,68 @@ static int column_top(int x, int y, int z)
   return top;
 }
 
-/* the cells `from` to `to` of a row are open on its side: the line there, and for columns their wall up to top */
-static void add_run(const outline_t *o, const row_side_t *r, int from, int to, int top)
+/* the cells `from` to `to` of a row are open on its side: the line there, and for columns their wall up to top.
+ * When `pad` is set (deadly column facing unmapped space), push the wall outward by DEADLY_PAD (0.6) to match
+ * Probe A's 3x3 outer-ray reach, mitering outer corners into unmapped space and trimming concave inner corners. */
+static void add_run(const outline_t *o, const row_side_t *r, int from, int to, int top, bool pad)
 {
-  int edge = r->row + r->side; /* the row's side, as a cell corner */
-  int x0 = r->along ? edge : from, z0 = r->along ? from : edge;
-  int x1 = r->along ? edge : to, z1 = r->along ? to : edge;
-  add_edge(x0, r->y, z0, x1, r->y, z1, o->colour);
+  float edge = (float)(r->row + r->side);
+  float s0 = (float)from, s1 = (float)to;
+  if (pad) {
+    int beside = r->row + (r->side ? 1 : -1);
+    edge += r->side ? DEADLY_PAD : -DEADLY_PAD;
+    int px = r->along ? r->row : from - 1, pz = r->along ? from - 1 : r->row;
+    int bpx = r->along ? beside : from - 1, bpz = r->along ? from - 1 : beside;
+    if (!goes_on(o->kind, px, r->y, pz)) {
+      if (col_unmapped(px, pz, top))
+        s0 -= DEADLY_PAD;
+    } else if (goes_on(o->kind, bpx, r->y, bpz)) {
+      s0 += DEADLY_PAD;
+    }
+    int nx = r->along ? r->row : to, nz = r->along ? to : r->row;
+    int bnx = r->along ? beside : to, bnz = r->along ? to : beside;
+    if (!goes_on(o->kind, nx, r->y, nz)) {
+      if (col_unmapped(nx, nz, top))
+        s1 += DEADLY_PAD;
+    } else if (goes_on(o->kind, bnx, r->y, bnz)) {
+      s1 -= DEADLY_PAD;
+    }
+    if (s1 <= s0 + 0.05f)
+      return;
+  }
+  float x0 = r->along ? edge : s0, z0 = r->along ? s0 : edge;
+  float x1 = r->along ? edge : s1, z1 = r->along ? s1 : edge;
+  add_edge_f(x0, r->y, z0, x1, r->y, z1, o->colour);
   if (!o->columns)
     return;
-  add_edge(x0, top, z0, x1, top, z1, o->colour);
-  add_post(x0, z0, r->y, top, o->colour);
-  add_post(x1, z1, r->y, top, o->colour);
-  add_wall(x0, z0, x1, z1, r->y, top, o->colour);
+  add_edge_f(x0, top, z0, x1, top, z1, o->colour);
+  add_post_f(x0, z0, r->y, top, o->colour);
+  add_post_f(x1, z1, r->y, top, o->colour);
+  add_wall_f(x0, z0, x1, z1, r->y, top, o->colour);
 }
 
 /* One side of a row: where a cell of the kind has none beside it there, that side, the cells in a row joined
- * into one line (for columns, cut where the top changes). The box's own border isn't an edge: what's past it
- * isn't known. */
+ * into one line (for columns, cut where the top or +/-0.6 pad changes). The box's own border isn't an edge:
+ * what's past it isn't known. */
 static void outline_row_side(const outline_t *o, const row_side_t *r)
 {
   int length = box_size[r->along ? 2 : 0], beside = r->row + (r->side ? 1 : -1);
   int run = -1, run_top = 0;
+  bool run_pad = false;
   for (int i = 1; i < length; i++) {
     int x = r->along ? r->row : i, z = r->along ? i : r->row;
     int beside_x = r->along ? beside : i, beside_z = r->along ? i : beside;
     bool open = i < length - 1 && o->kind(x, r->y, z) && !goes_on(o->kind, beside_x, r->y, beside_z);
     int top = open && o->columns ? column_top(x, r->y, z) : r->y;
-    if (run >= 0 && (!open || top != run_top)) {
-      add_run(o, r, run, i, run_top);
+    bool pad = open && o->columns && col_unmapped(beside_x, beside_z, top);
+    if (run >= 0 && (!open || top != run_top || pad != run_pad)) {
+      add_run(o, r, run, i, run_top, run_pad);
       run = -1;
     }
     if (open && run < 0) {
       run = i;
       run_top = top;
+      run_pad = pad;
     }
   }
 }
@@ -579,6 +678,8 @@ typedef struct {
   bool on_map;      /* mapped ground under Link */
   float landed[3];  /* on_map: where the cast down landed */
   bool outside;     /* Link is outside the probe's box (PROBE_OUTSIDE) */
+  bool has_bounds;  /* VolumeStats AABB at probe +0xEC/+0xF8 is valid */
+  float aabb_min[3], aabb_max[3];
   bool has_point;   /* probe C holds a cell */
   float point[3], level;
 } link_state_t;
@@ -594,6 +695,11 @@ static bool link_state(link_state_t *s)
     return false;
   memcpy(s->pos, (const void *)(actor + ACTOR_POS), sizeof(s->pos));
   memcpy(s->probe_pos, (const void *)(probe + PROBE_POS), sizeof(s->probe_pos));
+  memcpy(s->aabb_max, (const void *)(probe + PROBE_AABB_MAX), sizeof(s->aabb_max));
+  memcpy(s->aabb_min, (const void *)(probe + PROBE_AABB_MIN), sizeof(s->aabb_min));
+  s->has_bounds = s->aabb_min[0] < s->aabb_max[0] && s->aabb_min[2] < s->aabb_max[2] &&
+                  s->aabb_min[0] > -1e6f && s->aabb_max[0] < 1e6f && s->aabb_min[1] > -1e6f &&
+                  s->aabb_min[1] < 1e6f && s->aabb_min[2] > -1e6f && s->aabb_max[2] < 1e6f;
   memcpy(&s->probe_h, (const void *)(probe + PROBE_HEIGHT), sizeof(s->probe_h));
   s->ray_len = PROBE_DEFAULT_RAY;
   uintptr_t owner = sys_ptr(probe + PROBE_OWNER);
@@ -802,7 +908,8 @@ static bool will_ring_shift(const link_state_t *s, float dy_probe, float wx, flo
   /* Pre-pass (main+0x38B374..0x38B554): when Probe A hits, cast from A's cell centre toward Q; if that
    * encounters an intervening voxel face, Q snaps to that hit cell's centre. */
   int acell[3];
-  if (probe_a_sim(q, s->probe_h, acell)) {
+  bool on_map = probe_a_sim(q, s->probe_h, acell);
+  if (on_map) {
     float ac[3] = { (float)acell[0] + 0.5f, (float)acell[1] + 0.5f, (float)acell[2] + 0.5f };
     float vx = q[0] - ac[0], vy = q[1] - ac[1], vz = q[2] - ac[2];
     float len = fsqrtf(vx * vx + vy * vy + vz * vz);
@@ -827,13 +934,22 @@ static bool will_ring_shift(const link_state_t *s, float dy_probe, float wx, flo
       limit = cur;
   }
   /* Test from ray 63 downward first: rays 56..63 point steepest down and hit floor directly underfoot on the
-   * very first iteration when on mapped ground, avoiding the remaining rays. */
+   * very first iteration when on mapped ground, avoiding the remaining rays. When off the map, find the closest
+   * 3D hit and require its horizontal distance to stay < 8.0 (a closer 3D wall >= 8m sideways still voids). */
+  bool found = false;
+  float best_d2_sq = 0.0f;
   for (int i = PROBE_RAYS - 1; i >= 0; i--) {
     float ht;
-    if (voxel_raycast(q, probe_rays[i], limit, &ht, 0))
-      return true;
+    if (voxel_raycast(q, probe_rays[i], limit, &ht, 0)) {
+      if (on_map)
+        return true;
+      found = true;
+      limit = ht;
+      float rx = probe_rays[i][0], rz = probe_rays[i][2];
+      best_d2_sq = ht * ht * (rx * rx + rz * rz);
+    }
   }
-  return false;
+  return found && best_d2_sq < VOID_DISTANCE * VOID_DISTANCE;
 }
 
 /* Single downward Phive collision raycast (main+0x5FF750 / 1.0.0 main+0x582D00) on player ground layer 0x1A. */
@@ -1178,10 +1294,81 @@ static bool rebuild_due(const int here[3])
   return false;
 }
 
+/* Draw a quad patch + wireframe border/crosshairs for one nearby plane of the VolumeStats outer AABB (+5m). */
+static void add_bounds_quad(const float c[3], const float u[3], const float v[3], uint8_t col)
+{
+  float p1[3] = { c[0] + u[0], c[1] + u[1], c[2] + u[2] };
+  float p2[3] = { p1[0] + v[0], p1[1] + v[1], p1[2] + v[2] };
+  float p3[3] = { c[0] + v[0], c[1] + v[1], c[2] + v[2] };
+  line(c, p1, col);
+  line(p1, p2, col);
+  line(p2, p3, col);
+  line(p3, c, col);
+  float mu0[3] = { c[0] + 0.5f * u[0], c[1] + 0.5f * u[1], c[2] + 0.5f * u[2] };
+  float mu1[3] = { p3[0] + 0.5f * u[0], p3[1] + 0.5f * u[1], p3[2] + 0.5f * u[2] };
+  float mv0[3] = { c[0] + 0.5f * v[0], c[1] + 0.5f * v[1], c[2] + 0.5f * v[2] };
+  float mv1[3] = { p1[0] + 0.5f * v[0], p1[1] + 0.5f * v[1], p1[2] + 0.5f * v[2] };
+  line(mu0, mu1, col);
+  line(mv0, mv1, col);
+  if (n_bounds_faces < 5)
+    bounds_faces[n_bounds_faces++] = (aw_face_t){
+      { c[0], c[1], c[2] }, { u[0], u[1], u[2] }, { v[0], v[1], v[2] }, col, !voidmap_xray };
+}
+
+/* Nearby planes of the map's VolumeStats outer AABB: leaving X/Z by > 5m or dropping > 5m below minY voids
+ * (main+0x38CE24 sets PROBE_OUTSIDE -> bit 19). Only planes within BOUNDS_SHOW_RANGE of Link are drawn. */
+static void outer_bounds(const link_state_t *s)
+{
+  uint8_t col = s->outside ? AW_VOID_DEADLY : AW_VOID_BOUNDS;
+  float x0 = s->aabb_min[0] - PROBE_BOX_MARGIN, x1 = s->aabb_max[0] + PROBE_BOX_MARGIN;
+  float y0 = s->aabb_min[1] - PROBE_BOX_MARGIN;
+  float z0 = s->aabb_min[2] - PROBE_BOX_MARGIN, z1 = s->aabb_max[2] + PROBE_BOX_MARGIN;
+  float y_lo = s->pos[1] - BOUNDS_WALL_HALF;
+  if (y_lo < y0)
+    y_lo = y0;
+  float y_hi = s->pos[1] + BOUNDS_WALL_HALF;
+  if (y_hi < y_lo + 1.0f)
+    y_hi = y_lo + 1.0f;
+
+  float z_lo = s->pos[2] - BOUNDS_PATCH_HALF, z_hi = s->pos[2] + BOUNDS_PATCH_HALF;
+  if (z_lo < z0) z_lo = z0;
+  if (z_hi > z1) z_hi = z1;
+  if (z_hi > z_lo) {
+    if (absf(s->pos[0] - x0) <= BOUNDS_SHOW_RANGE) {
+      float c[3] = { x0, y_lo, z_lo }, u[3] = { 0, 0, z_hi - z_lo }, v[3] = { 0, y_hi - y_lo, 0 };
+      add_bounds_quad(c, u, v, col);
+    }
+    if (absf(s->pos[0] - x1) <= BOUNDS_SHOW_RANGE) {
+      float c[3] = { x1, y_lo, z_lo }, u[3] = { 0, 0, z_hi - z_lo }, v[3] = { 0, y_hi - y_lo, 0 };
+      add_bounds_quad(c, u, v, col);
+    }
+  }
+
+  float x_lo = s->pos[0] - BOUNDS_PATCH_HALF, x_hi = s->pos[0] + BOUNDS_PATCH_HALF;
+  if (x_lo < x0) x_lo = x0;
+  if (x_hi > x1) x_hi = x1;
+  if (x_hi > x_lo) {
+    if (absf(s->pos[2] - z0) <= BOUNDS_SHOW_RANGE) {
+      float c[3] = { x_lo, y_lo, z0 }, u[3] = { x_hi - x_lo, 0, 0 }, v[3] = { 0, y_hi - y_lo, 0 };
+      add_bounds_quad(c, u, v, col);
+    }
+    if (absf(s->pos[2] - z1) <= BOUNDS_SHOW_RANGE) {
+      float c[3] = { x_lo, y_lo, z1 }, u[3] = { x_hi - x_lo, 0, 0 }, v[3] = { 0, y_hi - y_lo, 0 };
+      add_bounds_quad(c, u, v, col);
+    }
+  }
+
+  if (x_hi > x_lo && z_hi > z_lo && s->pos[1] - y0 <= BOUNDS_SHOW_RANGE && y0 - s->pos[1] <= BOUNDS_SHOW_RANGE) {
+    float c[3] = { x_lo, y0, z_lo }, u[3] = { x_hi - x_lo, 0, 0 }, v[3] = { 0, 0, z_hi - z_lo };
+    add_bounds_quad(c, u, v, col);
+  }
+}
+
 int voidmap_lines(float ends[][2][3], uint8_t colours[], int max)
 {
   frames++;
   fence.on = false;
+  n_bounds_faces = 0;
   link_state_t s;
   if (!voidmap_shown || !map_manager() || !link_state(&s))
     return 0;
@@ -1191,6 +1378,8 @@ int voidmap_lines(float ends[][2][3], uint8_t colours[], int max)
   max_out = max;
   if (voidmap_ring && s.has_point)
     ring(&s);
+  if (voidmap_bounds && s.has_bounds)
+    outer_bounds(&s);
   if (voidmap_ground || voidmap_deadly || voidmap_shift) {
     int here[3] = { to_cell(s.pos[0]), to_cell(s.pos[1]), to_cell(s.pos[2]) };
     if (rebuild_due(here))
@@ -1251,6 +1440,9 @@ int voidmap_faces(aw_face_t faces[], int max)
   if (!voidmap_shown || !map_manager() || !link_state(&s))
     return 0;
   int n = fence.on && voidmap_ring ? fence_faces(faces, max) : 0;
+  if (voidmap_bounds)
+    for (int i = 0; i < n_bounds_faces && n < max; i++)
+      faces[n++] = bounds_faces[i];
   if (voidmap_shift && shift_grid_valid && box_valid)
     n += shift_faces(faces + n, max - n);
   if (voidmap_deadly && box_valid)

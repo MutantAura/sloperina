@@ -194,22 +194,22 @@ is a deadly one, or when nothing is underneath and that nearest cell is 8 units 
 |---|---|
 | **show** | Draw the parts ticked under it (its options, indented below it). |
 | **edge of the ground map** | **White**: where the mapped ground ends. Past the line the game finds nothing under Link. Not voiding by itself: see the fence. Off by default. |
-| **deadly cells** | **Red**: columns over the cells that void Link at once. A column runs from its cell up to the next mapped ground over it, because the game looks down from any height: anywhere inside one voids. On by default. |
+| **deadly cells** | **Red**: columns over the cells that void Link at once. A column runs from its cell (including deep cells more than 48 units below Link) up to the next mapped ground over it, and expands 0.6 units outward into adjacent unmapped air to match the game's 3×3 downward probe. On by default. |
 | **8 unit fence** | **Orange**: a ring 8 units round the ground cell the game is holding for Link now. With nothing underfoot, Link voids on leaving it; it turns **red** when that happens. The rule only measures sideways, so the real boundary has no top or bottom: 4 units of it are drawn at Link's height. A line runs from Link to the cell while Link is off the map. On by default. |
-| **where the fence moves** | Translucent ground shading around Link showing whether standing there will shift the 8-unit fence's anchor point: **green** where one of the game's 64 ground-map rays finds a closer mapped surface in 3D (moving the fence), **red** where the check fails and the fence stays frozen where it is. On by default. |
+| **where the fence moves** | Translucent ground shading around Link showing whether standing there will shift the 8-unit fence's anchor point: **green** where one of the game's 64 ground-map rays finds a closer mapped surface in 3D (moving the fence safely), **red** where the check fails and the fence stays frozen (or would snap ≥ 8 units sideways while off the map). On by default. |
 | **void areas** | **Purple**: the areas placed in the map that void whatever is inside them, **red** while Link is in one. The holes down into grottos are made the same way and are drawn too (thin discs at the hole). On by default. |
+| **map's outer box** | **Cyan**: the sides and bottom floor 5 units outside the ground map's outer bounding box (`VolumeStatsAABB`), shown when Link is within 28 units of a wall or floor; turns **red** if Link crosses outside and voids. On by default. |
 | **through the scenery** | Also draw all of it where the scenery is in front (otherwise it's hidden behind the scenery, in the game's style). |
 
-The columns, the fence and the void areas have see-through sides. The line under the menu, below **return**,
+The columns, the fence, the outer box and the void areas have see-through sides. The line under the menu, below **return**,
 says where Link stands for the game: **on the map**, **off the map** with how far the held cell is out of 8, or
 **VOID** with the rule that fired. Each void from the ground map also goes in the log file with what caused it and
 where (`void out: ...`).
 
 Not drawn: floors the game tags as an abyss, which void on touch (the whole game has one, at the bottom of the
-Shadow Temple's chasm), the ground map's own outer box (leaving it
-by more than 5 units voids; it's named in the log when it happens), and a few dungeon rooms' own void scripts. The
+Shadow Temple's chasm), and a few dungeon rooms' own void scripts. The
 cells round Link are read again every two seconds or when Link has moved 4 units, out to 24 units to the side, 48 units down
-and 16 units up; where there are more lines than fit, the farthest are left out.
+(with deeper deadly cells projected upward from below) and 16 units up; where there are more lines than fit, the farthest are left out.
 
 ### 2.4 Memfiles
 

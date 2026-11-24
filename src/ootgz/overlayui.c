@@ -64,6 +64,7 @@ static const gpu_colour_t line_colours[AW_NCOLORS] = {
   [AW_VOID_SHIFT_OK] = { 0.18f, 0.92f, 0.32f, 1 },   /* green: the 8-unit fence updates here */
   [AW_VOID_SHIFT_FAIL] = { 0.96f, 0.18f, 0.16f, 1 }, /* red: the 8-unit fence stays stuck here */
   [AW_VOID_AREA] = { 0.72f, 0.36f, 1.0f, 1 },    /* purple: an area that voids Link inside it */
+  [AW_VOID_BOUNDS] = { 0.16f, 0.88f, 1.0f, 1 },  /* cyan: the ground map's outer bounding box (+5m margin) */
   [AW_OCARINA] = { 0.10f, 0.60f, 0.25f, 1 },   /* dark green: slot B if the ocarina were put away (savepos.c) */
   [AW_OCARINA_LOAD] = { 1.0f, 1.0f, 0.70f, 1 },   /* pale yellow: where a load puts Link from it */
   [AW_HOOK] = { 1.0f, 0.86f, 0.12f, 1 },          /* gold: the hookshot's hook out (hsstore.c) */

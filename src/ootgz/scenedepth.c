@@ -36,6 +36,8 @@ void free(void *p);                             /* from main */
 #define LINES_KEEP 30         /* presents the lines' copy goes on after they last asked for it */
 #define LINES_PIXELS (1536 * 864) /* the lines' depth and layer: at most this many pixels (the game's scene) */
 #define LINES_FRESH 2         /* presents a line copy is good for (the game may record a frame ahead) */
+
+volatile bool scenedepth_keep_last;
 #define SLOTS 8               /* texel copies in flight (two or three presents each) */
 #define MAX_ASKED 16          /* enemies looked at: the nearest */
 #define MAX_POINTS (MAX_ASKED * EH_PROBES)
@@ -459,7 +461,8 @@ const nvn_texture_t *scenedepth_lines(int area_w, int area_h, int *w, int *h, bo
     *prime = true;
     return (const nvn_texture_t *)&line_texture;
   }
-  return line_any && now - line_copied <= LINES_FRESH ? (const nvn_texture_t *)&line_texture : 0;
+  return line_any && (now - line_copied <= LINES_FRESH || scenedepth_keep_last) ? (const nvn_texture_t *)&line_texture
+                                                                                : 0;
 }
 
 void scenedepth_primed(void)

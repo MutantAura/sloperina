@@ -28,6 +28,9 @@ float scenedepth_bar_alpha(uintptr_t id, uint64_t now);
  * from now on (the copies are only made while they do). *prime: true the first time, when it must be
  * cleared to the far plane before the GPU first copies into it (gpuui_depth) */
 const nvn_texture_t *scenedepth_lines(int area_w, int area_h, int *w, int *h, bool *prime);
+/* game thread: the game is paused with the world overlays still shown (the item wheel): it doesn't draw the world
+ * meanwhile, so its last depth copy stays good (the world hasn't moved) and scenedepth_lines keeps giving it */
+extern volatile bool scenedepth_keep_last;
 /* render thread: the priming clear went into this frame's commands */
 void scenedepth_primed(void);
 /* render thread: the lines can't be hidden after all (no memory for their layer): no more copies */

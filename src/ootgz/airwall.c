@@ -22,6 +22,7 @@
 #include "lang.h"
 #include "publish.h"
 #include "savepos.h"
+#include "scenedepth.h"
 #include "sys.h"
 #include "view.h"
 #include "voidmap.h"
@@ -673,6 +674,8 @@ static void add_edge_dots(aw_dot_t *out, int *n, aw_line_t *line_out, int *n_lin
 
 /* --- hidden while the game is paused ------------------------------------------------------------- */
 
+#define GD_MENU_SCREEN 0x578D41E1u /* gamedata.c's: the game's menu screen (an unnamed Enum), for the log */
+
 /* True while the game shows its pause screen or map, where the walls would draw over it (and the item wheel, with
  * settings > menu settings > hide world overlays over item wheel).
  * Frame advance doesn't count (see debug > pause research), so the walls still show while advancing. */
@@ -680,17 +683,20 @@ static bool game_is_paused(void)
 {
   bool is_pause;
   int32_t pause_requests;
-  bool paused = gd_game_paused(&is_pause, &pause_requests) && world_overlays_hidden();
+  bool game_paused = gd_game_paused(&is_pause, &pause_requests);
+  bool paused = game_paused && world_overlays_hidden();
 
-  /* Log each change, with both values, so it can be checked which one the game's menus set. */
-  static bool was_paused;
-  if (paused != was_paused) {
-    if (paused)
-      log_printf("air walls: hidden, game paused (IsPause %d, GamePauseRequestCount %d)", (int)is_pause,
-                 (int)pause_requests);
+  /* Log each change, with both values and the menu screen, so it can be checked which ones the game's menus set. */
+  static bool was_game_paused;
+  if (game_paused != was_game_paused) {
+    uint32_t screen = 0;
+    bool known = gd_get_enum(GD_MENU_SCREEN, &screen);
+    if (game_paused)
+      log_printf("air walls: game paused (IsPause %d, GamePauseRequestCount %d, menu screen %s%#x): %s", (int)is_pause,
+                 (int)pause_requests, known ? "" : "unread ", (unsigned)screen, paused ? "hidden" : "still shown");
     else
-      log_printf("air walls: shown again, game unpaused");
-    was_paused = paused;
+      log_printf("air walls: game unpaused");
+    was_game_paused = game_paused;
   }
   return paused;
 }
@@ -780,6 +786,7 @@ void airwall_frame(bool gpu)
   link_boxes[f].ok = false;
   bool walls = (airwalls_shown || void_areas_shown()) && current_map;
   bool draw = (walls || savepos_shown || voidmap_shown || hsstore_shown) && !game_is_paused();
+  scenedepth_keep_last = draw && gd_game_paused(0, 0); /* the item wheel: the world isn't drawn, its depth stays */
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
     /* the save position's markers (savepos.c) first: a few lines the walls' budget never cuts */

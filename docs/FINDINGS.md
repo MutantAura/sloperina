@@ -1022,9 +1022,8 @@ point.
   and P`+0x18B0` = 1 (ready; P`+0x30` bit 11 is set too). On a body (a moving block, a platform) `main+0x2E7FE80`
   decides; a refusal sets the cooldown P`+0x18CC` = 35, which counts down and blocks the hand-off below; unsafe
   frames set it to 1. P`+0x1948` not NaN: an area sensor forces the point (P`+0x1950..0x1974`). A second copy at
-  P`+0x18B4`/`+0x18C8` is used while P`+0x1C34` bit 4. `main+0x2814620` reads the same point; it is the enter of
-  the AI node `ExecutePlayerUseWarpItem` (Farore's Wind), not the void-out respawn as noted here before (§9.25).
-  `main+0x30170E0` reads it too.
+  P`+0x18B4`/`+0x18C8` is used while P`+0x1C34` bit 4. The point is also read by `main+0x2814620`, the enter
+  of the AI node `ExecutePlayerUseWarpItem` (Farore's Wind), and by `main+0x30170E0`.
 - **The hand-off** at `main+0x60830C` (inside `main+0x6080C0`, which also writes `PlayerStatus.CurrentPos` /
   `CurrentDir` every frame) copies it to AutoSaveMgr (scene component 12, §9.3) slot B: yaw `+0x178`, position
   `+0x17C`, valid `+0x188` = 1, `+0x189`, `+0x18A`. Slot A (`+0x198` yaw, `+0x19C` position, valid `+0x1A8`) comes from
@@ -1883,5 +1882,4 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - **Not the trigger:** `Obj_Abyss_A_01` (placed in many dungeons) is only a dark bottom model with a dummy physics
   param. The collision's user shape tag `Abyss` (bit 4, mask 0x10, PhiveConfig material presets `Floor_Abyss`,
   `Material_Sand_Abyss`, `Material_Metal_Spike_Abyss`) exists, but no code reading it was found yet.
-- `main+0x2814620` (§9.7) is `ExecutePlayerUseWarpItem`'s enter, not a void-out respawn. Where a void-out puts Link
-  back (`EventPlayerPostAbyss`, `main+0x26BA6F0`'s node) wasn't followed.
+- Where a void-out puts Link back (`EventPlayerPostAbyss`, `main+0x26BA6F0`'s node) wasn't followed.

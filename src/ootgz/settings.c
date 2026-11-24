@@ -8,6 +8,7 @@
  *   menu_style=0 (the game's type; gz's pixel font, 1, is no longer offered: a 1 is read as 0)
  *   flag_log=0|1, flag_log_player_status=0|1, flag_log_story=0|1 (the flag log's three files, flaglog.h)
  *   hookshot_hook_shown=0|1 (draw the hookshot's hook and aim, hsstore.h)
+ *   remote_control=0|1 (run the scripts written to remote/cmd.txt, remote.h)
  *   hide_in_game_menus=0|1 (no watches, input display or log while the game's pause screen or map is open)
  *   hide_over_item_wheel=0|1 (the same while its item wheel is up)
  *   save_backups=0|1 (copy the game's save folder to the SD card after every save, savebackup.h)
@@ -42,6 +43,7 @@
 #include "voidmap.h"
 #include "hsstore.h"
 #include "flaglog.h"
+#include "remote.h"
 #include "savebackup.h"
 #include "binds.h"
 #include "swkbd.h"
@@ -142,6 +144,7 @@ typedef struct {
   int32_t flag_log_status;
   int32_t flag_log_story;
   int32_t hook_shown;
+  int32_t remote_control;
   uint32_t binds[CMD_COUNT]; /* binds.h */
   char archive_folder[SAVE_FOLDER_LEN]; /* where archive now puts them (savebackup.h) */
 } snapshot_t;
@@ -187,6 +190,7 @@ static snapshot_t take_snapshot(void)
   s.frame_advance = frame_advance;
   s.frame_advance_in_pause = frame_advance_in_pause;
   s.pause_display = pause_display;
+  s.remote_control = remote_enabled;
   memcpy(s.binds, binds, sizeof(s.binds));
   snprintf(s.archive_folder, sizeof(s.archive_folder), "%s", savebackup_archive_folder());
   snprintf(s.lang, sizeof(s.lang), "%s", lang_code());
@@ -271,6 +275,7 @@ static void apply_snapshot(const snapshot_t *s)
   frame_advance = s->frame_advance != 0;
   frame_advance_in_pause = s->frame_advance_in_pause != 0;
   pause_display = s->pause_display != 0;
+  remote_enabled = s->remote_control != 0;
   savebackup_set_archive_folder(s->archive_folder);
   for (int c = 0; c < CMD_COUNT; c++) /* a needed one left unbound (by hand): its default */
     binds[c] = command_info[c].required && !bind_length(s->binds[c]) ? bind_default((command_t)c) : s->binds[c];
@@ -434,6 +439,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("flag_log_player_status", flag_log_status),
   INT_KEY("flag_log_story", flag_log_story),
   INT_KEY("hookshot_hook_shown", hook_shown),
+  INT_KEY("remote_control", remote_control),
 };
 #define N_INT_KEYS (sizeof(int_keys) / sizeof(*int_keys))
 
@@ -677,7 +683,8 @@ static void save_settings_file(const snapshot_t *s)
                   (int)s->voidmap_xray, (int)s->voidmap_areas, (int)s->input_attach, s->archive_folder,
                   (int)s->system_keyboard);
   if (n < (int)sizeof(buf))
-    n += snprintf(buf + n, sizeof(buf) - n, "save_backup_hard_numbered=%d\n", (int)s->save_backup_numbered);
+    n += snprintf(buf + n, sizeof(buf) - n, "save_backup_hard_numbered=%d\nremote_control=%d\n",
+                  (int)s->save_backup_numbered, (int)s->remote_control);
   for (int c = 0; c < CMD_COUNT && n < (int)sizeof(buf); c++) {
     char name[48];
     bind_name(s->binds[c], name, sizeof(name));

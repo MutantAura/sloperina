@@ -43,6 +43,7 @@
 #include "savepos.h"
 #include "memfile.h"
 #include "ragdoll.h"
+#include "remote.h"
 #include "tpose.h"
 #include "hsstore.h"
 #include "eventskip.h"
@@ -392,6 +393,7 @@ static void frame(void)
   flaglog_frame(false); /* what the game changed since the last frame, before this module changes anything */
   command_context();
   input_update();
+  remote_frame(); /* a script's lines (remote.h), as if pressed or chosen now */
 
   fa_menu_was_open = menu_current != 0; /* an L that closes the menu isn't frame advance's */
   menu_controls();

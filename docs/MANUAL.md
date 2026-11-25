@@ -123,6 +123,15 @@ Four submenus, then under **return** what can only be read: Link's **position** 
 | **bomb t-pose** | Turns on the ocarina breath glitch: Link's arms go into a T-pose while he runs holding a bomb. In the game it comes from holding one ocarina note until Link takes a breath (about 4.5 s), and lasts until an idle animation, an attack or a boots change. While ticked it stays on through those. Unticking puts the normal pose back, which also clears the glitch if the ocarina caused it. Checked on 1.1.1 and 1.0.0 as adult Link. |
 | **force hookshot storage** | Gives hookshot storage on purpose: the moment a hookshot or longshot shot starts, Link takes a bomb's medium hit, which cancels the shot before the hook flies. The next shot then skips flying and pulls Link straight towards the spot the cancelled shot aimed at, through walls if it was behind one (on another map it crashes the game). Says "hookshot storage" when it worked. A shot that uses storage isn't hit, so it can be used with this ticked. 1.0.0 only: on 1.1.1 the game lets go when nothing real is hooked, so the option isn't in the menu there. |
 
+#### 2.1.5 Lank / lunk mode (beta)
+
+Beta: it changes the game's own files as the game reads them and in memory. It starts off each time the game starts.
+
+| Item | What it does |
+|---|---|
+| **mode** | **off**, or **lank & lunk**: each age plays the other's animations, as in the cutscenes played at the wrong age, so child Link is stretched to adult proportions (Lank) and adult Link squashed to the child's (Lunk). |
+| **apply** | Makes the chosen mode the one in force, then asks for a **reload map** (**scene interaction**): that reload goes to the other age and back, since the game makes Link anew only when his age changes; age, sword, shield and clothes come back. An age change or a file load applies it too. |
+
 ### 2.2 Warps
 
 | Item | What it does |

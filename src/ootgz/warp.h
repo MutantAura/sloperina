@@ -22,5 +22,7 @@ bool warp_requested(void);
 /* Request the event `name` with no parameters, as the SeqOneShotRequestEvent node does (title.c); false if the
  * game refused it (another event runs or is being started) */
 bool warp_request_event(const char *name);
+/* an event runs (an arrival, a cutscene, a talk): the game refuses a warp's event request until it's over */
+bool warp_event_running(void);
 
 #endif

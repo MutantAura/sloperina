@@ -32,6 +32,7 @@
 #include "freecam.h"
 #include "tpose.h"
 #include "hsstore.h"
+#include "lank.h"
 #include "remote.h"
 #include "eventskip.h"
 #include "link.h"
@@ -522,11 +523,12 @@ static void build_link(void)
   }
   menu_add_return(&m_link_actions);
 
-  menu_init(&m_link, "link", 16);
+  menu_init(&m_link, "link", 17);
   menu_add_submenu(&m_link, "status", &m_link_status);
   menu_add_submenu(&m_link, "scene interaction", &m_link_scene);
   menu_add_submenu(&m_link, "position", &m_link_position);
   menu_add_submenu(&m_link, "actions", &m_link_actions);
+  lank_menu_add(&m_link); /* beta (lank.c) */
   menu_add_return(&m_link);
   /* what can only be read, under return after a blank line */
   add_blank_line(&m_link);

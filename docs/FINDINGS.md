@@ -2112,3 +2112,40 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - **Telling the wheel from the pause screen:** the menu screen Enum (`0x578D41E1`) is `None` (`0xB6EEDE09`) for the
   R item list. When the user opened their wheel, the overlays were hidden as for a menu screen, so the wheel they use
   may set it; the log's pause line now gives the value. Enemy health bars (enemyhp.c) still go and come back at once.
+
+### 9.34 Lank and Lunk, and changing the game's files at run time (beta; 1.1.1; checked in game, 24th November 2026)
+- **What decides the proportions:** child and adult Link are two actors (`Player_Child`, `Player_Adult`), each with
+  its own model and its own `Component/AnimationParam` in its pack (`content:/Pack/Actor/Player_Child.pack.zs`,
+  `Player_Adult.pack.zs`). Its AnimationResources name the animation sets by ModelProjectName: the child's
+  `Player_Child_Demo_Animation`, `_01` to `_04` and `_Cba`; the adult's the same six (`Player_Adult_…`) plus
+  `Player_Adult_02_H_Animation` and `Player_Dark_Animation`. The animations carry the bone lengths of the skeleton
+  they were made for, so a model playing the other age's sets takes that age's proportions: the cutscene look
+  (a scene made for one age played at the other) in normal play.
+- **When the names are read:** when the game makes Link, which is only at a file load or an age change (a reload
+  or a map change at the same age keeps him). It reads the age's pack through main's nn::fs imports (`OpenFile`,
+  then `ReadFile(size_t *, FileHandle, long, void *, size_t, const ReadOption &)` in pieces of 902,912 bytes) or,
+  when it read it before, makes him from what it kept: the AnimationParam file alone, in a 64 KiB block of its own
+  (names at offset 0x124), seen to last across age changes; at other times the pack was read again.
+- **gamepatch.c (any file of the game):** wraps main's `OpenFile`, `CloseFile`, `GetFileSize` and three
+  `ReadFile`s (`got_hook`). A patch names a file, a member and a fix that changes bytes in place. While it's on,
+  opening its file reads it here (`gamefile_read_zs`), runs the fix and answers that handle's size and reads with
+  one zstd frame of stored blocks (no dictionary: the game decodes it; 1.18 MiB for the child's pack). Switching a
+  patch also runs its fix on the copies the game kept: the ones found before at once, then a search (a piece each
+  frame) for its anchor, a 4-byte aligned word, in memory regions up to the patch's size limit. For these packs
+  that's regions up to 1 MiB: 1.1 GiB of the 9.6 GiB of readable and writable memory, about 4 s; all of it took
+  20 s and cost frames. The copies found are remembered for the next switch.
+- **remake.c (making Link again):** asked for, the next **reload map** goes to the other age and back (age.c calls
+  it at a reload's start; the age, sword, shield and clothes come back), waiting for the first load's arrival
+  event to end (a warp asked for during it is refused). For any change that shows when Link is made.
+- **lank.c:** two patches whose fix swaps `Child` and `Adult` in the six shared names (the same length, so nothing
+  moves), after checking the key and the age's list are there (the actor database also lists the names, without
+  the key), and the **link > lank / lunk mode (beta)** menu: a mode, applied, then a reload. Not kept in the
+  settings.
+- **Beyond these:** a new change to the game's files is a client of gamepatch.h (and remake.h when it's read as
+  Link is made); the shared files only call the modules' init, frame and menu functions.
+- **Checked in game:** off at boot, then lank & lunk applied and the map reloaded: Lank; off and reloaded: the
+  normal child; lank & lunk with an age change: Lunk, also in a child map through warps > override age. No
+  restart in between. Not checked: 1.0.0, which has the same imports and files.
+- **What didn't work:** changing the names only in memory once (the pack may be read again), the
+  `Model/%s.anim.bfres` formatter calls (they name cutscene and model files, not these sets) and the BYML
+  string-field reader of the parameter files (`main+0x2B5C480`, never called for them).

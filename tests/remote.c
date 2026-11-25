@@ -75,6 +75,38 @@ void position_set(double x, double y, double z, double facing)
 }
 static actor_near_t actors_there[3] = { { .name = "Npc_Kokiri", .distance = 2.5f }, { .name = "Obj_Sign", .distance = 4.25f },
                                         { .name = "Npc_Far", .distance = 30 } };
+/* spawn's side: the names offered, and the game's create, whose actor is made spawn_delay frames after the request */
+const char *const actor_names[] = { "Enemy_Wolfos", "Obj_Pot_A_01" };
+const int actor_names_count = 2;
+static int spawned_now;
+static uint32_t spawn_delay = 3, spawn_at;
+static uint32_t spawn_refused; /* the game's result code when it refuses; 0: queued */
+bool actor_spawn_handle(const char *name, const float pos[3], float yaw_degrees, uintptr_t *handle, uint32_t *result)
+{
+  *result = spawn_refused;
+  *handle = 0;
+  if (spawn_refused)
+    return false;
+  *handle = 1;
+  spawn_at = now + spawn_delay;
+  return true;
+}
+spawn_poll_t actor_spawn_poll(uintptr_t *handle, uintptr_t *actor)
+{
+  *actor = 0;
+  if (now < spawn_at)
+    return SPAWN_WAITING;
+  *handle = 0;
+  *actor = 0x1000 + (uintptr_t)spawned_now++;
+  return SPAWN_MADE;
+}
+void actor_spawn_cancel(uintptr_t *handle) { *handle = 0; }
+bool actor_read(uintptr_t actor, actor_read_t *out)
+{
+  *out = (actor_read_t){ .name = "made", .running = true, .state = 4 };
+  return true;
+}
+
 int actors_near(float radius, actor_near_t *out, int max)
 {
   int n = 0;
@@ -454,6 +486,20 @@ int main(void)
   out_has(" 1 ok 2 actors within 6 m\n");
   out_has(" 2 ok 1 actors within 3 m\n");
   out_has(" 3 err actors: a distance in metres\n");
+
+  /* spawn: only the names spawn actor by name offers, any case; 2 m (or as said) in front of Link, facing him; the
+   * line ends when the actor is there; the game's refusal is passed on */
+  run_script("spawn enemy_wolfos\nspawn Obj_Pot_A_01 3.5\nspawn Enemy_Nope\nspawn\nspawn Enemy_Wolfos x\n");
+  out_has(" 1 ok spawn Enemy_Wolfos: made after 3 frames\n");
+  out_has(" 2 ok spawn Obj_Pot_A_01: made after 3 frames\n");
+  out_has(" 3 err spawn: Enemy_Nope isn't one of the 2 actors spawn actor by name offers\n");
+  out_has(" 4 err spawn: an actor's name");
+  out_has(" 5 err spawn: an actor's name");
+  assert(spawned_now == 2);
+  spawn_refused = 6;
+  run_script("spawn Enemy_Wolfos\n");
+  out_has(" 1 err spawn Enemy_Wolfos: the game refused it (6)\n");
+  spawn_refused = 0;
 
   /* place: the saved position set and loaded; facing as now unless given; refused while Link's record isn't known */
   run_script("place -12.45 110.36 4.66 250\nplace 1 2.5 -3\nplace 1 2\nplace 1 2 x\n");

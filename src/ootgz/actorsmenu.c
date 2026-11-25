@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "actornames.h"
+#include "age.h"
 #include "enemyhp.h"
 #include "gfx.h"
 #include "link.h"
@@ -26,7 +27,7 @@
 #define FOLDER_HEADS 60  /* ... and its names over them */
 #define FILTER_MAX 31
 
-static menu_t m_actors, m_browse, m_folder, m_chosen, m_spawn;
+static menu_t m_actors, m_browse, m_folder, m_chosen, m_spawn, m_common;
 
 /* what a list shows, by the start of the actor's name */
 enum { KIND_ALL, KIND_ENEMIES, KIND_NPCS, KIND_OBJECTS, KIND_SCENERY, KIND_OTHER, N_KINDS };
@@ -139,21 +140,41 @@ static void act_kill(menu_item_t *it)
   }
 }
 
-/* spawn: one more of the chosen actor's name, then watched for in the actor tree until it appears */
+/* spawn: one more of the chosen actor's name, through the create request's handle, so the actor made is known
+ * exactly (for remove spawned, and to make a horse one's own) */
 #define SPAWN_AHEAD 2.0     /* metres in front of Link */
-#define SPAWN_WAIT 600      /* frames to look for it (its pack may have to load) */
-#define SPAWN_COUNT_MAX 128
+#define SPAWN_WAIT 600      /* frames to wait for it (its pack may have to load) */
+#define OWN_WAIT 120        /* frames for a horse to start running, to be made one's own */
+#define SPAWNED_MAX 64      /* remove spawned: the actors made here, kept while they're in the map */
+#define CALM_FRAMES 60      /* an own horse's rodeo bit is cleared this long after (its setup sets it again) */
 
 float atan2f(float y, float x); /* from sdk */
 
 static struct {
   char name[64];
-  int frames, before;
+  int frames;
+  uintptr_t handle; /* the game writes the request's status here: it stays put until made or failed */
+  bool own_horse;   /* epona (owned): made one's own horse once it runs */
 } spawning;
-static uintptr_t spawn_found[SPAWN_COUNT_MAX];
+static uintptr_t spawned[SPAWNED_MAX];
+static int n_spawned;
+static uintptr_t owning, calming;
+static int own_left, calm_left;
 
-/* the game asked to make `name` in front of Link, facing him; watched for by spawn_frame */
-static void spawn_named(const char *name)
+static void remember(uintptr_t actor)
+{
+  actor_read_t a;
+  int n = 0;
+  for (int i = 0; i < n_spawned; i++) /* only those still in the map */
+    if (actor_read(spawned[i], &a))
+      spawned[n++] = spawned[i];
+  n_spawned = n;
+  if (n_spawned < SPAWNED_MAX)
+    spawned[n_spawned++] = actor;
+}
+
+/* the game asked to make `name` in front of Link, facing him; spawn_frame follows the request */
+static void spawn_named(const char *name, bool own_horse)
 {
   vec3f_t link;
   double fx = 0, fz = 1;
@@ -169,15 +190,15 @@ static void spawn_named(const char *name)
   float at[3] = { (float)(link.x + fx * SPAWN_AHEAD), (float)link.y, (float)(link.z + fz * SPAWN_AHEAD) };
   float yaw = atan2f((float)fx, (float)fz) * (180.0f / 3.14159265f) + 180.0f; /* facing Link */
   snprintf(spawning.name, sizeof(spawning.name), "%s", name);
-  spawning.before = actors_named(spawning.name, spawn_found, SPAWN_COUNT_MAX);
+  spawning.own_horse = own_horse;
   uint32_t result;
-  if (!actor_spawn(spawning.name, at, yaw, &result)) {
+  if (!actor_spawn_handle(spawning.name, at, yaw, &spawning.handle, &result)) {
     char text[96];
     snprintf(text, sizeof(text), "the game refused to make it (%u)", (unsigned)result);
     gfx_notice(text);
     return;
   }
-  spawning.frames = SPAWN_WAIT;
+  spawning.frames = 1;
   gfx_notice("spawning");
   menu_close(); /* so it can be watched */
 }
@@ -188,24 +209,57 @@ static void act_spawn(menu_item_t *it)
     gfx_notice("choose an actor first");
     return;
   }
-  spawn_named(chosen_name);
+  spawn_named(chosen_name, false);
+}
+
+/* epona (owned): once she runs, registered as the owned horse and her rodeo bit cleared (FINDINGS 9.33) */
+static void own_frame(void)
+{
+  if (calm_left > 0) {
+    calm_left--;
+    actor_calm_horse(calming);
+  }
+  if (!own_left)
+    return;
+  actor_read_t a;
+  if (!actor_read(owning, &a)) {
+    own_left = 0;
+    gfx_notice("the horse went before it was yours");
+  } else if (a.running) {
+    own_left = 0;
+    bool owned = actor_own_horse(owning);
+    actor_calm_horse(owning);
+    calming = owning, calm_left = CALM_FRAMES;
+    gfx_notice(owned ? "spawned: your horse" : "spawned, but the game didn't take it as your horse");
+  } else if (--own_left == 0) {
+    gfx_notice("spawned, but it didn't start in time to be yours");
+  }
 }
 
 static void spawn_frame(void)
 {
+  own_frame();
   if (!spawning.frames)
     return;
-  spawning.frames--;
-  if (spawning.frames % 10)
-    return;
-  int now = actors_named(spawning.name, spawn_found, SPAWN_COUNT_MAX);
-  if (now > spawning.before) {
-    log_printf("actors: %s made after %d frames (%d now)", spawning.name, SPAWN_WAIT - spawning.frames, now);
-    gfx_notice("spawned");
+  uintptr_t made;
+  spawn_poll_t now = actor_spawn_poll(&spawning.handle, &made);
+  if (now == SPAWN_MADE) {
+    log_printf("actors: %s made after %d frames: %#lx", spawning.name, spawning.frames, (unsigned long)made);
+    remember(made);
     spawning.frames = 0;
-  } else if (!spawning.frames) {
-    log_printf("actors: %s didn't appear in %d frames", spawning.name, SPAWN_WAIT);
-    gfx_notice("it didn't appear");
+    if (spawning.own_horse)
+      owning = made, own_left = OWN_WAIT;
+    else
+      gfx_notice("spawned");
+  } else if (now == SPAWN_FAILED) {
+    log_printf("actors: %s: the request failed after %d frames", spawning.name, spawning.frames);
+    gfx_notice("the game couldn't make it");
+    spawning.frames = 0;
+  } else if (++spawning.frames > SPAWN_WAIT) {
+    actor_spawn_cancel(&spawning.handle);
+    log_printf("actors: %s not made in %d frames", spawning.name, SPAWN_WAIT);
+    gfx_notice("it wasn't made in time");
+    spawning.frames = 0;
   }
 }
 
@@ -489,7 +543,7 @@ static void act_spawn_filter(menu_item_t *it)
   osk_open("actor name has", spawn_filter, FILTER_MAX, spawn_filter_typed, 0);
 }
 
-static void act_spawn_row(menu_item_t *it) { spawn_named(actor_names[spawn_rows[it->data]]); }
+static void act_spawn_row(menu_item_t *it) { spawn_named(actor_names[spawn_rows[it->data]], false); }
 
 static int get_spawn_kind(menu_item_t *it) { return spawn_kind; }
 static void set_spawn_kind(menu_item_t *it, int choice)
@@ -543,11 +597,126 @@ static void fill_spawn(void)
   menu_refresh(&m_spawn);
 }
 
+/* --- quick spawn: short lists of the likeliest ones, by kind ------------------------------- */
+
+typedef struct {
+  const char *label;
+  const char *child, *adult; /* the actor for each age (adult 0: the same) */
+  bool own_horse;
+} common_t;
+
+#define N(a) (int)(sizeof(a) / sizeof((a)[0]))
+
+static const common_t animals[] = {
+  { "epona (owned)", "Animal_Epona_Adult", 0, true },
+  { "young epona", "Animal_Epona_Child", 0, false },
+  { "horse", "Animal_Horse", 0, false },
+  { "cucco", "Animal_Cucco", 0, false },
+  { "bug", "Animal_Insect", 0, false },
+  { "cow", "Animal_Cow", 0, false },
+  { "dog", "Animal_Dog_White", 0, false },
+  { "cat", "Animal_Cat", 0, false },
+  { "frog", "Animal_Frog_Red", 0, false },
+  { "butterfly", "Animal_Butterfly", 0, false },
+  { "fish", "Animal_Fish_Bass", 0, false },
+};
+static const common_t enemies[] = {
+  { "deku baba", "Enemy_Dekubaba", 0, false },     { "skulltula", "Enemy_Skulltula", 0, false },
+  { "keese", "Enemy_Keese", 0, false },            { "octorok", "Enemy_Octorok", 0, false },
+  { "stalchild", "Enemy_Stalchild", 0, false },    { "wolfos", "Enemy_Wolfos", 0, false },
+  { "stalfos", "Enemy_Stalfos", 0, false },        { "lizalfos", "Enemy_Lizalfos", 0, false },
+  { "redead", "Enemy_ReDead", 0, false },          { "like like", "Enemy_LikeLike", 0, false },
+};
+static const common_t characters[] = {
+  { "saria", "Npc_Kokiri_Saria_Child", "Npc_Kokiri_Saria_Adult", false },
+  { "mido", "Npc_Kokiri_Mido_Child", "Npc_Kokiri_Mido_Adult", false },
+  { "malon", "Npc_Hylia_Malon_Child", "Npc_Hylia_Malon_Adult", false },
+  { "talon", "Npc_Hylia_Talon_Child", "Npc_Hylia_Talon_Adult", false },
+  { "zelda", "Npc_Hylia_Zelda_Child", "Npc_Hylia_Zelda_Adult", false },
+  { "darunia", "Npc_Goron_Darunia_Child", "Npc_Goron_Darunia_Adult", false },
+  { "ruto", "Npc_Zora_Ruto_Child_001", "Npc_Zora_Ruto_Adult_001", false },
+  { "impa", "Npc_Hylia_Impa_Child", 0, false },
+  { "sheik", "Npc_Hylia_Sheik_Adult", 0, false },
+  { "kaepora gaebora", "Npc_Kaepora", 0, false },
+};
+static const common_t objects[] = {
+  { "bomb", "Obj_Bomb", 0, false },                 { "bombchu", "Obj_Bombchu", 0, false },
+  { "bomb flower", "Obj_BombFlower_A_01", 0, false }, { "pot", "Obj_Pot_A_01", 0, false },
+  { "crate", "Obj_BrokenBox_A_01", 0, false },      { "push block", "Obj_MovableBox_A_01", 0, false },
+  { "liftable rock", "Obj_LiftRock_A_01", 0, false }, { "sign", "Obj_SignBoard_A_01", 0, false },
+  { "hookshot target", "Obj_HookShotTarget_A_01", 0, false },
+  { "song of time block", "Obj_SongOfTimeBlock_A_01", 0, false },
+};
+static const common_t pickups[] = {
+  { "heart", "Obj_Heart", 0, false },               { "fairy", "Obj_Fairy", 0, false },
+  { "green rupee", "Obj_Rupee_Green", 0, false },   { "red rupee", "Obj_Rupee_Red", 0, false },
+  { "deku stick", "Obj_DekuStick", 0, false },      { "deku nut", "Obj_DekuNut", 0, false },
+  { "deku seeds", "Obj_DekuSeed", 0, false },       { "arrows", "Obj_ArrowBundle_Small", 0, false },
+  { "magic jar", "Obj_MagicJar_Large", 0, false },
+};
+
+static const struct {
+  const char *title;
+  const common_t *list;
+  int count;
+  const char *note; /* a line under the list, or 0 */
+} commons[] = {
+  { "animals", animals, N(animals), 0 },
+  { "enemies", enemies, N(enemies), 0 },
+  { "characters", characters, N(characters), "spawns might affect flags/save states/etc" },
+  { "objects", objects, N(objects), 0 },
+  { "pickups", pickups, N(pickups), 0 },
+};
+#define N_COMMONS N(commons)
+static menu_t m_common_list[N_COMMONS];
+
+static void act_common(menu_item_t *it)
+{
+  const common_t *c = (const common_t *)it->data;
+  spawn_named(c->adult && age_current() == AGE_ADULT ? c->adult : c->child, c->own_horse);
+}
+
+static void act_remove_spawned(menu_item_t *it)
+{
+  int removed = 0;
+  for (int i = 0; i < n_spawned; i++)
+    removed += actor_remove(spawned[i]);
+  n_spawned = 0;
+  calm_left = own_left = 0;
+  char text[64];
+  snprintf(text, sizeof(text), "%d removed", removed);
+  gfx_notice(text);
+}
+
+static void text_note(menu_item_t *it, char *buf, int len) { snprintf(buf, len, "%s", (const char *)it->data); }
+
+static void fill_common(void)
+{
+  for (int g = 0; g < N_COMMONS; g++) {
+    menu_t *m = &m_common_list[g];
+    menu_init(m, commons[g].title, commons[g].count + 2);
+    for (int i = 0; i < commons[g].count; i++) {
+      menu_item_t *item = menu_add_action(m, commons[g].list[i].label, act_common, (intptr_t)&commons[g].list[i]);
+      if (item)
+        item->hint = commons[g].list[i].own_horse
+                         ? "L: epona in front of link, as your own horse, so she can be ridden"
+                         : "L: the game makes it in front of Link, facing him (its pack loads if it must)";
+    }
+    menu_add_return(m);
+    if (commons[g].note)
+      menu_add_text(m, text_note, (intptr_t)commons[g].note);
+    menu_add_submenu(&m_common, commons[g].title, m);
+  }
+  menu_add_return(&m_common);
+}
+
 /* --- building, and entering ----------------------------------------------------------------------- */
 
 menu_t *actorsmenu_build(void)
 {
-  menu_init(&m_actors, "actors", 3);
+  menu_init(&m_actors, "actors", 5);
+  menu_init(&m_common, "quick spawn", N_COMMONS + 1);
+  fill_common();
   menu_init(&m_spawn, "spawn actor by name or type", SPAWN_ROWS + 5);
   fill_spawn();
   menu_init(&m_browse, "browse current actors", N_KINDS + 6);
@@ -562,6 +731,12 @@ menu_t *actorsmenu_build(void)
   item = menu_add_submenu(&m_actors, "spawn actor by name or type", &m_spawn);
   if (item)
     item->hint = "any enemy, npc, object or item the game has: it loads what it needs";
+  item = menu_add_submenu(&m_actors, "quick spawn", &m_common);
+  if (item)
+    item->hint = "short lists by kind: animals (epona as your own horse), enemies, characters, objects, pickups";
+  item = menu_add_action(&m_actors, "remove spawned", act_remove_spawned, 0);
+  if (item)
+    item->hint = "L: delete every actor spawned here that's still in this map";
   menu_add_return(&m_actors);
   return &m_actors;
 }

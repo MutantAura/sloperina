@@ -219,6 +219,17 @@ struct z64hd_build {
    * calls: loads the actor's pack itself and makes it on a worker (FINDINGS 9.29) */
   uint32_t actor_create_mgr_ptr;
   uint32_t actor_create;
+  /* the owned horse (FINDINGS 9.33): get(scene manager [main+scene_mgr_ptr]) -> OwnedHorseMgr (its slot 17), whose
+   * u32 at +0x80 is the owned horse's id (actor+0x18); register(mgr, horse) makes a horse the owned one, the one
+   * Epona's Song calls (it does nothing for a horse whose kind isn't 1 or 2) */
+  /* the create request's handle (FINDINGS 9.33), as ExecuteGenericRequestCreateActor's update uses it: its status's
+   * u16 is 3 once the actor is made, 4 if the request failed; take(&handle, 1, 0) -> the actor, cancel(&handle, 1),
+   * release(&handle) after a failure */
+  uint32_t actor_handle_take;
+  uint32_t actor_handle_cancel;
+  uint32_t actor_handle_release;
+  uint32_t owned_horse_mgr_get;
+  uint32_t owned_horse_register;
   struct z64hd_link_path link_paths[5];
 };
 

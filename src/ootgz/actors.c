@@ -522,7 +522,65 @@ typedef bool (*actor_create_t)(uintptr_t mgr, const char *const *name, const act
                                uintptr_t *handle, uint32_t queue, uintptr_t preloaded, uintptr_t tmpl, uintptr_t cb,
                                bool flag, uint32_t *result, uintptr_t *out_param);
 
+static bool spawn_request(const char *name, const float pos[3], float yaw_degrees, uintptr_t *handle,
+                          uint32_t queue, uint32_t *result);
+
 bool actor_spawn(const char *name, const float pos[3], float yaw_degrees, uint32_t *result)
+{
+  return spawn_request(name, pos, yaw_degrees, 0, CREATE_QUEUE, result);
+}
+
+#define NODE_QUEUE 1u    /* the create node's queue, with its handle */
+#define HANDLE_MADE 3u
+#define HANDLE_FAILED 4u
+
+typedef uintptr_t (*handle_take_t)(uintptr_t *handle, uint32_t a, uint32_t b);
+typedef void (*handle_cancel_t)(uintptr_t *handle, uint32_t a);
+typedef void (*handle_release_t)(uintptr_t *handle);
+
+bool actor_spawn_handle(const char *name, const float pos[3], float yaw_degrees, uintptr_t *handle, uint32_t *result)
+{
+  *handle = 0;
+  *result = ~0u;
+  if (!z64hd_game || !z64hd_game->actor_handle_take || !z64hd_game->actor_handle_cancel ||
+      !z64hd_game->actor_handle_release)
+    return false;
+  if (spawn_request(name, pos, yaw_degrees, handle, NODE_QUEUE, result))
+    return true;
+  if (*handle)
+    MAIN_FN(handle_release_t, z64hd_game->actor_handle_release)(handle);
+  *handle = 0;
+  return false;
+}
+
+spawn_poll_t actor_spawn_poll(uintptr_t *handle, uintptr_t *actor)
+{
+  *actor = 0;
+  if (!*handle || !readable(*handle, 4))
+    return SPAWN_FAILED;
+  uint32_t state = *(uint16_t *)*handle;
+  if (state == HANDLE_MADE) {
+    *actor = MAIN_FN(handle_take_t, z64hd_game->actor_handle_take)(handle, 1, 0);
+    *handle = 0;
+    return *actor ? SPAWN_MADE : SPAWN_FAILED;
+  }
+  if (state == HANDLE_FAILED) {
+    MAIN_FN(handle_release_t, z64hd_game->actor_handle_release)(handle);
+    *handle = 0;
+    return SPAWN_FAILED;
+  }
+  return SPAWN_WAITING;
+}
+
+void actor_spawn_cancel(uintptr_t *handle)
+{
+  if (*handle && z64hd_game && z64hd_game->actor_handle_cancel)
+    MAIN_FN(handle_cancel_t, z64hd_game->actor_handle_cancel)(handle, 1);
+  *handle = 0;
+}
+
+static bool spawn_request(const char *name, const float pos[3], float yaw_degrees, uintptr_t *handle,
+                          uint32_t queue, uint32_t *result)
 {
   *result = ~0u;
   if (!z64hd_game || !z64hd_game->actor_create || !z64hd_game->actor_create_mgr_ptr || !name || !*name)
@@ -539,9 +597,59 @@ bool actor_spawn(const char *name, const float pos[3], float yaw_degrees, uint32
   arg.instance_name = "";
   arg.flags = CREATE_POS | CREATE_ROT;
   const char *the_name = name;
-  bool ok = MAIN_FN(actor_create_t, z64hd_game->actor_create)(mgr, &the_name, &arg, 0, CREATE_QUEUE, 0, 0, 0, false,
+  bool ok = MAIN_FN(actor_create_t, z64hd_game->actor_create)(mgr, &the_name, &arg, handle, queue, 0, 0, 0, false,
                                                              result, 0);
   log_printf("actors: create request %s at %.2f %.2f %.2f: %s (result %u)", name, (double)pos[0], (double)pos[1],
              (double)pos[2], ok ? "queued" : "refused", (unsigned)*result);
   return ok;
+}
+
+/* --- removing one, and a horse of one's own (debug > actors, FINDINGS 9.33) ----------------------- */
+
+bool actor_remove(uintptr_t actor)
+{
+  actor_read_t a;
+  if (!z64hd_game || !z64hd_game->actor_delete || !actor_read(actor, &a) || actor == link_actor())
+    return false;
+  bool ok = MAIN_FN(actor_delete_t, z64hd_game->actor_delete)(actor, DELETE_AS_AI);
+  log_printf("actors: delete request to %s %#lx: %s", a.name, (unsigned long)actor, ok ? "taken" : "refused");
+  return ok;
+}
+
+#define ACTOR_ID 0x18              /* u32 */
+#define HORSE_MGR_OWNED 0x80       /* u32: the owned horse's id */
+#define COMPONENTS_QUADRUPED 0x388 /* the QuadrupedComponent (getter 0x2C1F6A0 [0x2BCB710]) */
+#define QUADRUPED_BITS 0x2E8       /* u32 */
+#define QUADRUPED_CAN_RODEO 0x8u   /* QueryQuadrupedCanRodeo; set, a ridden horse bucks the rider off */
+
+typedef uintptr_t (*owned_horse_mgr_get_t)(uintptr_t scene_mgr);
+typedef void (*owned_horse_register_t)(uintptr_t mgr, uintptr_t horse);
+
+bool actor_own_horse(uintptr_t horse)
+{
+  actor_read_t a;
+  if (!z64hd_game || !z64hd_game->owned_horse_mgr_get || !z64hd_game->owned_horse_register ||
+      !z64hd_game->scene_mgr_ptr || !actor_read(horse, &a))
+    return false;
+  uintptr_t scene = sys_ptr(MAIN(z64hd_game->scene_mgr_ptr));
+  uintptr_t mgr = scene ? MAIN_FN(owned_horse_mgr_get_t, z64hd_game->owned_horse_mgr_get)(scene) : 0;
+  if (!readable(mgr + HORSE_MGR_OWNED, 4))
+    return false;
+  MAIN_FN(owned_horse_register_t, z64hd_game->owned_horse_register)(mgr, horse);
+  bool owned = *(uint32_t *)(horse + ACTOR_ID) == *(uint32_t *)(mgr + HORSE_MGR_OWNED);
+  log_printf("actors: %s %#lx as the owned horse: %s", a.name, (unsigned long)horse, owned ? "taken" : "refused");
+  return owned;
+}
+
+bool actor_calm_horse(uintptr_t horse)
+{
+  uintptr_t components = readable(horse + ACTOR_COMPONENTS, 8) ? *(uintptr_t *)(horse + ACTOR_COMPONENTS) : 0;
+  uintptr_t quad = readable(components + COMPONENTS_QUADRUPED, 8) ? *(uintptr_t *)(components + COMPONENTS_QUADRUPED) : 0;
+  if (!quad || !sys_mapped(quad + QUADRUPED_BITS, 4, SYS_PERM_R | SYS_PERM_W))
+    return false;
+  volatile uint32_t *bits = (volatile uint32_t *)(quad + QUADRUPED_BITS);
+  if (!(*bits & QUADRUPED_CAN_RODEO))
+    return false;
+  *bits &= ~QUADRUPED_CAN_RODEO;
+  return true;
 }

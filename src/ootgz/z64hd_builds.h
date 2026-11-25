@@ -190,6 +190,14 @@ static const struct z64hd_build z64hd_builds[] = {
     .actor_delete = 0xC4FA0,    /* 1.1.1 0xA6490, matched over 32 and 64 instructions */
     .actor_create_mgr_ptr = 0x4E21428, /* 1.1.1 0x4E91888 - 0x70460, from the matched caller (FINDINGS 9.29) */
     .actor_create = 0x97FEB0,          /* 1.1.1 0x372A70, matched over 24 and 48 instructions */
+    /* 1.1.1's 0xB3CC40 and 0x329D990, through their callers (5 and 2 call sites agree); 29 of 30 and 39 of 40
+     * masked words the same (a scene field offset inside the getter, a register choice) */
+    /* the create node's update (vtable 0x493BF88 slot 11, 0x2696070) and leave call these, as 1.1.1's */
+    .actor_handle_take = 0x3A4F580,
+    .actor_handle_cancel = 0xA1F060,
+    .actor_handle_release = 0x3A4F550,
+    .owned_horse_mgr_get = 0x26AD4E0,
+    .owned_horse_register = 0x323E840,
     .gd_set_string16 = 0xF83410, /* SetString16: 1.1.1 0xF69FF0, matched over 64 instructions (FINDINGS 9.26) */
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
@@ -321,6 +329,14 @@ static const struct z64hd_build z64hd_builds[] = {
     .actor_delete = 0xA6490,
     .actor_create_mgr_ptr = 0x4E91888, /* FINDINGS 9.29 */
     .actor_create = 0x372A70,
+    /* QueryHorseIsOwnedHorse compares actor+0x18 with the manager's +0x80; register is what the horse component
+     * (0x2E3D298) and the map's horse setup (0x2F62228) call */
+    /* ExecuteGenericRequestCreateActor's update 0x26E6400 (take through 0x26E6500) and leave 0x26E6480 */
+    .actor_handle_take = 0x3AAEFD0,
+    .actor_handle_cancel = 0xB2FA30,
+    .actor_handle_release = 0xB2FBC0,
+    .owned_horse_mgr_get = 0xB3CC40,
+    .owned_horse_register = 0x329D990,
     .gd_set_string16 = 0xF69FF0, /* SetString16 (FINDINGS 9.26) */
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },

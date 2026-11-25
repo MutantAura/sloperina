@@ -70,6 +70,26 @@ actor_kill_t actor_kill(uintptr_t actor);
  * kept). False, with the game's result code, if the request wasn't queued. Game thread, while the game runs. */
 bool actor_spawn(const char *name, const float pos[3], float yaw_degrees, uint32_t *result);
 
+/* actors.c: the same with the request's handle, as the game's own create node keeps one, so the actor made is known
+ * exactly (actor_spawn_poll); *handle must stay where it is until the poll says made or failed. Queue 1, as the
+ * node. False (and *handle 0) if this version's handle functions aren't known or the request wasn't queued. */
+bool actor_spawn_handle(const char *name, const float pos[3], float yaw_degrees, uintptr_t *handle, uint32_t *result);
+/* each frame after it: SPAWN_WAITING, SPAWN_MADE (*actor is it, the handle done with) or SPAWN_FAILED */
+typedef enum { SPAWN_WAITING, SPAWN_MADE, SPAWN_FAILED } spawn_poll_t;
+spawn_poll_t actor_spawn_poll(uintptr_t *handle, uintptr_t *actor);
+void actor_spawn_cancel(uintptr_t *handle); /* gives the request up */
+
+/* actors.c: delete an actor found earlier, whatever it is (the game's delete request, as the AI's delete node; no
+ * death, no drop). Never Link. False if it's gone or the request was refused. Game thread, outside any walk. */
+bool actor_remove(uintptr_t actor);
+
+/* actors.c: a horse made by actor_spawn as one's own (FINDINGS 9.33): registered as the owned horse (the one Epona's
+ * Song calls), and its rodeo bit cleared so it doesn't buck the rider off. actor_own_horse is false if this game
+ * version's addresses aren't known or the game didn't take it; actor_calm_horse is true if the bit was set (the
+ * horse's setup sets it again from its parameters, so call it for a while after the horse appears). */
+bool actor_own_horse(uintptr_t horse);
+bool actor_calm_horse(uintptr_t horse);
+
 /* the colours of the rectangles (nvn.c) */
 enum { EH_BACK, EH_FILL, EH_LOW, EH_TEXT, EH_NCOLORS };
 

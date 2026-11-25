@@ -445,6 +445,13 @@ folder (on an emulator: right-click the game > *Open save data location*).
   - **spawn one like it** asks the game to make another actor of the same name, 2 m in front of Link and facing him. The game makes it the way its own AI does; it says "spawned" once it's there (usually in a few frames). It gets none of the placement data the map's own copy has (links, rails, switches), so some actors may stand idle.
   - **kill** sends the actor the game's own death request, the one a fall into a bottomless pit sends: it fades out, with no drop. Bosses and the like refuse it ("it won't die that way"), so their fights can't be skipped. An NPC or a thing with no death of its own is deleted instead (the game's own delete, as its AI uses); scenery, the game's system actors and Link are never touched. A killed enemy may be back when the map reloads.
 - **spawn actor by name or type**: any enemy, NPC, object or item the game has (1856 of them). Type a piece of the name in **name has**, pick a **type** (the same kinds as the folders), then **L** on one of the first 40 matches; it's made as **spawn one like it** makes one. Its pack is loaded if the map doesn't already have it. The `_Dictionary` actors are the enemy guide's models.
+- **quick spawn**: short lists of the likeliest actors, by kind: **animals** (Epona, a cucco, a bug, a cow...),
+  **enemies**, **characters** (the child's or the adult's, by Link's age), **objects** and **pickups**. **L** on one
+  makes it as **spawn one like it** does. **epona (owned)**, in **animals**, makes her your own horse, so she lets you ride
+  her (child Link too, though his ride looks rough). Talking to a spawned character
+  can start its own event, which may change flags or the save.
+- **remove spawned**: deletes every actor made in this menu that's still in the map (they go with a map change
+  anyway).
 
 **free camera**: takes the picture off Link so you can fly it anywhere. Close the menu to fly: the left stick moves along the view, the right stick looks round, **ZR** rises, **ZL** sinks and holding **X** goes six times faster. The game gets no input meanwhile, so Link stands where he was; untick it (or use its bind) to get the game's camera back, as it was. What's drawn and culled is the free camera's view, and the watches, air walls and other overlays are drawn from it too. The world isn't loaded round it, though: the game streams the terrain and places the actors round Link, so far from him you see the far, simple terrain and none of the actors there. It can be given buttons in **settings > rebind commands** (under **debug**, **free camera on/off**; unbound to start with), and remote control's `input` sticks and buttons fly it too.
 

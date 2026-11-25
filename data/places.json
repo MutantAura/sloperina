@@ -1,0 +1,4129 @@
+{
+ "source": "The Legend of Zelda Ocarina of Time [v1.1.1].nup",
+ "maps": {
+  "BarinadeStage": [
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     27.468,
+     98.095,
+     -50.909
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     30.636,
+     107.335,
+     -54.381
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     39.28,
+     99.444,
+     -63.578
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     41.44,
+     110.026,
+     -86.977
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     41.728,
+     100.795,
+     -84.311
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     42.062,
+     113.33,
+     -113.187
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     43.55,
+     108.892,
+     -76.378
+    ]
+   }
+  ],
+  "BigOctoStage": [
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -32.557,
+     111.08,
+     -92.958
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -32.506,
+     93.589,
+     -92.334
+    ]
+   }
+  ],
+  "BottomOfTheWell": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: skulltula",
+    "pos": [
+     0.085,
+     106.0,
+     34.403
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: chest x7, skulltula x2",
+    "pos": [
+     -0.271,
+     100.0,
+     -14.113
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: skulltula, chest",
+    "pos": [
+     -1.206,
+     101.307,
+     -71.909
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: keese x4, gibdo x3",
+    "pos": [
+     -54.451,
+     100.0,
+     -18.499
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: keese x4, gold skulltula",
+    "pos": [
+     8.335,
+     99.981,
+     -27.803
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: deku baba, gold skulltula",
+    "pos": [
+     -7.978,
+     100.0,
+     -27.421
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6: fire keese x3, beamos",
+    "pos": [
+     27.271,
+     100.004,
+     -29.088
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: like like, gold skulltula",
+    "pos": [
+     26.502,
+     99.997,
+     -15.726
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: chest",
+    "pos": [
+     0.105,
+     92.309,
+     -102.516
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9: redead x3, chest",
+    "pos": [
+     1.747,
+     90.84,
+     -20.103
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10",
+    "pos": [
+     -26.304,
+     99.996,
+     -8.757
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11: chest",
+    "pos": [
+     -0.049,
+     102.17,
+     -94.985
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12",
+    "pos": [
+     8.105,
+     97.601,
+     -81.628
+    ]
+   }
+  ],
+  "DeathMountainCrater_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto: dinolfos x2, chest",
+    "pos": [
+     -66.283,
+     70.786,
+     4.522
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -50.534,
+     117.369,
+     0.531
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -17.381,
+     124.901,
+     52.577
+    ]
+   }
+  ],
+  "DeathMountainCrater_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto: dinolfos x2, chest",
+    "pos": [
+     -66.283,
+     70.786,
+     4.522
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -50.534,
+     117.369,
+     0.531
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -17.381,
+     124.901,
+     52.577
+    ]
+   }
+  ],
+  "DeathMountainTrail_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -13.379,
+     140.075,
+     -6.785
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: baby dodongo x5",
+    "pos": [
+     -1.649,
+     59.053,
+     -26.118
+    ]
+   }
+  ],
+  "DeathMountainTrail_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -13.379,
+     140.075,
+     -6.785
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: baby dodongo x5",
+    "pos": [
+     -1.649,
+     59.053,
+     -26.118
+    ]
+   }
+  ],
+  "DesertColossus_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto: skullwalltula x5, beamos",
+    "pos": [
+     -127.285,
+     77.491,
+     -34.969
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -115.503,
+     93.923,
+     -26.681
+    ]
+   }
+  ],
+  "DesertColossus_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto: skullwalltula x5, beamos",
+    "pos": [
+     -127.285,
+     77.491,
+     -34.969
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -115.503,
+     93.923,
+     -26.681
+    ]
+   }
+  ],
+  "DodongoCavern": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0",
+    "pos": [
+     0.0,
+     101.75,
+     28.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: beamos x3, chest x3",
+    "pos": [
+     -0.0,
+     100.0,
+     -23.5
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: baby dodongo x6, gold skulltula",
+    "pos": [
+     58.0,
+     98.5,
+     -9.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: keese x3, gold skulltula",
+    "pos": [
+     64.0,
+     97.25,
+     10.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: keese x2",
+    "pos": [
+     92.5,
+     101.302,
+     -17.01
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: middle boss lizalfos x2, chest",
+    "pos": [
+     88.0,
+     109.425,
+     -52.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6",
+    "pos": [
+     62.5,
+     100.5,
+     -75.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: business scrubs",
+    "pos": [
+     62.5,
+     101.526,
+     -90.5
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: dodongo x3",
+    "pos": [
+     42.0,
+     100.0,
+     -52.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9",
+    "pos": [
+     36.0,
+     101.5,
+     -23.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: skullwalltula, chest",
+    "pos": [
+     -49.0,
+     103.2,
+     -37.75
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11: amos, chest",
+    "pos": [
+     -49.0,
+     104.021,
+     -5.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12: amos x3, fire keese x2",
+    "pos": [
+     -49.0,
+     114.315,
+     -8.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 13,
+    "label": "room 13: chest x2",
+    "pos": [
+     46.5,
+     112.25,
+     -16.5
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 14,
+    "label": "room 14",
+    "pos": [
+     73.75,
+     116.275,
+     -6.6
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 15,
+    "label": "room 15: baby dodongo x3",
+    "pos": [
+     99.0,
+     115.25,
+     -9.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 16,
+    "label": "room 16: middle boss lizalfos x2, chest",
+    "pos": [
+     110.0,
+     115.775,
+     -28.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 17,
+    "label": "room 17",
+    "pos": [
+     73.75,
+     113.775,
+     -23.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 18,
+    "label": "room 18: dodongo x2, gold skulltula",
+    "pos": [
+     21.0,
+     112.0,
+     -51.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 19,
+    "label": "room 19: fire keese x4",
+    "pos": [
+     -7.0,
+     95.5,
+     -80.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 20,
+    "label": "room 20: baby dodongo x3, amos",
+    "pos": [
+     -41.25,
+     96.99,
+     -104.25
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 21,
+    "label": "room 21",
+    "pos": [
+     24.0,
+     92.4,
+     -78.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 22,
+    "label": "room 22: dungeon boss dodongo",
+    "pos": [
+     24.0,
+     73.0,
+     -60.5
+    ]
+   }
+  ],
+  "FireTemple": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: fire keese x2",
+    "pos": [
+     0.0,
+     103.555,
+     12.25
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: red bubble x8, fire keese x4",
+    "pos": [
+     41.423,
+     105.0,
+     -5.116
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: chest",
+    "pos": [
+     -25.5,
+     105.0,
+     0.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: middle boss flare dancer, chest",
+    "pos": [
+     -6.971,
+     106.485,
+     -33.385
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: torch slug x3, chest",
+    "pos": [
+     93.039,
+     141.05,
+     8.391
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: torch slug x3, chest x3",
+    "pos": [
+     56.158,
+     151.423,
+     -2.511
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6",
+    "pos": [
+     42.075,
+     147.085,
+     0.332
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: gold skulltula",
+    "pos": [
+     37.868,
+     179.841,
+     -13.123
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: red bubble x4, chest x3",
+    "pos": [
+     41.757,
+     186.998,
+     0.187
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9",
+    "pos": [
+     -28.064,
+     170.273,
+     -0.008
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: fire keese x4, tricky door x3",
+    "pos": [
+     -29.532,
+     160.196,
+     0.015
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11: chest",
+    "pos": [
+     -44.5,
+     145.2,
+     0.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12",
+    "pos": [
+     -68.084,
+     182.138,
+     9.258
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 13,
+    "label": "room 13: fire keese x3, chest",
+    "pos": [
+     -43.724,
+     189.5,
+     -0.069
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 14,
+    "label": "room 14: fire keese x4",
+    "pos": [
+     -44.5,
+     180.735,
+     -19.6
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 15,
+    "label": "room 15: torch slug x6",
+    "pos": [
+     4.175,
+     100.164,
+     -9.542
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 16,
+    "label": "room 16: red bubble x10, chest",
+    "pos": [
+     24.034,
+     147.028,
+     0.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 17,
+    "label": "room 17: chest",
+    "pos": [
+     -7.052,
+     100.207,
+     -10.801
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 18,
+    "label": "room 18: crazy floor tile x5, like like",
+    "pos": [
+     10.627,
+     100.0,
+     -31.03
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 19,
+    "label": "room 19: crazy floor tile x8, like like",
+    "pos": [
+     57.0,
+     113.8,
+     -46.06
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 21,
+    "label": "room 21: keese x4",
+    "pos": [
+     90.0,
+     112.113,
+     0.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 22,
+    "label": "room 22: chest",
+    "pos": [
+     39.0,
+     105.0,
+     47.53
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 24,
+    "label": "room 24: middle boss flare dancer",
+    "pos": [
+     -71.954,
+     151.216,
+     2.361
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 25,
+    "label": "room 25",
+    "pos": [
+     -29.532,
+     153.291,
+     0.015
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 27,
+    "label": "room 27: torch slug",
+    "pos": [
+     -57.543,
+     180.193,
+     -19.637
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 33,
+    "label": "room 33: dungeon boss volvagia",
+    "pos": [
+     -65.5,
+     105.0,
+     -0.0
+    ]
+   }
+  ],
+  "ForestTemple": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: wolfos x4, chest",
+    "pos": [
+     0.085,
+     103.441,
+     59.701
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: skulltula",
+    "pos": [
+     -0.07,
+     102.595,
+     34.8
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: gold skulltula, middle boss poe meg",
+    "pos": [
+     0.0,
+     104.501,
+     -3.5
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: blue bubble",
+    "pos": [
+     -0.07,
+     106.426,
+     -39.42
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: stalfos weak x2, chest",
+    "pos": [
+     -0.096,
+     105.5,
+     -55.909
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: blue bubble",
+    "pos": [
+     -34.82,
+     103.51,
+     0.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6: blue bubble",
+    "pos": [
+     -60.923,
+     113.102,
+     5.669
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: wallmaster",
+    "pos": [
+     -60.923,
+     109.398,
+     5.669
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: chest",
+    "pos": [
+     -60.923,
+     114.13,
+     5.669
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9: blue bubble x2",
+    "pos": [
+     -60.923,
+     126.466,
+     5.669
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10",
+    "pos": [
+     -56.4,
+     124.7,
+     -34.492
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11: wallmaster",
+    "pos": [
+     -56.4,
+     126.355,
+     -59.487
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12: skullwalltula x3, deku baba x2",
+    "pos": [
+     -30.269,
+     99.0,
+     -27.646
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 14,
+    "label": "room 14: deku baba x2, octorok",
+    "pos": [
+     24.649,
+     99.992,
+     -24.55
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 15,
+    "label": "room 15: chest",
+    "pos": [
+     -7.629,
+     88.025,
+     -39.998
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 16,
+    "label": "room 16: poe joelle, chest",
+    "pos": [
+     -30.916,
+     125.525,
+     -59.484
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 17,
+    "label": "room 17: stalfos weak x3, chest",
+    "pos": [
+     0.13,
+     118.575,
+     -59.4
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 18,
+    "label": "room 18: poe beth, chest",
+    "pos": [
+     28.87,
+     125.525,
+     -59.49
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 19,
+    "label": "room 19: wallmaster",
+    "pos": [
+     56.977,
+     124.668,
+     -59.363
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 20,
+    "label": "room 20: green bubble x2",
+    "pos": [
+     56.727,
+     124.985,
+     -32.124
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 21,
+    "label": "room 21: blue bubble x2",
+    "pos": [
+     -56.433,
+     107.306,
+     -59.401
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 22,
+    "label": "room 22: floormaster, chest",
+    "pos": [
+     -65.674,
+     107.0,
+     -26.766
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 23,
+    "label": "room 23",
+    "pos": [
+     56.541,
+     124.574,
+     3.309
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 24,
+    "label": "room 24: skulltula x3, chest",
+    "pos": [
+     54.524,
+     103.997,
+     -36.296
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 25,
+    "label": "room 25: poe amy",
+    "pos": [
+     56.75,
+     103.944,
+     0.2
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 26,
+    "label": "room 26",
+    "pos": [
+     35.65,
+     105.532,
+     0.229
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 27,
+    "label": "room 27: chest, skulltula",
+    "pos": [
+     -0.07,
+     61.771,
+     -14.658
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 29,
+    "label": "room 29: dungeon boss phantom ganon",
+    "pos": [
+     -0.181,
+     74.707,
+     -62.765
+    ]
+   }
+  ],
+  "GanondorfStage": [
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     0.06,
+     171.05,
+     -24.63
+    ]
+   }
+  ],
+  "GerudoFortress_Adult": [
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -28.01,
+     104.79,
+     -94.365
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: gerudo",
+    "pos": [
+     -26.71,
+     118.41,
+     -110.41
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     11.229,
+     115.58,
+     -51.561
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     12.834,
+     120.466,
+     -86.903
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     13.17,
+     118.924,
+     -30.423
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     13.665,
+     120.43,
+     -95.058
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     20.41,
+     127.449,
+     -30.926
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     21.988,
+     117.44,
+     -69.945
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     22.235,
+     109.82,
+     -54.295
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     25.456,
+     117.5,
+     -51.45
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     33.245,
+     124.974,
+     -81.961
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     37.455,
+     131.4,
+     -83.05
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: gerudo",
+    "pos": [
+     41.934,
+     112.6,
+     -69.188
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     46.96,
+     125.98,
+     -50.44
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     49.237,
+     131.28,
+     -89.527
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     52.463,
+     114.992,
+     63.074
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     56.608,
+     133.43,
+     -38.16
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     59.099,
+     133.5,
+     -65.468
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     59.116,
+     133.44,
+     -54.716
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: gerudo",
+    "pos": [
+     61.163,
+     115.469,
+     -51.523
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: gerudo",
+    "pos": [
+     71.804,
+     114.875,
+     42.603
+    ]
+   }
+  ],
+  "GerudoTrainingGround": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: chest x2",
+    "pos": [
+     -1.833,
+     99.25,
+     -6.095
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: stalfos x4, chest",
+    "pos": [
+     -47.05,
+     97.75,
+     -5.13
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2",
+    "pos": [
+     -46.769,
+     98.0,
+     -42.965
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: wolfos x4, wolfos white x4",
+    "pos": [
+     -47.123,
+     103.975,
+     -85.33
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: chest",
+    "pos": [
+     -2.207,
+     108.207,
+     -82.212
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: fire keese x2, chest x2",
+    "pos": [
+     43.349,
+     98.359,
+     -82.401
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6: red bubble x2",
+    "pos": [
+     43.152,
+     94.025,
+     -48.449
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: dinolfos x2, beamos",
+    "pos": [
+     44.417,
+     98.525,
+     -5.365
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: chest x8",
+    "pos": [
+     -1.423,
+     98.01,
+     -47.96
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9: shell blade x2, chest",
+    "pos": [
+     68.906,
+     94.762,
+     -43.946
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: chest x5, like like x3",
+    "pos": [
+     -47.508,
+     103.975,
+     -126.192
+    ]
+   }
+  ],
+  "GerudoValley_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto: octorok x3",
+    "pos": [
+     11.478,
+     -18.098,
+     36.451
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian x4, running man",
+    "pos": [
+     -38.085,
+     100.9,
+     -22.038
+    ]
+   }
+  ],
+  "GerudoValley_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto: octorok x3",
+    "pos": [
+     11.478,
+     -18.098,
+     36.451
+    ]
+   }
+  ],
+  "GoronCity_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto: chest x2",
+    "pos": [
+     -51.674,
+     95.195,
+     26.314
+    ]
+   }
+  ],
+  "GoronCity_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto: chest x2",
+    "pos": [
+     -51.674,
+     95.195,
+     26.314
+    ]
+   }
+  ],
+  "Graveyard_Adult": [
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -14.441,
+     99.768,
+     20.774
+    ]
+   }
+  ],
+  "Graveyard_Child": [
+   {
+    "kind": "interior",
+    "label": "interior: dampe",
+    "pos": [
+     -14.441,
+     99.768,
+     20.774
+    ]
+   }
+  ],
+  "HyruleCastle": [
+   {
+    "kind": "grotto",
+    "label": "grotto: gold skulltula",
+    "pos": [
+     39.179,
+     101.121,
+     -116.209
+    ]
+   }
+  ],
+  "HyruleField_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto: skulltula",
+    "pos": [
+     -258.317,
+     120.739,
+     137.923
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: chest",
+    "pos": [
+     -212.572,
+     98.523,
+     450.578
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -204.728,
+     101.803,
+     455.479
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: skulltula",
+    "pos": [
+     -156.063,
+     125.123,
+     338.411
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: gold skulltula",
+    "pos": [
+     -147.79,
+     129.925,
+     322.422
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: blue tektite",
+    "pos": [
+     -97.982,
+     129.384,
+     17.096
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -13.227,
+     137.722,
+     169.493
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     39.867,
+     134.17,
+     26.58
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     39.922,
+     130.612,
+     342.298
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: redead x2, chest",
+    "pos": [
+     154.183,
+     136.522,
+     18.672
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     163.273,
+     155.738,
+     27.385
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     179.819,
+     142.728,
+     190.498
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -292.755,
+     129.541,
+     595.625
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -176.137,
+     128.265,
+     417.081
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -175.582,
+     137.122,
+     417.5
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -154.147,
+     150.577,
+     267.123
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -146.131,
+     150.21,
+     268.865
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -145.33,
+     159.341,
+     268.7
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -96.938,
+     137.674,
+     490.796
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: talon",
+    "pos": [
+     -56.257,
+     150.545,
+     210.705
+    ]
+   }
+  ],
+  "HyruleField_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto: skulltula",
+    "pos": [
+     -258.317,
+     120.739,
+     137.923
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: chest",
+    "pos": [
+     -212.572,
+     98.523,
+     450.578
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -204.728,
+     101.803,
+     455.479
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: skulltula",
+    "pos": [
+     -156.063,
+     125.123,
+     338.411
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: gold skulltula",
+    "pos": [
+     -147.79,
+     129.925,
+     322.422
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: blue tektite",
+    "pos": [
+     -97.982,
+     129.384,
+     17.096
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -36.408,
+     150.658,
+     290.698
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -13.227,
+     137.722,
+     169.493
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     39.867,
+     134.17,
+     26.58
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     39.922,
+     130.612,
+     342.298
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto: redead x2, chest",
+    "pos": [
+     154.183,
+     136.522,
+     18.672
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     163.273,
+     155.738,
+     27.385
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     179.819,
+     142.728,
+     190.498
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -292.755,
+     129.541,
+     595.625
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -176.137,
+     128.265,
+     417.081
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -175.582,
+     137.122,
+     417.5
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -154.147,
+     150.577,
+     267.123
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -146.131,
+     150.21,
+     268.865
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -145.33,
+     159.341,
+     268.7
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -96.938,
+     137.674,
+     490.796
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: talon",
+    "pos": [
+     -56.257,
+     150.545,
+     210.705
+    ]
+   }
+  ],
+  "IceCavern": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0",
+    "pos": [
+     17.343,
+     102.305,
+     79.769
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: freezard fixed x3",
+    "pos": [
+     0.0,
+     99.75,
+     35.91
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2",
+    "pos": [
+     2.147,
+     103.055,
+     12.3
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: flying pot ice cavern x2, gold skulltula",
+    "pos": [
+     7.292,
+     105.233,
+     -13.354
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: freezard fixed",
+    "pos": [
+     41.005,
+     104.3,
+     3.649
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: keese ice x3, freezard x3",
+    "pos": [
+     18.431,
+     103.32,
+     -57.667
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6: keese x3, chest",
+    "pos": [
+     80.599,
+     103.023,
+     4.528
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7",
+    "pos": [
+     -13.721,
+     100.66,
+     -17.499
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: keese ice x3, chest",
+    "pos": [
+     -32.063,
+     100.0,
+     -20.411
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9: freezard fixed x2",
+    "pos": [
+     -41.751,
+     105.806,
+     8.038
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: wolfos white, chest",
+    "pos": [
+     -46.225,
+     109.615,
+     36.646
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11",
+    "pos": [
+     -50.742,
+     113.111,
+     62.736
+    ]
+   }
+  ],
+  "InsideGanonCastle": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: beamos for high place x2",
+    "pos": [
+     -0.066,
+     106.0,
+     39.895
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1",
+    "pos": [
+     -0.226,
+     109.396,
+     -20.523
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: wolfos x2, chest",
+    "pos": [
+     23.035,
+     103.248,
+     19.135
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: beamos",
+    "pos": [
+     36.487,
+     102.75,
+     42.18
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4",
+    "pos": [
+     47.52,
+     102.9,
+     62.111
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: chest x2, freezard x2",
+    "pos": [
+     50.184,
+     104.639,
+     -21.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6",
+    "pos": [
+     78.361,
+     97.745,
+     -20.893
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7",
+    "pos": [
+     101.813,
+     99.745,
+     -20.995
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: chest x2, green bubble x2",
+    "pos": [
+     38.586,
+     103.9,
+     -88.865
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9",
+    "pos": [
+     65.837,
+     105.4,
+     -135.912
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: red bubble x4, torch slug",
+    "pos": [
+     -30.464,
+     103.708,
+     -73.805
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11",
+    "pos": [
+     -52.592,
+     103.975,
+     -103.921
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12: chest x7, keese truth x3",
+    "pos": [
+     -45.559,
+     99.763,
+     -21.041
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 13,
+    "label": "room 13: chest x2",
+    "pos": [
+     -52.206,
+     99.947,
+     -21.056
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 14,
+    "label": "room 14",
+    "pos": [
+     -67.516,
+     106.449,
+     -21.015
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 15,
+    "label": "room 15: wallmaster",
+    "pos": [
+     -83.547,
+     102.708,
+     -20.999
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 16,
+    "label": "room 16: beamos, amos",
+    "pos": [
+     -22.279,
+     103.938,
+     18.59
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 17,
+    "label": "room 17: floormaster x9, wallmaster x3",
+    "pos": [
+     -30.064,
+     107.068,
+     37.419
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 18,
+    "label": "room 18",
+    "pos": [
+     -38.083,
+     105.012,
+     51.368
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 19,
+    "label": "room 19: fire keese x4",
+    "pos": [
+     -0.011,
+     129.906,
+     -19.683
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 20,
+    "label": "room 20: dinolfos x2",
+    "pos": [
+     0.391,
+     136.247,
+     -24.428
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 21,
+    "label": "room 21",
+    "pos": [
+     18.559,
+     137.247,
+     -24.673
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 22,
+    "label": "room 22: stalfos x2",
+    "pos": [
+     0.205,
+     142.96,
+     -25.003
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 23,
+    "label": "room 23",
+    "pos": [
+     0.051,
+     144.247,
+     -6.418
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 24,
+    "label": "room 24: iron knuckle black, iron knuckle white",
+    "pos": [
+     0.094,
+     151.156,
+     -24.656
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 25,
+    "label": "room 25",
+    "pos": [
+     -24.088,
+     150.647,
+     -24.626
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 62,
+    "label": "room 62",
+    "pos": [
+     -0.03,
+     156.622,
+     -45.681
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 63,
+    "label": "room 63: dungeon boss ganondorf",
+    "pos": [
+     0.049,
+     156.599,
+     -26.618
+    ]
+   }
+  ],
+  "InsideJabuJabuBelly": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: octorok x2",
+    "pos": [
+     -0.162,
+     92.0,
+     -8.627
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: biri x2",
+    "pos": [
+     0.556,
+     91.536,
+     -42.488
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: biri x4, bari x3",
+    "pos": [
+     0.057,
+     91.1,
+     -80.638
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: biri x4, gold skulltula x2",
+    "pos": [
+     -0.877,
+     82.211,
+     -79.868
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: octorok",
+    "pos": [
+     -22.881,
+     99.811,
+     -59.955
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: biri x4, gold skulltula",
+    "pos": [
+     31.893,
+     107.526,
+     -53.703
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6: biri x2, middle boss big octo",
+    "pos": [
+     -32.39,
+     85.851,
+     -93.351
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: tailpasaran x5",
+    "pos": [
+     0.59,
+     92.353,
+     -141.61
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: stinger x2, tentacle green",
+    "pos": [
+     0.66,
+     93.435,
+     -192.551
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9: stinger x4, chest",
+    "pos": [
+     -29.728,
+     92.349,
+     -131.89
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: tentacle red",
+    "pos": [
+     36.991,
+     95.759,
+     -138.94
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11: biri x4, tentacle blue",
+    "pos": [
+     -28.819,
+     92.718,
+     -181.028
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12: shabom x9, chest",
+    "pos": [
+     24.237,
+     92.423,
+     -176.728
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 13,
+    "label": "room 13: octorok x2, chest",
+    "pos": [
+     -28.802,
+     82.129,
+     -56.123
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 14,
+    "label": "room 14: shabom x4, stinger x2",
+    "pos": [
+     29.0,
+     76.672,
+     -59.641
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 15,
+    "label": "room 15: dungeon boss barinade",
+    "pos": [
+     42.34,
+     102.133,
+     -112.495
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 16,
+    "label": "room 16",
+    "pos": [
+     42.748,
+     101.041,
+     -77.999
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 17,
+    "label": "room 17",
+    "pos": [
+     0.5,
+     98.473,
+     -46.06
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 18,
+    "label": "room 18: octorok, business scrubs",
+    "pos": [
+     0.565,
+     75.5,
+     -42.488
+    ]
+   }
+  ],
+  "InsideTheDekuTree": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: skullwalltula x3, deku baba x3",
+    "pos": [
+     0.0,
+     103.367,
+     0.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: deku scrub",
+    "pos": [
+     -21.5,
+     109.3,
+     9.511
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: chest x2, skullwalltula",
+    "pos": [
+     -40.443,
+     112.095,
+     11.469
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: deku baba x2, chest x2",
+    "pos": [
+     -37.851,
+     120.289,
+     0.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: deku baba x3, gold skulltula x2",
+    "pos": [
+     -18.5,
+     78.362,
+     2.5
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: deku scrub",
+    "pos": [
+     -9.211,
+     78.362,
+     26.577
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6",
+    "pos": [
+     -30.154,
+     78.669,
+     37.004
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: deku baba withered x2, deku baba",
+    "pos": [
+     -57.5,
+     82.269,
+     40.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: gohma egg x3, deku baba withered",
+    "pos": [
+     -61.997,
+     82.308,
+     14.283
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9: deku scrub brothers x3",
+    "pos": [
+     -27.836,
+     52.802,
+     20.278
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: gohma",
+    "pos": [
+     19.314,
+     53.04,
+     67.634
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11: skulltula, gold skulltula",
+    "pos": [
+     -78.087,
+     82.269,
+     -3.574
+    ]
+   }
+  ],
+  "IronKnuckleBlackStage": [
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     0.0,
+     143.97,
+     -3.96
+    ]
+   }
+  ],
+  "KakarikoVillage_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -19.98,
+     102.046,
+     66.0
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -72.638,
+     103.495,
+     6.538
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -61.728,
+     98.352,
+     62.744
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian x3",
+    "pos": [
+     -50.723,
+     96.724,
+     29.996
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -45.306,
+     104.752,
+     99.256
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -39.138,
+     106.405,
+     8.476
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -28.935,
+     103.055,
+     29.195
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -25.473,
+     102.686,
+     75.599
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     1.439,
+     104.68,
+     44.267
+    ]
+   }
+  ],
+  "KakarikoVillage_Adult_Alternative": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -19.98,
+     102.046,
+     66.0
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -72.638,
+     103.495,
+     6.538
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -61.728,
+     98.352,
+     62.744
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian x3",
+    "pos": [
+     -50.723,
+     96.724,
+     29.996
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -45.306,
+     104.752,
+     99.256
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -39.138,
+     106.405,
+     8.476
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -28.935,
+     103.055,
+     29.195
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -25.473,
+     102.686,
+     75.599
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     1.439,
+     104.68,
+     44.267
+    ]
+   }
+  ],
+  "KakarikoVillage_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     -19.98,
+     102.046,
+     66.0
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -72.638,
+     103.495,
+     6.538
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -61.468,
+     98.4,
+     62.811
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -50.723,
+     96.724,
+     29.996
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -45.306,
+     104.752,
+     99.256
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -39.138,
+     106.405,
+     8.476
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -28.935,
+     103.055,
+     29.195
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -25.473,
+     102.686,
+     75.599
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     1.439,
+     104.68,
+     44.267
+    ]
+   }
+  ],
+  "KokiriForest_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto: deku scrub brothers x3, chest",
+    "pos": [
+     -51.934,
+     104.454,
+     -62.823
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: kokiri x3",
+    "pos": [
+     -78.322,
+     117.136,
+     -16.331
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: kokiri",
+    "pos": [
+     -51.718,
+     112.201,
+     -39.889
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -44.684,
+     118.75,
+     15.639
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -10.241,
+     111.732,
+     18.278
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: kokiri",
+    "pos": [
+     -2.035,
+     110.139,
+     -24.458
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: kokiri",
+    "pos": [
+     13.898,
+     109.946,
+     18.429
+    ]
+   }
+  ],
+  "KokiriForest_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto: deku scrub brothers x3, chest",
+    "pos": [
+     -51.934,
+     104.454,
+     -62.823
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: kokiri x3",
+    "pos": [
+     -78.322,
+     117.136,
+     -16.331
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -51.718,
+     112.201,
+     -39.889
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -44.684,
+     118.75,
+     15.639
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -10.241,
+     111.732,
+     18.278
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: kokiri x3",
+    "pos": [
+     -2.035,
+     110.139,
+     -24.458
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: kokiri",
+    "pos": [
+     13.898,
+     109.946,
+     18.429
+    ]
+   }
+  ],
+  "LostWood_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto: scrub forest stage elder",
+    "pos": [
+     3.801,
+     86.348,
+     -47.5
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     20.5,
+     86.271,
+     -75.65
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     27.792,
+     86.273,
+     -28.265
+    ]
+   }
+  ],
+  "LostWood_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto: scrub forest stage elder",
+    "pos": [
+     3.801,
+     86.348,
+     -47.5
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     20.5,
+     86.271,
+     -75.65
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     27.792,
+     86.273,
+     -28.265
+    ]
+   }
+  ],
+  "Market_Adult": [
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     9.047,
+     100.048,
+     28.017
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     10.119,
+     100.161,
+     39.565
+    ]
+   }
+  ],
+  "Market_Child": [
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -59.548,
+     97.262,
+     0.232
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -52.789,
+     97.334,
+     22.913
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -43.668,
+     101.469,
+     -13.667
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     -25.341,
+     99.969,
+     6.494
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     -12.756,
+     100.083,
+     28.618
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian",
+    "pos": [
+     8.951,
+     100.255,
+     -16.322
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     9.047,
+     100.048,
+     28.017
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior",
+    "pos": [
+     10.119,
+     100.161,
+     39.565
+    ]
+   },
+   {
+    "kind": "interior",
+    "label": "interior: hylian x4, goron",
+    "pos": [
+     18.026,
+     100.111,
+     11.0
+    ]
+   }
+  ],
+  "SacredForestMeadow_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto: wolfos x2, chest",
+    "pos": [
+     -3.369,
+     82.785,
+     64.505
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     5.007,
+     97.242,
+     -81.83
+    ]
+   }
+  ],
+  "SacredForestMeadow_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto: wolfos x2, chest",
+    "pos": [
+     -3.369,
+     82.785,
+     64.505
+    ]
+   },
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     5.007,
+     97.242,
+     -81.83
+    ]
+   }
+  ],
+  "ShadowTemple": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0",
+    "pos": [
+     13.871,
+     90.429,
+     45.509
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1",
+    "pos": [
+     42.884,
+     89.988,
+     1.043
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: flying pot shadow temple, wallmaster",
+    "pos": [
+     -3.525,
+     90.4,
+     -4.674
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: keese x2, redead",
+    "pos": [
+     2.737,
+     90.425,
+     -23.435
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: chest",
+    "pos": [
+     -72.65,
+     90.946,
+     -10.198
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: beamos",
+    "pos": [
+     77.389,
+     87.187,
+     1.457
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6: chest",
+    "pos": [
+     83.503,
+     87.187,
+     -23.585
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: gibdo x2, chest",
+    "pos": [
+     84.239,
+     87.187,
+     19.36
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: skulltula x4",
+    "pos": [
+     106.47,
+     75.425,
+     17.429
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9: beamos, red bubble",
+    "pos": [
+     80.0,
+     65.516,
+     71.417
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: fire keese x3, like like",
+    "pos": [
+     145.355,
+     61.438,
+     96.818
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11: chest x2, gold skulltula",
+    "pos": [
+     19.231,
+     56.4,
+     92.104
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12: redead x2",
+    "pos": [
+     56.945,
+     52.5,
+     33.934
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 13,
+    "label": "room 13: keese x2, fire keese x2",
+    "pos": [
+     30.961,
+     59.298,
+     32.906
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 14,
+    "label": "room 14: skulltula, gold skulltula",
+    "pos": [
+     83.737,
+     52.0,
+     6.325
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 15,
+    "label": "room 15: redead x2, chest",
+    "pos": [
+     124.51,
+     52.0,
+     6.691
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 16,
+    "label": "room 16: flying pot shadow temple x2, gibdo x2",
+    "pos": [
+     109.658,
+     52.0,
+     -18.798
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 17,
+    "label": "room 17: stalfos x2, gold skulltula",
+    "pos": [
+     7.836,
+     42.0,
+     -58.365
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 18,
+    "label": "room 18: floormaster x2",
+    "pos": [
+     -181.609,
+     41.288,
+     -43.558
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 19,
+    "label": "room 19: chest x2, redead x2",
+    "pos": [
+     -181.793,
+     41.288,
+     -66.991
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 20,
+    "label": "room 20: gold skulltula",
+    "pos": [
+     -217.952,
+     41.279,
+     -43.585
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 21,
+    "label": "room 21: floormaster truth, chest",
+    "pos": [
+     -181.677,
+     41.796,
+     -17.485
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 22,
+    "label": "room 22",
+    "pos": [
+     -138.555,
+     42.277,
+     5.226
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 23,
+    "label": "room 23",
+    "pos": [
+     -138.441,
+     41.998,
+     27.216
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 24,
+    "label": "room 24: dungeon boss bongo bongo",
+    "pos": [
+     -138.568,
+     -11.06,
+     29.302
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 26,
+    "label": "room 26",
+    "pos": [
+     -43.519,
+     90.425,
+     -9.828
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 29,
+    "label": "room 29",
+    "pos": [
+     109.658,
+     43.577,
+     -18.798
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 30,
+    "label": "room 30: flying pot shadow temple x2",
+    "pos": [
+     13.871,
+     90.429,
+     15.241
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 31,
+    "label": "room 31: chest x2, gold skulltula",
+    "pos": [
+     175.657,
+     61.438,
+     96.818
+    ]
+   }
+  ],
+  "SpiritTemple": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: flying pot spirit temple x4, amos x2",
+    "pos": [
+     0.0,
+     100.0,
+     -10.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: keese x2, fire keese x2",
+    "pos": [
+     -33.567,
+     104.831,
+     -30.384
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: flying pot spirit temple x2, green bubble x2",
+    "pos": [
+     -52.08,
+     104.748,
+     -52.854
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: anubis",
+    "pos": [
+     -33.381,
+     104.683,
+     -78.735
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: keese x4, fire keese",
+    "pos": [
+     -15.323,
+     104.739,
+     -52.306
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5",
+    "pos": [
+     -33.6,
+     104.75,
+     -49.5
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6: skullwalltula x4, lizalfos x2",
+    "pos": [
+     -32.204,
+     119.473,
+     -47.5
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: chest x2, gold skulltula x2",
+    "pos": [
+     0.0,
+     120.744,
+     -59.151
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8",
+    "pos": [
+     -19.443,
+     129.69,
+     -30.181
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 9,
+    "label": "room 9: beamos for high place x3, chest",
+    "pos": [
+     -44.154,
+     130.794,
+     -21.832
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: gold skulltula",
+    "pos": [
+     -55.767,
+     132.803,
+     2.545
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11: iron knuckle silver",
+    "pos": [
+     -55.89,
+     132.077,
+     21.791
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12",
+    "pos": [
+     -55.656,
+     133.701,
+     39.213
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 13,
+    "label": "room 13: beamos",
+    "pos": [
+     33.57,
+     104.749,
+     -30.737
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 14,
+    "label": "room 14: wolfos, chest",
+    "pos": [
+     18.093,
+     105.0,
+     -48.415
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 15,
+    "label": "room 15: gold skulltula",
+    "pos": [
+     48.845,
+     100.243,
+     -54.799
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 16,
+    "label": "room 16: like like, chest",
+    "pos": [
+     48.889,
+     100.244,
+     -77.8
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 17,
+    "label": "room 17: flying pot spirit temple x2, like like",
+    "pos": [
+     33.5,
+     105.0,
+     -49.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 18,
+    "label": "room 18: chest x2, floormaster truth",
+    "pos": [
+     35.4,
+     119.15,
+     -47.54
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 19,
+    "label": "room 19",
+    "pos": [
+     -0.48,
+     112.85,
+     -39.971
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 20,
+    "label": "room 20: beamos",
+    "pos": [
+     20.238,
+     129.352,
+     -30.306
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 21,
+    "label": "room 21: anubis x3, beamos",
+    "pos": [
+     38.634,
+     129.957,
+     -22.962
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 22,
+    "label": "room 22: amos x3",
+    "pos": [
+     55.761,
+     130.0,
+     -23.237
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 23,
+    "label": "room 23: chest x2",
+    "pos": [
+     55.854,
+     132.1,
+     0.293
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 24,
+    "label": "room 24: iron knuckle silver",
+    "pos": [
+     55.609,
+     132.212,
+     21.787
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 25,
+    "label": "room 25",
+    "pos": [
+     55.718,
+     133.483,
+     43.752
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 26,
+    "label": "room 26: chest",
+    "pos": [
+     55.8,
+     131.528,
+     -47.204
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 27,
+    "label": "room 27: beamos for high place x2, lizalfos x2",
+    "pos": [
+     17.073,
+     139.0,
+     -22.719
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 28,
+    "label": "room 28",
+    "pos": [
+     19.838,
+     154.04,
+     -47.968
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 29,
+    "label": "room 29: tricky door spirit temple x6, torch slug x4",
+    "pos": [
+     19.8,
+     152.906,
+     -65.053
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 30,
+    "label": "room 30: flying pot spirit temple x4",
+    "pos": [
+     -0.082,
+     153.115,
+     -49.979
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 31,
+    "label": "room 31: bubble white x3, dinolfos x2",
+    "pos": [
+     -20.956,
+     157.041,
+     -26.864
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 32,
+    "label": "room 32: middle boss iron knuckle nabooru",
+    "pos": [
+     0.14,
+     137.453,
+     -88.942
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 33,
+    "label": "room 33: dungeon boss koume, dungeon boss kotake",
+    "pos": [
+     0.157,
+     153.397,
+     -157.844
+    ]
+   }
+  ],
+  "WaterTemple": [
+   {
+    "kind": "room",
+    "n": 0,
+    "label": "room 0: blue tektite x2, spike x2",
+    "pos": [
+     -6.262,
+     100.0,
+     -15.403
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 1,
+    "label": "room 1: gold skulltula",
+    "pos": [
+     -4.5,
+     111.482,
+     -1.96
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 2,
+    "label": "room 2: spike x3, chest",
+    "pos": [
+     0.0,
+     89.034,
+     -1.96
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 3,
+    "label": "room 3: blue tektite x2, like like",
+    "pos": [
+     -36.5,
+     101.0,
+     19.925
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 4,
+    "label": "room 4: stinger under water x4, chest",
+    "pos": [
+     36.2,
+     115.134,
+     -23.91
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 5,
+    "label": "room 5: keese x2",
+    "pos": [
+     -47.972,
+     113.725,
+     -4.394
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 6,
+    "label": "room 6: blue tektite x6",
+    "pos": [
+     -81.929,
+     122.243,
+     -19.39
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 7,
+    "label": "room 7: chest",
+    "pos": [
+     -78.0,
+     129.319,
+     -108.78
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 8,
+    "label": "room 8: shell blade x3, chest",
+    "pos": [
+     -36.0,
+     100.0,
+     -19.6
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 10,
+    "label": "room 10: blue tektite x3",
+    "pos": [
+     -26.0,
+     125.874,
+     3.43
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 11,
+    "label": "room 11",
+    "pos": [
+     -4.242,
+     129.307,
+     -54.257
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 12,
+    "label": "room 12: blue tektite x6",
+    "pos": [
+     -4.5,
+     100.0,
+     -73.5
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 14,
+    "label": "room 14: stinger under water x5",
+    "pos": [
+     -4.5,
+     98.5,
+     -114.17
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 15,
+    "label": "room 15: blue tektite x3, chest",
+    "pos": [
+     14.886,
+     103.0,
+     -98.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 17,
+    "label": "room 17: chest",
+    "pos": [
+     25.897,
+     106.93,
+     -4.21
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 18,
+    "label": "room 18: spike x3, chest",
+    "pos": [
+     40.106,
+     100.0,
+     -4.41
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 20,
+    "label": "room 20: chest",
+    "pos": [
+     -6.5,
+     113.062,
+     -43.61
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 21,
+    "label": "room 21: gold skulltula",
+    "pos": [
+     -59.0,
+     110.25,
+     -70.0
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 22,
+    "label": "room 22: middle boss dark link",
+    "pos": [
+     -78.0,
+     127.001,
+     -64.19
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 23,
+    "label": "room 23: dungeon boss morpha",
+    "pos": [
+     -4.524,
+     131.933,
+     -88.264
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 24,
+    "label": "room 24: shell blade x2, gold skulltula",
+    "pos": [
+     20.0,
+     102.5,
+     -66.64
+    ]
+   },
+   {
+    "kind": "room",
+    "n": 25,
+    "label": "room 25: shell blade x3, gold skulltula",
+    "pos": [
+     43.0,
+     110.637,
+     -4.5
+    ]
+   }
+  ],
+  "ZoraDomain_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     16.987,
+     100.238,
+     -18.261
+    ]
+   }
+  ],
+  "ZoraDomain_Adult_Alternative": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     16.987,
+     100.238,
+     -18.261
+    ]
+   }
+  ],
+  "ZoraDomain_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     16.987,
+     100.238,
+     -18.261
+    ]
+   }
+  ],
+  "ZoraRiver_Adult": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     5.176,
+     114.225,
+     -16.274
+    ]
+   }
+  ],
+  "ZoraRiver_Child": [
+   {
+    "kind": "grotto",
+    "label": "grotto",
+    "pos": [
+     5.176,
+     114.225,
+     -16.274
+    ]
+   }
+  ]
+ }
+}

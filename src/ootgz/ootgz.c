@@ -49,6 +49,7 @@
 #include "hsstore.h"
 #include "actorsmenu.h"
 #include "freecam.h"
+#include "placer.h"
 #include "remote.h"
 #include "eventskip.h"
 #include "position.h"
@@ -147,7 +148,7 @@ static fa_event_t fa_read_button(void)
   uint64_t ticks_per_ms = sys_tick_freq() / 1000;
   uint64_t now = sys_tick();
 
-  if (menu_current || fa_menu_was_open) {
+  if (menu_current || fa_menu_was_open || placer_active || freecam_on) { /* the menu's, the placer's, the camera's */
     fa_button_down = false;
     fa_blocked_after_menu = true;
     fa_menu_closed_at = now;
@@ -196,16 +197,28 @@ static fa_event_t fa_read_button(void)
 
 /* Which commands apply (binds_set_enabled), before the controller is read: the menu's own while it's open, the
  * rest while it's closed; frame advance's while it's on (run also with the menu open: it's how a paused game
- * goes on); levitate's toggle while levitate is. Showing the menu always. */
+ * goes on); levitate's toggle while levitate is. Showing the menu always. While the actor placer or browser has the
+ * controller (placer.c), or the free camera (freecam.c), none of the others: their buttons are their own until B
+ * leaves them (the free camera's bind still turns it off). */
 static void command_context(void)
 {
-  bool open = menu_current != 0;
+  bool open = menu_current != 0, placing = (placer_active || freecam_on) && !open;
   for (int c = 0; c < CMD_COUNT; c++)
-    binds_set_enabled((command_t)c, command_info[c].group == CMD_GROUP_MENU ? open : !open);
+    binds_set_enabled((command_t)c, command_info[c].group == CMD_GROUP_MENU ? open : !open && !placing);
   binds_set_enabled(CMD_MENU, true);
-  binds_set_enabled(CMD_ADVANCE, frame_advance && !open);
-  binds_set_enabled(CMD_RUN, frame_advance);
-  binds_set_enabled(CMD_LEVITATE, levitate_enabled && !open);
+  binds_set_enabled(CMD_ADVANCE, frame_advance && !open && !placing);
+  binds_set_enabled(CMD_RUN, frame_advance && !placing);
+  binds_set_enabled(CMD_LEVITATE, levitate_enabled && !open && !placing);
+  binds_set_enabled(CMD_FREECAM, !open); /* its own bind turns it off again */
+}
+
+/* settings > menu settings > watches / input display while exploring: left out while a camera tool has the
+ * controller (the free camera, the explorer, look at actors, placing), unless kept */
+static void tools_hide_panels(void)
+{
+  bool tool = (placer_active || freecam_on) && !menu_current;
+  gfx_hide_watches = tool && !tools_show_watches;
+  gfx_hide_input = tool && !tools_show_input;
 }
 
 /* Opens, closes and drives the menu. Returns true if the input was the menu's. */
@@ -351,6 +364,7 @@ static void fa_hold_game(void)
     }
     watches_frame(menu_current != 0);
     gfx_hud_hidden = hud_hidden();
+  tools_hide_panels();
     gfx_frame();
     if (nvn_present_held())
       shown = true;
@@ -451,28 +465,31 @@ static void frame(void)
     menu_draw();
   }
   bool overlays_on_gpu = overlayui_on_gpu(); /* lines and bars for the GPU, else rectangles */
+  placer_frame(menu_current != 0); /* the actor placer: before its beam is drawn */
   voidmap_frame();
   airwall_frame(overlays_on_gpu);
   enemyhp_frame(overlays_on_gpu);
   menus_research_frame();
   watches_frame(menu_current != 0);
-  levitate_frame(menu_current != 0);
+  bool controls_taken = menu_current != 0 || placer_active || freecam_on; /* the menu's, the placer's, the camera's */
+  levitate_frame(controls_taken);
   savepos_frame();
   hsstore_frame();
-  ragdoll_frame(menu_current != 0);
+  ragdoll_frame(controls_taken);
   tpose_frame();
-  position_frame(menu_current != 0);
+  position_frame(controls_taken);
   freecam_frame(menu_current != 0);
-  divetest_frame(menu_current != 0);
+  divetest_frame(controls_taken);
   lock_frame();
   warp_frame();
   title_frame();
   eventskip_frame();
   tod_frame();
   age_frame();
-  memfile_binds_frame(menu_current != 0);
+  memfile_binds_frame(controls_taken);
   memfile_frame(); /* a memfile save/load: after the warp, Link moved the following frames */
   gfx_hud_hidden = hud_hidden();
+  tools_hide_panels();
   gfx_frame();
 
   cheats_frame();

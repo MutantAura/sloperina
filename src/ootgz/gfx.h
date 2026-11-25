@@ -172,7 +172,10 @@ typedef struct {
   char     value_shown[GFX_ROWS][GFX_VALUE_LEN], value_widest[GFX_ROWS][GFX_VALUE_LEN];
 } gfx_panel_t;
 
-typedef struct { gfx_panel_t panel[GFX_PANELS]; } gfx_screen_t;
+typedef struct {
+  gfx_panel_t panel[GFX_PANELS];
+  char guide[GFX_HINT_LEN]; /* gfx_guide's controls, this frame ("": none) */
+} gfx_screen_t;
 
 /* game thread: the menu (panel 0) */
 void gfx_begin(void);
@@ -188,6 +191,14 @@ void gfx_end(void);
 void gfx_clear(void);            /* menu closed */
 /* gz_log: a line in the log at the bottom right, shown a second and then faded out */
 void gfx_notice(const char *s);
+/* game thread: the controls of something in use, in a band across the bottom centre of the picture: a line (or a few,
+ * "\n" between them) of "<button> what" pairs (hint words: button names become the game's glyphs; two spaces between pairs), drawn this
+ * frame only; it fades in when it's first given and out after the last. The game's style draws it (nativeui.c);
+ * gz's doesn't. */
+void gfx_guide(const char *s);
+/* game thread, before gfx_frame: the watches (panel 1) and the input display (panel 3) left out of this frame, each on
+ * its own (the explorer and the other camera tools, unless settings keep them) */
+extern bool gfx_hide_watches, gfx_hide_input;
 /* gz's start-up splash, in the log's place (bottom right) for `frames` frames, then faded out: lines
  * (NULL: a blank one), each in its style, indented by its count of columns */
 void gfx_splash(const char *const *lines, const uint8_t *styles, const uint8_t *indents, int n, int frames);

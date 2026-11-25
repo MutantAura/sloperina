@@ -80,6 +80,7 @@ With the menu closed (the defaults; **settings > rebind commands** changes them)
 | **R3** | Ragdoll (as a bomb hit) when not levitating |
 | **L** | Frame advance (if enabled, [2.12.3](#2123-frame-advance)) |
 | **L + L3** (either order) | Frame advance: run again |
+| **R + right stick up** | Free camera on / off ([2.11](#211-debug)) |
 
 **reload map** and **end cutscene** can be given buttons too (**settings > rebind commands**, under **scene**); they
 have none at first.
@@ -141,6 +142,7 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 | **reload map** | Reloads the current map (at the age set in **link**). |
 | **end cutscene** | Ends the cutscene (or dialogue, chest opening or other event) that's playing. A played-back cutscene is skipped the way the game's own skip does; any other event is cancelled the way the game cancels one. Flags the rest of the event would have set aren't set, so it may play again. |
 | **time of day** | The game's clock: the time now (and whether it's day, 06:00 to 18:00, or night), **hour** and **minute** to set it, **freeze time** to hold it where it is, and **dawn**, **noon**, **dusk** and **midnight** to jump to. It sets the clock the way the game's own `ExecuteWmSetTime` does. Until the story has started the clock (early in a new game it stays at 06:00), setting it does nothing. Freezing isn't saved in the settings. |
+| **explorer** | Go round this map's dungeon rooms, grottos and interiors with the free camera, and go to them. See [2.3.4](#234-explorer). |
 | *collision* | |
 | **environment** | See below. |
 | **void out** | See [2.3.3](#233-void-out). |
@@ -211,6 +213,35 @@ Not drawn: floors the game tags as an abyss, which void on touch (the whole game
 Shadow Temple's chasm), and a few dungeon rooms' own void scripts. The
 cells round Link are read again every two seconds or when Link has moved 4 units, out to 24 units to the side, 48 units down
 (with deeper deadly cells projected upward from below) and 16 units up; where there are more lines than fit, the farthest are left out.
+
+#### 2.3.4 Explorer
+
+**scene > explorer** goes round the map you're in by its places: its dungeon rooms, grottos and interiors (the houses,
+shops and huts, which in this game are inside their buildings where they stand). The menu closes and the free
+camera looks down on a yellow beam, as **debug > actors > look at actors** does ([2.11](#211-debug)):
+
+- **d-right** and **d-left** go up and down the places, the camera gliding to each: rooms in their numbers' order
+  (d-right up, d-left down),
+  the rest nearest first. An interior or a grotto is looked at from close and low, under its roof; zoom out with
+  **ZL**. The panel at the top left says which (a room's number, a grotto or an interior), what's in it on the
+  line under (a room's or grotto's enemies and chests, an interior's people), the **type** shown, and where in
+  the list it is (**3 of 28**).
+- **L** and **R** choose which: all **places**, **rooms**, **grottos** or **interiors**, only those the map has,
+  moving on to the first of them.
+- **A** goes there: Link to the place (or, with none chosen, to where the beam stands), as **go to** moves him;
+  you carry on exploring until **B**.
+- In a dungeon, going to a room takes Link into it: the game wakes a room (its enemies, chests, switches) only
+  for where Link is, so this is what shows it as it is. The room's enemies can reach him meanwhile, and a room's
+  events can start. **B** puts him back where he was when you started exploring, or where **A** last put him.
+  **Y** turns this on and off (**take Link**, on to start with and remembered; the bar at the bottom says which):
+  off, only the camera goes, Link stays where he is (or goes back there, if he was in a room), and a room shows its
+  walls but not its enemies.
+- the **left stick**, **d-up** / **d-down** (height), **L3** (back to Link), the **right stick**, **ZL** / **ZR** (zoom) and **X**
+  move the beam and the camera as when looking at actors; **B** finishes and gives the camera back.
+
+The places come from the game's map layouts (`tools/places.py`). Far from Link the world isn't loaded, so the
+beam may stand in the air (orange) until Link goes there. Some grottos have no landing point of their own, and
+the beam stands at their entrance instead. Going to a dungeon room wakes it as walking in does (checked in the Forest Temple).
 
 ### 2.4 Memfiles
 
@@ -440,13 +471,29 @@ folder (on an emulator: right-click the game > *Open save data location*).
 **actors**: like gz's actors menu.
 
 - **browse current actors**: every actor loaded in the scene, at any distance and in any state, in folders by kind with their counts: **all**, **enemies** (`Enemy_`), **npcs** (`Npc_`), **objects** (`Obj_`, `Item_`), **scenery** (`Land_`) and **other** (cameras, areas, the game's system actors). **name has** narrows them to the names with a piece you type (any case). In a folder they're grouped under their names, nearest first in each, or with **sort** all nearest first, each with its distance and state (4 and 5: running; 6: not appeared yet; 7 and over: dying). Read again on entering **browse current actors** or with its **refresh**.
-- **L** on an actor in a folder opens it: its name, how far away it is and where, its state and its life if it has any, read live, then **go to**, **spawn one like it** and **kill**. An actor that has gone since the folder was read is never touched: it shows as *gone*. The last one opened is marked `>` in the folder.
+- **L** on an actor in a folder opens it: its name, how far away it is and where, its state and its life if it has any, read live, then **go to**, **spawn one like it** and **kill / despawn**. An actor that has gone since the folder was read is never touched: it shows as *gone*. The last one opened is marked `>` in the folder.
   - **go to** puts Link where the actor is, the way **load position** moves him, without changing your saved position. Inside something solid (a bed, a door) the game puts him straight back.
-  - **spawn one like it** asks the game to make another actor of the same name, 2 m in front of Link and facing him. The game makes it the way its own AI does; it says "spawned" once it's there (usually in a few frames). It gets none of the placement data the map's own copy has (links, rails, switches), so some actors may stand idle.
-  - **kill** sends the actor the game's own death request, the one a fall into a bottomless pit sends: it fades out, with no drop. Bosses and the like refuse it ("it won't die that way"), so their fights can't be skipped. An NPC or a thing with no death of its own is deleted instead (the game's own delete, as its AI uses); scenery, the game's system actors and Link are never touched. A killed enemy may be back when the map reloads.
+  - **spawn one like it** asks the game to make another actor of the same name, placed with the sticks first (see **spawn where**) or 2 m in front of Link and facing him. The game makes it the way its own AI does; it says "spawned" once it's there (usually in a few frames). It gets none of the placement data the map's own copy has (links, rails, switches), so some actors may stand idle.
+  - **kill / despawn** sends the actor the game's own death request, the one a fall into a bottomless pit sends: it fades out, with no drop. Where the game refuses it (bosses and the like, and some NPCs), where the actor has no death of its own, or where it's taken but the actor is still standing half a second later, the actor is despawned instead: the game's own delete, as its AI uses, with no death, drop or respawn flag. A despawned boss's fight won't finish as it should. Scenery, the game's system actors and Link are never touched. A killed or despawned actor may be back when the map reloads.
 - **spawn actor by name or type**: any enemy, NPC, object or item the game has (1856 of them). Type a piece of the name in **name has**, pick a **type** (the same kinds as the folders), then **L** on one of the first 40 matches; it's made as **spawn one like it** makes one. Its pack is loaded if the map doesn't already have it. The `_Dictionary` actors are the enemy guide's models.
+- **look at actors**: the free camera over a beam on the ground, as when placing (below) but with nothing to place: for going from actor to actor and killing them. What **d-left** and **d-right** go through starts as **look at** says, under it: **all kinds** (enemies, NPCs, objects and items; to start with), **enemies**, **npcs** or **objects**. While looking, **L** and **R** change it, moving on to the nearest of them at once. (Placing, they go through all kinds.)
+- **spawn where**: **placed with the sticks** (to start with) or **in front of Link**. Placed, the menu closes and the free camera looks down on a yellow beam standing on a ring, with an arrow for the way the actor will face, as furniture is placed in The Sims on a console. The spot starts 3 m in front of Link, or where the free camera is looking if it's already on.
 
-**free camera**: takes the picture off Link so you can fly it anywhere. Close the menu to fly: the left stick moves along the view, the right stick looks round, **ZR** rises, **ZL** sinks and holding **X** goes six times faster. The game gets no input meanwhile, so Link stands where he was; untick it (or use its bind) to get the game's camera back, as it was. What's drawn and culled is the free camera's view, and the watches, air walls and other overlays are drawn from it too. The world isn't loaded round it, though: the game streams the terrain and places the actors round Link, so far from him you see the far, simple terrain and none of the actors there. It can be given buttons in **settings > rebind commands** (under **debug**, **free camera on/off**; unbound to start with), and remote control's `input` sticks and buttons fly it too.
+  While placing or looking, a panel at the top left names what's under the beam (with its life under the name, if it has any) and what d-left and d-right go through, and the controls are shown in a band across the bottom of the screen with the game's own button glyphs, fading in and out with it (in gz's menu style they're in the panel instead):
+  - the **left stick** moves the spot over the ground, as the camera faces; it keeps to the ground (up steps and slopes, off ledges) and turns orange where there's no ground under it, keeping its height
+  - **d-up** and **d-down** move it up and down: it turns orange, keeps that height as the left stick moves it, and a line goes down from it to the ground under it
+  - **L3** (pressing the left stick): back to Link, the spot on the ground where he stands and the camera with it
+  - **R3** (pressing the right stick): hides the controls bar, the beam and the panel, for a clear picture; **R3** again shows them (the game's own HUD is left as its options have it)
+  - the **right stick** swings the camera round the spot and up and down; **ZR** and **ZL** zoom in and out; holding **X** moves the spot (and its height) four times faster
+  - **d-left** and **d-right** step through the actors of the kind shown within 40 m of the spot, nearest first: **d-right** on to the next, **d-left** back to the one before. The spot locks on to each, and the camera glides to it and follows it smoothly, so one that moves doesn't jerk the view. The left stick lets go of it, carrying on from where it is (the next press then starts from the actors near there). Navi and the ocarina's fairy are never in the list.
+  - the ring turns red over an actor: the one locked on to, or one of any kind within 1 m of the beam. **Y** kills or despawns it, as **kill / despawn** does.
+  - looking: **A** goes to the actor locked on to or under the beam, or with none, to where the beam stands (Link moved there as **go to** moves him); you carry on looking until **B**
+  - placing: **L** and **R** turn the arrow, 15 degrees a press (it starts facing the camera), and **A** makes the actor there; you can carry on and make more
+  - **B** finishes and gives the camera back (to Link, or to the free camera if it was on).
+
+  The game gets no input meanwhile, as with the free camera. Opening the menu holds it until the menu's closed; turning the free camera off ends it. Remote control's `input` sticks and buttons work it too.
+
+**free camera**: takes the picture off Link so you can fly it anywhere. Close the menu to fly, with the same controls as the explorer where they're alike, shown in a bar across the bottom of the screen: the left stick moves along the view, the right stick looks round, **d-up** rises, **d-down** sinks and holding **X** goes six times faster; **ZR** and **ZL** zoom in and out (the camera moving along its view); **A** goes back to Link (behind him, looking at him); **R3** hides the controls bar and shows it again; **L3** hands the controller to Link and back again (the bar says which L3 goes to next: **L3 control Link** while you're moving the camera, **L3 control camera** while you're controlling Link): with Link, the game gets every button but L3 and R3 (so A is his as ever; **R3** still hides the bar) and the camera stays where it is, so you can watch him from there; **Y** follows Link (**Y follow Link: on / off** in the bar): the camera keeps its angle and where it is from him and goes with him as he moves, with you controlling him or not, and moving the camera meanwhile changes where it keeps from him; **B** turns it off and gives the game's camera back, as it was (so does unticking it, or its bind). The game gets no input meanwhile, so Link stands where he was, and the module's other shortcuts (levitate, ragdoll, frame advance...) wait until it's off. What's drawn and culled is the free camera's view, and the watches, air walls and other overlays are drawn from it too. The world isn't loaded round it, though: the game streams the terrain and places the actors round Link, so far from him you see the far, simple terrain and none of the actors there. **R + right stick up** turns it on and off too (**settings > rebind commands**, under **debug**, **free camera on/off**; settings files from before it had a bind get it once), and remote control's `input` sticks and buttons fly it too.
 
 **tests > dive tests**: **from heights** and **while moving** measure how deep Link goes into water by how he falls in. Start
 one with Link swimming at the surface (facing open water for **while moving**) and leave the controls alone: it
@@ -558,6 +605,11 @@ opening and closing the wheel quickly doesn't make them flash. Off, they stay ov
 it opened (the game turns its camera for the wheel, so they no longer line up with the picture behind it). Enemy
 health bars still go and come back at once.
 
+**watches while exploring** and **input display while exploring** (both off at first): the watches and the input
+display are hidden while the explorer, **look at actors**, placing an actor or the free camera has the controller,
+so they don't cover the picture or the controls bar. On, each stays on screen there. Either way they're back as soon
+as the tool ends, and while this menu is open over it.
+
 **switch keyboard** (on at first): naming something (an archive, a folder, a watch's label) opens the Switch's own
 keyboard, with its controls: the left stick or D-pad between keys, **L** / **R** to move the cursor in the text, **B**
 to delete, **Y** for a space, **+** to finish (touch and a USB keyboard work too). The game waits while it's up.
@@ -625,7 +677,7 @@ stay the game's. Settings from before the commands with frame advance on **R** b
 
 gz's **commands** menu, here **rebind commands**: each of sloperinaGZ's controls and the buttons it's bound to, under **menu**, **frame
 advance**, **link**, **scene**, **memfiles**, **watches and timer** and **debug**. The **scene** commands, **reload map** ([2.1.2](#212-scene-interaction)) and **end
-cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title screen** and **free camera on/off** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
+cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title screen** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
 **right stick down**); letting go of one ends it, and pressing another button partway through cancels it. When one
 bind is part of another that's also held (**R + D-pad left** holds **D-pad left**), only the bigger one counts, so
 **R + A + D-pad right** resets jump height without also hiding the watches. **run again** takes its buttons in any

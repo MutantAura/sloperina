@@ -2056,6 +2056,10 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   camera) following. debug > free camera does this (freecam.c); the object gets its own vtable back when it's off,
   and is hooked again when the game makes a new one. Checked in game (24th November 2026, 1.1.1): 100 m above Kokiri
   Forest and 450 m across Hyrule Field, and back.
+- **Up:** the matrix is built with the camera's up as well (floats at `+0x50`), and the game's isn't straight up: its
+  own camera leans it with its view (`0.215 0.968 -0.126` at Lon Lon Ranch, 1.1.1, written again every frame). Left
+  as it was, the free camera's picture rolled by that much, the horizon crooked; freecam.c sets it to `0 1 0` in the
+  same hook (checked in game, 25th November 2026).
 - **Not like this:** writing the player camera's views (`component+0x5B8`, +0x450..+0x4F0, §9.18) from the frame hook
   and snapping: the drawn eye the next frame was the game's again (the hook runs before the camera's update).
 - **The traverse system** (what the world is placed round): the game interface `[[main+0x4E91888]]` [`0x4E21428`]
@@ -2112,3 +2116,46 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - **Telling the wheel from the pause screen:** the menu screen Enum (`0x578D41E1`) is `None` (`0xB6EEDE09`) for the
   R item list. When the user opened their wheel, the overlays were hidden as for a menu screen, so the wheel they use
   may set it; the log's pause line now gives the value. Enemy health bars (enemyhp.c) still go and come back at once.
+
+### 9.33 A map's places: dungeon rooms, grottos and interiors in the layouts (1.1.1 dump; checked in game, 25th November 2026)
+- **No separate maps for them.** `romfs/Banc` has 33 maps (and two folders of shared data); grottos and interiors
+  are placed inside their parent map's layout (`<Layout>_{Static,Dynamic}.bcett.byml.zs`), the way the dungeon rooms
+  are inside the dungeon's. `tools/places.py` writes them to `data/places.json` (392 places in 48 layouts), built into
+  `data_places` / `data_placemaps` (data.c) for the explorer (placer.c), found by the map name (`GD_STR_MAP`).
+- **Dungeon rooms:** one `DungeonRoomCenterAnchor` per room (11 to 34 in each dungeon), with no room number; the
+  number is the `Dynamic.DefaultDungeonRoomIndex` most of the nearest numbered actors carry. Labelled by the room's
+  enemies and chests (as conversation-log/dungeon-rooms-2026-11-10.md).
+- **Grottos** (the game's "hiding holes"): each is an AI group `HidingHole_Level_Hole_NN_Prefab_xxxx` (NN its kind)
+  whose references are the grotto's actors, a `DestinationAnchor` where the game puts Link when he drops in, the
+  inside `Area` and the hole's `Area` on the surface (Hyrule Field's ReDead grotto: anchor 154.2 136.5 18.7, the hole
+  163.6 155.7 27.9). One grotto can be several groups at one spot (its hole, its room, `..._EnvArea_*` its look):
+  merged within 6 m across. About half have no anchor (Kakariko's: its entrance under a rock); those are placed at
+  their lowest actors. 13 in Hyrule Field (child).
+- **Interiors** are inside their buildings where they stand: a building `Land_<Town>_House_*` (not its
+  `HouseOutside` shell) has its origin on the floor inside (Kakariko's `House_A_03`: an NPC 0.7 m from it), and
+  interiors elsewhere are made of `Land_*_Interior_*` / `*_Inside_*` pieces, and in Hyrule Field and Gerudo Valley
+  marked by `IndoorAreaBox` volumes too (none in Kakariko or Kokiri Forest). Doors (`Obj_Kakariko_Door_*`,
+  `Obj_Door_Hinge_*`) are plain openings with no links. Gathered where they're within 7 m across and 5 m up.
+  Checked: Link moved to a Kakariko house's origin by load position's move stands inside it, on its floor.
+- **Not here:** loading zones (exits.json) only lead to other maps, never into a grotto or a house. Not checked: going
+  to a dungeon room by load position's move, without the room change the Wallmaster's flow makes
+  (shelved-room-warp-2026-11-10.md), may leave the room asleep.
+- **What wakes a room** (Forest Temple, 25th November 2026): with Link at the entrance, the camera in room 4 shows
+  its walls, floor and chest but not its two Stalfos; Link moved there by load position's move wakes it at once
+  (both Stalfos, 18/18, the map marking him in it). Writing GameData `DungeonRoom` (Int `0x9B529F63`, -1 outside a
+  dungeon) to 4 directly stuck (the game didn't put it back) but woke nothing, the map still marking him at the
+  entrance: it's a record of the room, not what wakes one. The waking follows Link himself, likely through the room
+  number in the VolumeStats grid where he stands (`DungeonRoomId`, §9.21); not found yet.
+- **What the explorer does for now:** going to a room moves Link into it (load position's move) so it wakes, and B
+  puts him back where he was (placer.c, `home`).
+- **To wake a room with Link left where he is** (the explorer's room loading as it should be; estimated 2 to 4 hours,
+  about an even chance): dump main from Lichii's memory (main-memory-dump in the session notes) and find
+  1. the event action `GameSystemActor.EventChangeDungeonRoom` (`ChangeRoomID`; the Wallmaster's
+     `Enemy_Wallmaster_ReturnToEntrance` flow and `Defeat_Ganon` use it, shelved-room-warp-2026-11-10.md): its
+     handler, and the manager it tells (the current room, and what creates and deletes the rooms' actors);
+  2. who reads the VolumeStats `DungeonRoomId` at Link's position each frame and hands it to that manager;
+  3. whether the room's actors are then made by room alone, or also only within a distance of Link (the traverse
+     positions of §9.30: index 0 follows Link; an additional position there woke nothing in Hyrule Field).
+  Then, from the explorer: call the room change for the room the camera is on (or override what the manager reads
+  for Link), and give the room back to Link's own when exploring ends. If actors are also made by distance from
+  Link, a traverse position at the room may be needed too; if that can't be done, moving Link stays.

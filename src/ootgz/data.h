@@ -84,5 +84,11 @@ extern const airmap_t    data_airmaps[];     extern const int data_n_airmaps;
 extern const airshape_t  data_exitshapes[];
 extern const airwall_t   data_exits[];
 extern const airmap_t    data_exitmaps[];    extern const int data_n_exitmaps;
+/* the explorer's places (places.json, tools/places.py): each map's dungeon rooms, grottos and interiors, labelled by
+ * what's in them, at the point the explorer goes to (on or just over its floor) */
+enum { PLACE_ROOM, PLACE_GROTTO, PLACE_INTERIOR, PLACE_KINDS };
+typedef struct { const char *label; uint8_t kind; float pos[3]; } place_t;
+extern const place_t     data_places[];
+extern const airmap_t    data_placemaps[];   extern const int data_n_placemaps;
 
 #endif

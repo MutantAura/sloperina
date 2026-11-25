@@ -991,6 +991,11 @@ static bool phive_ground_cast(const float from[3], const float to[3], float out_
   return true;
 }
 
+bool voidmap_ground_cast(const float from[3], const float to[3], float pos[3], float normal[3])
+{
+  return phive_raycast_ready() && phive_ground_cast(from, to, pos, normal);
+}
+
 /* Sample walkable collision ground at (wx, wz) near Link's height ref_y. Two-stage cast: first from just above
  * Link's head (stays under dungeon ceilings/bridges), then higher up if missed (catches steep uphill slopes). */
 static void sample_ground_cell(const link_state_t *s, bool use_phive, float ref_y, float wx, float wz,

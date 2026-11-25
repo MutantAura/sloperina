@@ -351,7 +351,8 @@ static void use_near(uintptr_t actor)
   near.out[at] = (actor_near_t){ (const char *)name, distance, actor, { pos[0], pos[1], pos[2] }, state };
 }
 
-int actors_near(float radius, actor_near_t *out, int max)
+/* near a point: distance_to_link measures from walk.link_pos, set to the point */
+static int near_from(const vec3f_t *centre, float radius, actor_near_t *out, int max)
 {
   if (!z64hd_game || !z64hd_game->actor_mgr_ptr || max < 1)
     return 0;
@@ -361,8 +362,10 @@ int actors_near(float radius, actor_near_t *out, int max)
   walk.visits = 0;
   walk.visit = use_near;
   walk.link = link_actor();
-  if (!link_drawn_pos(&walk.link_pos))
+  vec3f_t link;
+  if (!centre && !link_drawn_pos(&link))
     return 0;
+  walk.link_pos = centre ? *centre : link;
   for (int i = 0; i < max; i++)
     out[i] = (actor_near_t){ 0 };
   near.out = out;
@@ -371,6 +374,14 @@ int actors_near(float radius, actor_near_t *out, int max)
   near.radius = radius;
   walk_tree(*(uintptr_t *)(mgr + MGR_TREE_ROOT));
   return near.n;
+}
+
+int actors_near(float radius, actor_near_t *out, int max) { return near_from(0, radius, out, max); }
+
+int actors_near_point(const float point[3], float radius, actor_near_t *out, int max)
+{
+  vec3f_t centre = { point[0], point[1], point[2] };
+  return near_from(&centre, radius, out, max);
 }
 
 /* --- every actor in the manager (debug > actors > browse) ------------------------------------------ */
@@ -497,6 +508,20 @@ actor_kill_t actor_kill(uintptr_t actor)
   bool ok = MAIN_FN(actor_delete_t, z64hd_game->actor_delete)(actor, DELETE_AS_AI);
   log_printf("actors: delete request to %s %#lx (no Death component): %s", a.name, (unsigned long)actor,
              ok ? "taken" : "refused");
+  return ok ? KILL_DELETED : KILL_DELETE_REFUSED;
+}
+
+actor_kill_t actor_despawn(uintptr_t actor)
+{
+  actor_read_t a;
+  if (!z64hd_game || !z64hd_game->actor_delete)
+    return KILL_UNKNOWN;
+  if (!actor_read(actor, &a))
+    return KILL_GONE;
+  if (actor == link_actor() || !(deletable(a.name) || starts_with(a.name, "Enemy_")))
+    return KILL_NOT_ALLOWED;
+  bool ok = MAIN_FN(actor_delete_t, z64hd_game->actor_delete)(actor, DELETE_AS_AI);
+  log_printf("actors: despawn (delete request) to %s %#lx: %s", a.name, (unsigned long)actor, ok ? "taken" : "refused");
   return ok ? KILL_DELETED : KILL_DELETE_REFUSED;
 }
 

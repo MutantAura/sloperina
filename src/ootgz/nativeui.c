@@ -1115,6 +1115,7 @@ static const struct { const char *word; uint32_t glyph, other; } buttons[] = {
   { "ls-down", GF_LSTICK_DOWN, 0 }, { "rs-up", GF_RSTICK, 0 }, { "rs-left", GF_RSTICK, 0 }, /* not menu text */
   { "rs-right", GF_RSTICK, 0 }, { "ls-up", GF_LSTICK, 0 }, { "ls-left", GF_LSTICK, 0 }, /* not menu text */
   { "ls-right", GF_LSTICK, 0 }, /* not menu text */
+  { "LS", GF_LSTICK, 0 }, { "RS", GF_RSTICK, 0 }, /* the sticks themselves (the actor placer's panel) */
 };
 
 /* a bind's button (binds.h: input.h's bit number) as a glyph; 0 for SL / SR, which have none */
@@ -2870,6 +2871,59 @@ static void draw_menu_moving(const gfx_panel_t *panel, float x, float y, float w
 }
 
 int nativeui_band_scale;
+
+/* the control guide: one line of hint words (button names as glyphs) on the band the watches sit on, fading out at
+ * both ends, centred across the picture's foot */
+#define GUIDE_ROW_FP 14    /* its row: a little taller than a hint's */
+#define GUIDE_PAD_EM 0.9f  /* its text from the band's full part, each side, in its em */
+#define GUIDE_FADE_EM 2.5f /* the band's fade at each end */
+#define GUIDE_UP_FP 6      /* off the picture's foot, past the margin */
+#define GUIDE_LINES 3
+
+bool nativeui_guide(const char *text, int w, int h, int margin, int scale, float alpha)
+{
+  if (!gpuui_ready() || !nativeui_ready() || !text || !*text || w <= 0 || h <= 0 || alpha <= 0)
+    return false;
+  fp_px = (float)scale / NUI_SC_ONE;
+  mrow_t r;
+  memset(&r, 0, sizeof(r));
+  r.kind = GFX_ROW_HINT;
+  r.scale = scale;
+  r.cols = r.switch_from = r.indent_from = GFX_COLS;
+  r.opens_at = -1;
+  r.h = GUIDE_ROW_FP * fp_px;
+  row_metrics(&r);
+  int len = (int)__builtin_strlen(text);
+  gpu = true;
+  gpu_fade = alpha; /* the band and its words fade in and out together */
+  /* its lines ("\n" between them), each centred: the band as wide as the widest */
+  int from[GUIDE_LINES], to[GUIDE_LINES], lines = 0;
+  float line_w[GUIDE_LINES], text_w = 0;
+  for (int i = 0; i <= len && lines < GUIDE_LINES;) {
+    int e = i;
+    while (e < len && text[e] != '\n')
+      e++;
+    from[lines] = i, to[lines] = e;
+    line_w[lines] = hint_words(&r, text, i, e, 0, false);
+    text_w = line_w[lines] > text_w ? line_w[lines] : text_w;
+    lines++;
+    i = e + 1;
+  }
+  float fade = r.em * GUIDE_FADE_EM, pad = r.em * GUIDE_PAD_EM;
+  float bw = text_w + 2 * (fade + pad), bh = r.h * lines + pad;
+  float x = ((float)w - bw) / 2, y = (float)h - (float)margin - GUIDE_UP_FP * fp_px - bh;
+  draw_band(x, y, bw, bh, fade, fade, 0, 0, alpha);
+  gpu_fade = alpha;
+  strip_w = (int)(text_w + 1);
+  for (int l = 0; l < lines; l++) {
+    gpu_x = x + fade + pad + (text_w - line_w[l]) / 2;
+    gpu_y = y + pad / 2 + r.h * l;
+    hint_words(&r, text, from[l], to[l], 0, true);
+  }
+  gpu = false;
+  gpu_fade = 1;
+  return true;
+}
 
 bool nativeui_gpu_panel(const gfx_panel_t *panel, int x, int y, int w, int h, int scale, int opacity,
                         nui_legacy_fn legacy)

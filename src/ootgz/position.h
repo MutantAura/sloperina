@@ -14,6 +14,10 @@ void position_set(double x, double y, double z, double facing_degrees);
 /* Link to a spot of this map as a load puts him there, leaving the saved position alone (debug > actors > go
  * to); false, with a notice, if he can't be moved now */
 bool position_goto(double x, double y, double z);
+/* the same with no notices for it (the explorer's own moves, placer.c); false if one is under way */
+bool position_goto_quiet(double x, double y, double z);
+/* a load or go to is under way (its writes, or waiting to start) */
+bool position_busy(void);
 /* frame hook, after levitate_frame: the shortcuts, and a load in progress */
 void position_frame(bool menu_open);
 

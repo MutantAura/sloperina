@@ -18,6 +18,7 @@
 #include "gfx.h"
 #include "link.h"
 #include "osk.h"
+#include "placer.h"
 #include "position.h"
 #include "sys.h"
 
@@ -108,27 +109,61 @@ static void act_goto(menu_item_t *it)
   }
 }
 
-static void act_kill(menu_item_t *it)
+/* a death the game took, watched: an actor still running this many frames later (an NPC whose AI pays it no heed)
+ * is despawned */
+#define DEATH_WATCH 30
+static struct {
+  uintptr_t actor;
+  int frames;
+} death_watch;
+
+static void despawn(uintptr_t actor, const char *why)
 {
-  if (!chosen) {
-    gfx_notice("choose an actor first");
-    return;
-  }
-  switch (actor_kill(chosen)) {
-    case KILL_DEATH:
-      gfx_notice("killed");
-      break;
-    case KILL_DEATH_REFUSED:
-      gfx_notice("it won't die that way (a boss, or already dying)");
-      break;
+  switch (actor_despawn(actor)) {
     case KILL_DELETED:
-      gfx_notice("deleted (it had no death of its own)");
+      gfx_notice(why);
       break;
     case KILL_DELETE_REFUSED:
-      gfx_notice("the game refused to delete it");
+      gfx_notice("the game refused to despawn it");
       break;
+    case KILL_GONE:
+      break; /* gone after all */
+    default:
+      gfx_notice("not that one: only enemies, npcs and things");
+      break;
+  }
+}
+
+static void death_watch_frame(void)
+{
+  if (!death_watch.actor || --death_watch.frames > 0)
+    return;
+  actor_read_t a;
+  if (actor_read(death_watch.actor, &a) && a.running) {
+    log_printf("actors: %s still running %d frames after its death request: despawned", a.name, DEATH_WATCH);
+    despawn(death_watch.actor, "despawned (it wouldn't die)");
+  }
+  death_watch.actor = 0;
+}
+
+bool actorsmenu_kill(uintptr_t actor)
+{
+  actor_kill_t result = actor_kill(actor);
+  switch (result) {
+    case KILL_DEATH:
+      gfx_notice("killed");
+      death_watch.actor = actor; /* despawned if it pays the death no heed */
+      death_watch.frames = DEATH_WATCH;
+      break;
+    case KILL_DEATH_REFUSED: /* a boss, or one whose death ignores this reason: despawned */
     case KILL_NOT_ALLOWED:
-      gfx_notice("not that one: it can't die, and only npcs and things are deleted");
+      despawn(actor, "despawned (it won't die that way)");
+      return true;
+    case KILL_DELETED:
+      gfx_notice("despawned (it has no death of its own)");
+      break;
+    case KILL_DELETE_REFUSED:
+      gfx_notice("the game refused to despawn it");
       break;
     case KILL_GONE:
       gfx_notice("that actor has gone");
@@ -137,30 +172,65 @@ static void act_kill(menu_item_t *it)
       gfx_notice("kill: not known for this game version");
       break;
   }
+  return result == KILL_DEATH || result == KILL_DELETED;
 }
 
-/* spawn: one more of the chosen actor's name, then watched for in the actor tree until it appears */
+static void act_kill(menu_item_t *it)
+{
+  if (!chosen) {
+    gfx_notice("choose an actor first");
+    return;
+  }
+  actorsmenu_kill(chosen);
+}
+
+/* spawn: placed with the sticks first (placer.c), or straight away in front of Link; then watched for in the actor
+ * tree until it appears */
 #define SPAWN_AHEAD 2.0     /* metres in front of Link */
 #define SPAWN_WAIT 600      /* frames to look for it (its pack may have to load) */
 #define SPAWN_COUNT_MAX 128
 
 float atan2f(float y, float x); /* from sdk */
 
+static int spawn_where; /* 0: placed with the sticks, 1: in front of Link */
+static const char *const spawn_where_names[] = { "placed with the sticks", "in front of Link" };
+
 static struct {
   char name[64];
-  int frames, before;
+  int frames, before, pending; /* pending: asked for and not seen yet */
 } spawning;
 static uintptr_t spawn_found[SPAWN_COUNT_MAX];
 
-/* the game asked to make `name` in front of Link, facing him; watched for by spawn_frame */
+bool actorsmenu_spawn_at(const char *name, const float at[3], float yaw)
+{
+  if (!spawning.frames || compare_names(spawning.name, name)) { /* a new watch (one of another name is given up) */
+    snprintf(spawning.name, sizeof(spawning.name), "%s", name);
+    spawning.before = actors_named(spawning.name, spawn_found, SPAWN_COUNT_MAX);
+    spawning.pending = 0;
+  }
+  uint32_t result;
+  if (!actor_spawn(spawning.name, at, yaw, &result)) {
+    char text[96];
+    snprintf(text, sizeof(text), "the game refused to make it (%u)", (unsigned)result);
+    gfx_notice(text);
+    return false;
+  }
+  spawning.pending++;
+  spawning.frames = SPAWN_WAIT;
+  gfx_notice("spawning");
+  return true;
+}
+
+/* the game asked to make `name`: placed first, or in front of Link, facing him */
 static void spawn_named(const char *name)
 {
-  vec3f_t link;
-  double fx = 0, fz = 1;
-  if (spawning.frames) {
-    gfx_notice("still waiting for the last one");
+  if (spawn_where == 0) {
+    if (placer_start(name))
+      menu_close(); /* to place it */
     return;
   }
+  vec3f_t link;
+  double fx = 0, fz = 1;
   if (!link_drawn_pos(&link)) {
     gfx_notice("spawn: Link not found");
     return;
@@ -168,18 +238,8 @@ static void spawn_named(const char *name)
   link_facing(&fx, &fz);
   float at[3] = { (float)(link.x + fx * SPAWN_AHEAD), (float)link.y, (float)(link.z + fz * SPAWN_AHEAD) };
   float yaw = atan2f((float)fx, (float)fz) * (180.0f / 3.14159265f) + 180.0f; /* facing Link */
-  snprintf(spawning.name, sizeof(spawning.name), "%s", name);
-  spawning.before = actors_named(spawning.name, spawn_found, SPAWN_COUNT_MAX);
-  uint32_t result;
-  if (!actor_spawn(spawning.name, at, yaw, &result)) {
-    char text[96];
-    snprintf(text, sizeof(text), "the game refused to make it (%u)", (unsigned)result);
-    gfx_notice(text);
-    return;
-  }
-  spawning.frames = SPAWN_WAIT;
-  gfx_notice("spawning");
-  menu_close(); /* so it can be watched */
+  if (actorsmenu_spawn_at(name, at, yaw))
+    menu_close(); /* so it can be watched */
 }
 
 static void act_spawn(menu_item_t *it)
@@ -202,12 +262,29 @@ static void spawn_frame(void)
   if (now > spawning.before) {
     log_printf("actors: %s made after %d frames (%d now)", spawning.name, SPAWN_WAIT - spawning.frames, now);
     gfx_notice("spawned");
-    spawning.frames = 0;
+    spawning.pending -= now - spawning.before;
+    spawning.before = now;
+    if (spawning.pending <= 0)
+      spawning.frames = 0;
   } else if (!spawning.frames) {
     log_printf("actors: %s didn't appear in %d frames", spawning.name, SPAWN_WAIT);
     gfx_notice("it didn't appear");
   }
 }
+
+static int look_kind; /* PLACER_ALL ... */
+
+static void act_look(menu_item_t *it)
+{
+  if (placer_look(look_kind))
+    menu_close();
+}
+
+static int get_look_kind(menu_item_t *it) { return look_kind; }
+static void set_look_kind(menu_item_t *it, int choice) { look_kind = choice; }
+
+static int get_spawn_where(menu_item_t *it) { return spawn_where; }
+static void set_spawn_where(menu_item_t *it, int choice) { spawn_where = choice; }
 
 /* the chosen actor, as it is now: three lines */
 static void text_chosen(menu_item_t *it, char *buf, int len)
@@ -247,10 +324,10 @@ static void fill_chosen(void)
     item->hint = "L: Link to this actor (load position's way; the saved position stays)";
   item = menu_add_action(&m_chosen, "spawn one like it", act_spawn, 0);
   if (item)
-    item->hint = "L: the game makes another of this actor, in front of Link (its pack loads if it must)";
-  item = menu_add_action(&m_chosen, "kill", act_kill, 0);
+    item->hint = "L: another of this actor: placed with the sticks (A spawns, Y kills or despawns, B ends), or in front of Link";
+  item = menu_add_action(&m_chosen, "kill / despawn", act_kill, 0);
   if (item)
-    item->hint = "L: the game's death request, as a fall into the void; npcs and things with none are deleted";
+    item->hint = "L: the game's death request (a fall into the void); despawned if it won't die or has no death";
   menu_add_return(&m_chosen);
   menu_refresh(&m_chosen);
 }
@@ -455,7 +532,7 @@ static void fill_folder(void)
       snprintf(frow_labels[n_frows], sizeof(frow_labels[n_frows]), "%s%6.1f  %s", mark, (double)a->distance, a->name);
     item = menu_add_action(&m_folder, frow_labels[n_frows], act_open_row, n_frows);
     if (item) {
-      item->hint = "L: open it: where it is, go to, spawn one like it, kill";
+      item->hint = "L: open it: where it is, go to, spawn one like it, kill or despawn";
       item->log_label = "";
     }
     n_frows++;
@@ -533,7 +610,7 @@ static void fill_spawn(void)
   for (int i = 0; i < n_spawn_rows; i++) {
     item = menu_add_action(&m_spawn, actor_names[spawn_rows[i]], act_spawn_row, i);
     if (item) {
-      item->hint = "L: the game makes it in front of Link, facing him (its pack loads if it must)";
+      item->hint = "L: place it with the sticks, A to spawn and B to end (or in front of Link: spawn where)";
       item->log_label = "";
     }
   }
@@ -547,7 +624,7 @@ static void fill_spawn(void)
 
 menu_t *actorsmenu_build(void)
 {
-  menu_init(&m_actors, "actors", 3);
+  menu_init(&m_actors, "actors", 6);
   menu_init(&m_spawn, "spawn actor by name or type", SPAWN_ROWS + 5);
   fill_spawn();
   menu_init(&m_browse, "browse current actors", N_KINDS + 6);
@@ -562,6 +639,15 @@ menu_t *actorsmenu_build(void)
   item = menu_add_submenu(&m_actors, "spawn actor by name or type", &m_spawn);
   if (item)
     item->hint = "any enemy, npc, object or item the game has: it loads what it needs";
+  item = menu_add_action(&m_actors, "look at actors", act_look, 0);
+  if (item)
+    item->hint = "L: the free camera over a beam: d-left/right go from actor to actor, Y kills or despawns, B ends";
+  item = menu_add_option(&m_actors, "look at", PLACER_KINDS, placer_kind_names, get_look_kind, set_look_kind, 0);
+  if (item)
+    item->hint = "which actors look at actors steps through to start with (ZL/ZR change it while looking)";
+  item = menu_add_option(&m_actors, "spawn where", 2, spawn_where_names, get_spawn_where, set_spawn_where, 0);
+  if (item)
+    item->hint = "placed: a beam to move with the left stick, the camera on the right, A spawns, Y kills or despawns, B ends";
   menu_add_return(&m_actors);
   return &m_actors;
 }
@@ -569,6 +655,7 @@ menu_t *actorsmenu_build(void)
 void actorsmenu_frame(void)
 {
   spawn_frame();
+  death_watch_frame();
   static menu_t *was;
   if (menu_current != was) {
     if (menu_current == &m_browse && was != &m_folder)

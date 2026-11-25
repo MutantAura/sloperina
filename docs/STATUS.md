@@ -31,6 +31,14 @@ The game patches are the same as 0.0.11's (patch v6).
 
 ## Unfinished or not checked
 
+- **Explorer: waking a dungeon room without moving Link.** The game wakes a room only for where Link is, so the
+  explorer takes him into each room and B puts him back. The user wants the room to wake for the camera alone, with
+  Link left where he is: the plan (finding the game's room change and calling it) is in FINDINGS 9.33.
+- **A Lichii hang, seen once** (25th November 2026): with take Link on, the explorer put Link in the Forest Temple's
+  room 0 and its Wolfos attacked him; about 3 s later Lichii's GPU thread stopped ("Waited N s for the GPU thread to
+  submit", eden_log.txt) and the game froze. The module's log was ordinary up to then (its game thread ran on); not
+  seen again, and not known whether the module had a part in it.
+
 - **Time of day before the story starts the clock**: on an early save the clock stays at 06:00 and ignores setting.
   Kaepora in Hyrule Field, or Impa's escort after Zelda's Lullaby, starts it; what they change isn't found. See
   FINDINGS 9.31 for what's ruled out. Next: the quest steps followed by a map reload (may autosave the save: ask

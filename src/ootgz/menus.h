@@ -13,6 +13,9 @@ extern bool frame_advance, frame_advance_in_pause, pause_display;
 /* the watches, the input display and the log are hidden while the game's pause screen or map is open,
  * and while its item wheel is */
 extern bool hide_in_game_menus, hide_over_item_wheel;
+/* settings > menu settings > watches / input display while exploring: shown while the free camera, the explorer, look
+ * at actors or placing has the controller (hidden there at first) */
+extern bool tools_show_watches, tools_show_input;
 /* the world overlays (air walls, void out, save positions, the hookshot's hook, enemy health) are hidden while the
  * game's pause screen or map is open, and while its item wheel is with this (on at first; they fade out and in, so
  * they don't flash; off: they stay over the wheel as they were when it opened) */

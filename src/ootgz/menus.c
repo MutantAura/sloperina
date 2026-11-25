@@ -30,6 +30,7 @@
 #include "actorsmenu.h"
 #include "timeofday.h"
 #include "freecam.h"
+#include "placer.h"
 #include "tpose.h"
 #include "hsstore.h"
 #include "remote.h"
@@ -2916,11 +2917,18 @@ static void build_memfiles(void)
   m_memfiles.footer = MEMFILE_SLOTS + 1;
 }
 
+/* scene > explorer (placer.c): this map's rooms, grottos and interiors */
+static void act_explorer(menu_item_t *it)
+{
+  if (placer_explore())
+    menu_close();
+}
+
 static void build_scene(void)
 {
   build_savepos();
   build_voids();
-  menu_init(&m_scene, "scene", 12);
+  menu_init(&m_scene, "scene", 13);
   menu_item_t *reload = menu_add_action(&m_scene, "reload map", act_reload_map, 0);
   if (reload)
     reload->hint = "L: reload this map (at the age set in the link menu)";
@@ -2930,6 +2938,7 @@ static void build_scene(void)
   menu_item_t *tod = menu_add_submenu(&m_scene, "time of day", tod_menu_build());
   if (tod)
     tod->hint = "the game's clock: see it, set it, freeze it";
+  menu_add_action(&m_scene, "explorer", act_explorer, 0); /* no hint: its controls are in its own bar */
   menu_add_heading(&m_scene, "collision");
   menu_add_submenu(&m_scene, "environment", &m_collision);
   menu_add_submenu(&m_scene, "void out", &m_voids);
@@ -4009,6 +4018,12 @@ static void build_commands(void)
 /* settings > menu settings */
 static menu_t m_menu_settings;
 
+bool tools_show_watches, tools_show_input;
+static bool get_tools_watches(menu_item_t *it) { return tools_show_watches; }
+static void set_tools_watches(menu_item_t *it, bool on) { tools_show_watches = on; }
+static bool get_tools_input(menu_item_t *it) { return tools_show_input; }
+static void set_tools_input(menu_item_t *it, bool on) { tools_show_input = on; }
+
 static bool get_switch_keyboard(menu_item_t *it)
 {
   return swkbd_enabled;
@@ -4021,7 +4036,7 @@ static void set_switch_keyboard(menu_item_t *it, bool on)
 
 static void build_menu_settings(void)
 {
-  menu_init(&m_menu_settings, "menu settings", 10);
+  menu_init(&m_menu_settings, "menu settings", 12);
   menu_item_t *language = menu_add_option(&m_menu_settings, "language", 1, lang_names(), get_lang, set_lang, 0);
   if (language)
     language->hint = "files in sd:/sloperinaGZ/lang (see lang/template.json)";
@@ -4047,6 +4062,14 @@ static void build_menu_settings(void)
                         "stay as they were when it opened)";
     world_wheel->log_label = "hide world overlays over item wheel:";
   }
+  menu_item_t *tools_watches = menu_add_check(&m_menu_settings, "watches while exploring", get_tools_watches,
+                                              set_tools_watches, 0);
+  if (tools_watches)
+    tools_watches->hint = "keep the watches on screen in the explorer, look at actors, placing and the free camera";
+  menu_item_t *tools_input = menu_add_check(&m_menu_settings, "input display while exploring", get_tools_input,
+                                            set_tools_input, 0);
+  if (tools_input)
+    tools_input->hint = "keep the input display on screen in the explorer, look at actors, placing and the free camera";
   menu_item_t *keyboard = menu_add_check(&m_menu_settings, "switch keyboard", get_switch_keyboard,
                                          set_switch_keyboard, 0);
   if (keyboard) {
@@ -4407,15 +4430,8 @@ static void build_debug(void)
   build_flaglog();
   menu_init(&m_debug, "debug", 10);
   menu_item_t *freecam = menu_add_check(&m_debug, "free camera", get_freecam, set_freecam, 0);
-  if (freecam) {
-    freecam->hint = "close the menu to fly: left stick move, right stick look, ZR up, ZL down, X fast";
+  if (freecam) /* no hint: its controls are in its own bar while it's on */
     freecam->log_label = "free camera:";
-  }
-  menu_item_t *to_title = menu_add_action(&m_debug, "return to title screen", act_return_to_title, 0);
-  if (to_title) {
-    to_title->hint = "L: back to the title screen from anything: cutscenes, menus, game over (what isn't saved is lost)";
-    to_title->log_label = "return to title screen";
-  }
   menu_item_t *actors = menu_add_submenu(&m_debug, "actors", actorsmenu_build());
   if (actors)
     actors->hint = "browse the actors loaded in the scene (go to, copy or kill one), or spawn any actor";
@@ -4425,6 +4441,11 @@ static void build_debug(void)
   menu_add_submenu(&m_debug, "pause research", &m_pause_research);
   menu_add_submenu(&m_debug, "flag logging", &m_flaglog);
   menu_add_submenu(&m_debug, "log", &m_log);
+  menu_item_t *to_title = menu_add_action(&m_debug, "return to title screen", act_return_to_title, 0);
+  if (to_title) {
+    to_title->hint = "L: back to the title screen from anything: cutscenes, menus, game over (what isn't saved is lost)";
+    to_title->log_label = "return to title screen";
+  }
   menu_add_return(&m_debug);
   memview_build(&m_watches);
 

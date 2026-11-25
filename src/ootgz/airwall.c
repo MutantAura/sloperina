@@ -17,6 +17,7 @@
 #include "gamedata.h"
 #include "hsstore.h"
 #include "menus.h"
+#include "placer.h"
 #include "age.h"
 #include "link.h"
 #include "lang.h"
@@ -808,10 +809,17 @@ void airwall_frame(bool gpu)
   n_air_walls_near = 0;
   link_boxes[f].ok = false;
   bool walls = (airwalls_shown || void_areas_shown()) && current_map;
-  bool draw = walls || savepos_shown || voidmap_shown || hsstore_shown;
+  bool draw = walls || savepos_shown || voidmap_shown || hsstore_shown || placer_active;
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
-    /* the save position's markers (savepos.c) first: a few lines the walls' budget never cuts */
+    /* the actor placer's beam and ring (placer.c) first: a few lines nothing else's budget cuts */
+    static float place_ends[PLACER_MAX_LINES][2][3];
+    static uint8_t place_colours[PLACER_MAX_LINES];
+    int n_place = placer_lines(place_ends, place_colours, PLACER_MAX_LINES);
+    for (int i = 0; i < n_place; i++)
+      add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, place_ends[i][0], place_ends[i][1], place_colours[i],
+                    false);
+    /* the save position's markers (savepos.c): a few lines the walls' budget never cuts */
     static float mark_ends[SAVEPOS_MAX_LINES][2][3];
     static uint8_t mark_colours[SAVEPOS_MAX_LINES];
     int n_marks = savepos_lines(mark_ends, mark_colours, SAVEPOS_MAX_LINES);

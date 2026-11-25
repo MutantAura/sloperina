@@ -7,21 +7,36 @@
  * New age: Sequence_IsChildhood, the map's other-age version (X_Child <-> X_Adult; maps without one,
  * like the dungeons, are shared), and the sword and shield swapped with PlayerStatus.AnotherEraEquip*,
  * which hold the other age's (the Temple of Time does the same). Adult-only tunics and boots are taken
- * off for a child. Nothing is applied to Link until the map loads. */
+ * off for a child. Nothing is applied to Link until the map loads.
+ *
+ * Override age (warps menu): a map whose GameBancParam has IsForceSwitchChildOrAdult sets the age on entry; the load
+ * script (LoadBancImpl) and the scene setup (main+0x9B76A0 on 1.1.1) both skip that while
+ * DebugParam.IsSetChildhoodManually is on, and the load script turns it off after reading it, so it is written
+ * every frame from the warp until the new map has settled. */
 #include "age.h"
 
 #include "binds.h"
 #include "data.h"
 #include "gamedata.h"
 #include "gfx.h"
+#include "link.h"
 #include "sys.h"
 #include "warp.h"
 
 #define F_IS_CHILDHOOD 0xCEA220D3u /* Sequence_IsChildhood */
 #define F_OTHER_WEAPON 0xA1F7EE2Bu /* PlayerStatus.AnotherEraEquipWeapon */
 #define F_OTHER_SHIELD 0x2342B619u /* PlayerStatus.AnotherEraEquipShield */
+#define F_SET_CHILD_MANUALLY 0x86724737u /* DebugParam.IsSetChildhoodManually */
+
+/* how long the override stays on: frames after the game reserved the map (a load measured ~640 on 1.1.1),
+ * and at most from the warp */
+#define OVERRIDE_AGE_AFTER_RESERVED 900
+#define OVERRIDE_AGE_MAX_FRAMES     2400
 
 static int wanted_age = -1; /* -1: follow the game's */
+static int override_age = -1; /* -1: disabled, the map decides */
+static bool holding_override;
+static uint32_t hold_started, hold_reserved; /* frames; hold_reserved 0 until the warp is done */
 
 int age_current(void)
 {
@@ -233,8 +248,75 @@ bool age_warp_to_silent(const char *name, const char *last_start, bool have_pos)
   return warp_arm_silent(map, spawn);
 }
 
+int age_override(void)
+{
+  return override_age;
+}
+
+void age_set_override(int age)
+{
+  override_age = age == AGE_CHILD || age == AGE_ADULT ? age : -1;
+}
+
+static void hold_override(bool on)
+{
+  if (holding_override == on)
+    return;
+  holding_override = on;
+  gd_set_bool(F_SET_CHILD_MANUALLY, on);
+  log_printf("override age: override %s", on ? "on" : "off");
+}
+
+void age_prepare_warp(void)
+{
+  if (override_age < 0) {
+    hold_override(false);
+    return;
+  }
+  int current_age = age_current();
+  if (current_age < 0) {
+    gfx_notice("override age: game data not found");
+    return;
+  }
+  if (override_age != current_age) {
+    if (undo_age < 0) {
+      undo_age = current_age;
+      snprintf(undo_tunic, sizeof(undo_tunic), "%s", gd_get_str(GD_STR_TUNIC) ? gd_get_str(GD_STR_TUNIC) : "");
+      snprintf(undo_boots, sizeof(undo_boots), "%s", gd_get_str(GD_STR_BOOTS) ? gd_get_str(GD_STR_BOOTS) : "");
+    } else if (override_age == undo_age) {
+      undo_age = -1;
+    }
+    apply_age(override_age);
+  }
+  wanted_age = -1;
+  hold_started = frame_counter();
+  hold_reserved = 0;
+  holding_override = false;
+  hold_override(true);
+}
+
+/* keep the override on until the new map has settled, or the warp was given up */
+static void override_age_frame(void)
+{
+  if (!holding_override)
+    return;
+  uint32_t now = frame_counter();
+  if (warp_abandoned() || now - hold_started > OVERRIDE_AGE_MAX_FRAMES) {
+    hold_override(false);
+    return;
+  }
+  if (!hold_reserved && !warp_pending() && warp_requested())
+    hold_reserved = now ? now : 1;
+  if (hold_reserved && now - hold_reserved > OVERRIDE_AGE_AFTER_RESERVED) {
+    hold_override(false);
+    return;
+  }
+  gd_set_bool(F_SET_CHILD_MANUALLY, true); /* the load script turns it off once it has read it */
+}
+
 void age_frame(void)
 {
+  override_age_frame();
   if (cmd_pressed(CMD_RELOAD_MAP)) { /* unbound unless given buttons (settings > rebind commands) */
     gfx_logf("reload map (%s)", age_wanted() == AGE_ADULT ? "adult" : "child");
     age_reload_map();

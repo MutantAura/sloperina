@@ -1653,6 +1653,11 @@ and **safety flags** watches read it (`safety.c`).
     `ChangeBanc.module` N7–N9 and auto-clears to `false`.
   - `DebugParam.IsSetChildhoodManually` (`0x86724737`, `Bool`): makes `LoadBancImpl.module` N29–N35 honor the existing
     `Sequence_IsChildhood` value and auto-clears to `false`.
+    The scene setup (1.1.1 `main+0x9B76A0`) reads it again later in the load: with it off, it writes the scene's
+    `GameBancParam.IsChildWhenInitializingScene` to `Sequence_IsChildhood`. A map that forces an age
+    (`IsForceSwitchChildOrAdult`, e.g. `GerudoFortress_Adult`) therefore keeps Link's age only if the flag is set
+    again after `LoadBancImpl` clears it; warps > override age writes it every frame until the map has loaded
+    (checked in game on 1.1.1: child Link in Gerudo Fortress).
   - `DebugParam.IsOverrideTraversePos` (`0x7325CE62`, `Bool`) + `DebugParam.OverrideTraversePos` (`0x527FA715`,
     `Vector3`): overrides chunk/actor traverse coordinates in `OnLoadBancParam.module` N12–N16 (not auto-cleared by the
     engine).

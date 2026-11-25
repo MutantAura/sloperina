@@ -18,4 +18,11 @@ void age_reload_map(void); /* reload the map at the start point Link last arrive
  * is known or the game refused the warp request immediately. */
 bool age_warp_to_silent(const char *name, const char *last_start, bool have_pos);
 
+/* warps > override age: -1 = disabled (the map's own age rule), else AGE_CHILD / AGE_ADULT */
+int age_override(void);
+void age_set_override(int age);
+/* Before a menu warp: with override age set, give Link that age now and keep DebugParam.IsSetChildhoodManually on
+ * through the map load, so a map that forces an age (GerudoFortress_Adult) keeps the one set here. */
+void age_prepare_warp(void);
+
 #endif

@@ -128,6 +128,7 @@ Four submenus, then under **return** what can only be read: Link's **position** 
 | Item | What it does |
 |---|---|
 | **places** | Every map, sorted into **overworld (child)**, **overworld (adult)**, **dungeons**, **boss & battle rooms** and **other**. Pick a map, then a spawn point; you go there straight away with the game's own fade. |
+| **override age** | **disabled** (the map decides, as in the game), **child** or **adult**: the age Link arrives at. Child or adult also works in a map made for the other age (child Link in Gerudo Fortress): the age is set when you warp, sword and shield swapped as by **link > status > age**, and the map's own age switch is held off until the map has loaded. |
 | **cancel warp** | Cancels a warp that's waiting (see below). |
 | **arrival cutscenes** | Arrive with the spawn point's own arrival scene instead of the standard one. |
 

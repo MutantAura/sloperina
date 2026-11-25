@@ -254,8 +254,8 @@ static bool kind_of(const char *n, int kind)
 {
   if (starts_with(n, "Npc_Navi") || starts_with(n, "Item_Ocarina")) /* not menu text */
     return false;
-  bool enemy = starts_with(n, "Enemy_"), npc = starts_with(n, "Npc_"),
-       object = starts_with(n, "Obj_") || starts_with(n, "Item_");
+  bool enemy = starts_with(n, "Enemy_"), npc = starts_with(n, "Npc_") || starts_with(n, "Animal_"), /* animals with */
+       object = starts_with(n, "Obj_") || starts_with(n, "Item_");                                      /* the npcs */
   return kind == SHOW_ENEMIES ? enemy : kind == SHOW_NPCS ? npc : kind == SHOW_OBJECTS ? object : enemy || npc || object;
 }
 

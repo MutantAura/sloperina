@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#include "actornames.h"
 #include "binds.h"
 #include "enemyhp.h"
 #include "gamedata.h"
@@ -684,6 +685,94 @@ static void run_place(char *args)
 
 #define ACTORS_MAX 24
 
+/* "spawn <actor> [metres]": the game makes that actor that far in front of Link (2 m unless said), facing him, as
+ * debug > actors > spawn actor by name does, through the create request's handle (actor_spawn_handle, FINDINGS 9.29
+ * and 9.34); the line ends when the actor made is running. Only the names that menu offers (actornames.c): a name the
+ * game has no ActorInfo row for would take a template slot for good. */
+#define SPAWN_AHEAD 2.0
+#define SPAWN_WAIT 600 /* frames to wait for it (its pack may have to load) */
+
+static struct {
+  bool active;
+  const char *name; /* actornames.c's */
+  int frames;
+  uintptr_t handle, actor; /* the request's status (the game writes it), then the actor made */
+} spawning;
+
+static const char *known_actor(const char *name)
+{
+  for (int i = 0; i < actor_names_count; i++)
+    if (same(actor_names[i], name))
+      return actor_names[i];
+  return 0;
+}
+
+static void run_spawn(char *args)
+{
+  char *name = take_word(&args);
+  char *metres = take_word(&args);
+  double d = SPAWN_AHEAD;
+  if (!*name || (*metres && !parse_decimal(metres, &d))) {
+    result(false, "spawn: an actor's name (as debug > actors lists it), then metres in front of Link (%.0f unless "
+           "said)", SPAWN_AHEAD);
+    return;
+  }
+  const char *actor = known_actor(name);
+  vec3f_t me;
+  double fx = 0, fz = 1;
+  if (!actor) {
+    result(false, "spawn: %s isn't one of the %d actors spawn actor by name offers", name, actor_names_count);
+    return;
+  }
+  if (!link_drawn_pos(&me)) {
+    result(false, "spawn: Link not found");
+    return;
+  }
+  link_facing(&fx, &fz);
+  float at[3] = { (float)(me.x + fx * d), me.y, (float)(me.z + fz * d) };
+  float yaw = atan2f((float)fx, (float)fz) * (180.0f / 3.14159265f) + 180.0f; /* facing Link */
+  uint32_t code;
+  if (!actor_spawn_handle(actor, at, yaw, &spawning.handle, &code)) {
+    result(false, "spawn %s: the game refused it (%u)", actor, (unsigned)code);
+    return;
+  }
+  spawning.active = true;
+  spawning.name = actor;
+  spawning.frames = 0;
+  spawning.actor = 0;
+}
+
+/* while a spawn line waits: made (then running), failed, or too long */
+static bool spawn_waiting(void)
+{
+  actor_read_t a;
+  if (!spawning.actor) {
+    spawn_poll_t now = actor_spawn_poll(&spawning.handle, &spawning.actor);
+    if (now == SPAWN_FAILED) {
+      spawning.active = false;
+      result(false, "spawn %s: the game couldn't make it", spawning.name);
+      return false;
+    }
+  }
+  if (spawning.actor && actor_read(spawning.actor, &a) && a.running) {
+    spawning.active = false;
+    result(true, "spawn %s: made after %d frames", spawning.name, spawning.frames);
+    return false;
+  }
+  if (spawning.actor && !actor_read(spawning.actor, &a)) {
+    spawning.active = false;
+    result(false, "spawn %s: made, but it went at once", spawning.name);
+    return false;
+  }
+  if (spawning.frames >= SPAWN_WAIT) {
+    actor_spawn_cancel(&spawning.handle);
+    spawning.active = false;
+    result(false, "spawn %s: not made after %d frames", spawning.name, spawning.frames);
+    return false;
+  }
+  return true;
+}
+
 static void run_actors(const char *args)
 {
   int32_t radius = 6;
@@ -760,6 +849,8 @@ static void run_line(char *line, bool held)
     run_place(args);
   } else if (same(verb, "actors")) {
     run_actors(args);
+  } else if (same(verb, "spawn")) {
+    run_spawn(args);
   } else if (same(verb, "trace")) {
     if (same(args, "off"))
       number = 0;
@@ -956,6 +1047,8 @@ static bool waiting(bool held)
 {
   if (wait_left > 0)
     return true;
+  if (spawning.active && spawn_waiting())
+    return true;
   if (pause_waiting) {
     if (!held)
       return true;
@@ -1006,6 +1099,8 @@ void remote_frame(bool held)
       input_off();
     if (wait_left > 0)
       wait_left--;
+    if (spawning.active) /* frames since the spawn line */
+      spawning.frames++;
     if (trace_left > 0) { /* this frame's, before any line of it runs */
       trace_line();
       trace_left--;

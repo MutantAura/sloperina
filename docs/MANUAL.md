@@ -129,6 +129,7 @@ Four submenus, then under **return** what can only be read: Link's **position** 
 | Item | What it does |
 |---|---|
 | **places** | Every map, sorted into **overworld (child)**, **overworld (adult)**, **dungeons**, **boss & battle rooms** and **other**. Pick a map, then a spawn point; you go there straight away with the game's own fade. |
+| **override age** | **disabled** (the map decides, as in the game), **child** or **adult**: the age Link arrives at. Child or adult also works in a map made for the other age (child Link in Gerudo Fortress): the age is set when you warp, sword and shield swapped as by **link > status > age**, and the map's own age switch is held off until the map has loaded. |
 | **cancel warp** | Cancels a warp that's waiting (see below). |
 | **arrival cutscenes** | Arrive with the spawn point's own arrival scene instead of the standard one. |
 
@@ -476,6 +477,13 @@ folder (on an emulator: right-click the game > *Open save data location*).
   - **spawn one like it** asks the game to make another actor of the same name, placed with the sticks first (see **spawn where**) or 2 m in front of Link and facing him. The game makes it the way its own AI does; it says "spawned" once it's there (usually in a few frames). It gets none of the placement data the map's own copy has (links, rails, switches), so some actors may stand idle.
   - **kill / despawn** sends the actor the game's own death request, the one a fall into a bottomless pit sends: it fades out, with no drop. Where the game refuses it (bosses and the like, and some NPCs), where the actor has no death of its own, or where it's taken but the actor is still standing half a second later, the actor is despawned instead: the game's own delete, as its AI uses, with no death, drop or respawn flag. A despawned boss's fight won't finish as it should. Scenery, the game's system actors and Link are never touched. A killed or despawned actor may be back when the map reloads.
 - **spawn actor by name or type**: any enemy, NPC, object or item the game has (1856 of them). Type a piece of the name in **name has**, pick a **type** (the same kinds as the folders), then **L** on one of the first 40 matches; it's made as **spawn one like it** makes one. Its pack is loaded if the map doesn't already have it. The `_Dictionary` actors are the enemy guide's models.
+- **quick spawn**: short lists of the likeliest actors, by kind: **animals** (Epona, a cucco, a bug, a cow...),
+  **enemies**, **characters** (the child's or the adult's, by Link's age), **objects** and **pickups**. **L** on one
+  makes it as **spawn one like it** does. **epona (owned)**, in **animals**, makes her your own horse, so she lets you ride
+  her (child Link too, though his ride looks rough). Talking to a spawned character
+  can start its own event, which may change flags or the save.
+- **remove spawned**: deletes every actor made in this menu that's still in the map (they go with a map change
+  anyway).
 - **look at actors**: the free camera over a beam on the ground, as when placing (below) but with nothing to place: for going from actor to actor and killing them. What **d-left** and **d-right** go through starts as **look at** says, under it: **all kinds** (enemies, NPCs, objects and items; to start with), **enemies**, **npcs** or **objects**. While looking, **L** and **R** change it, moving on to the nearest of them at once. (Placing, they go through all kinds.)
 - **spawn where**: **placed with the sticks** (to start with) or **in front of Link**. Placed, the menu closes and the free camera looks down on a yellow beam standing on a ring, with an arrow for the way the actor will face, as furniture is placed in The Sims on a console. The spot starts 3 m in front of Link, or where the free camera is looking if it's already on.
 
@@ -725,6 +733,7 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | `status` | The game's frame counter, the map, where Link is and which way he faces (`facing`, degrees), how he moves (`vy`, `hs`: his speed up and across), what he holds and has on ZR (`hand`, `zr`), whether ZL has a target (`lock`: 2 yes, 3 no), whether he's on the ground, his main and weapon action ids (`act`, `wpn`), whether the menu and the game's pause screen are open, whether the game is held, and the warp's state. `vy` and `hs` are the velocity as the game last set it, so they can keep a value while Link stands still (after a landing, for one). |
 | `trace <frames>` / `trace off` | A line for each of the next frames, without holding the script up: `<line> t y= vy= hs= x= z= hand= zr= paused= lock= ground= act= wpn=`. |
 | `actors [metres]` | The running actors within that distance of Link (6 unless said), nearest first, by the game's names. |
+| `spawn <actor> [metres]` | The game makes that actor that far in front of Link (2 m unless said), facing him, as **debug > actors > spawn actor by name or type** does; the line ends once it's running in the scene (`ok spawn <actor>: made after <n> frames`), or with `err` if the game refused it or it didn't appear within 600 frames. Only the names that menu offers, in any case (`Enemy_Wolfos`). |
 | `place <x> <y> <z> [facing]` | Puts Link on that spot of this map as **load position** does (wait some frames for it). With a facing (degrees, 0 = +z) he is turned to it; without, he faces as he did. |
 | `title` | Goes back to the game's title screen from whatever the game is doing (as **debug > return to title screen**), also with the game held (it's let go). `ok` once Link is gone and the game is at (or fading to) its title screen; `err` with the reason if it couldn't start (already at the title screen) or the game didn't leave play within a minute. Whatever isn't saved is lost, as with the pause screen's Return to Title. |
 | `echo <text>` | Puts the text in `out.txt` (a marker). |

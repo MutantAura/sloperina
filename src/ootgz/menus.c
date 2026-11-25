@@ -562,6 +562,7 @@ static void text_warp_state(menu_item_t *it, char *buf, int len)
 static void act_warp(menu_item_t *it)
 {
   gfx_logf("warp to %s", data_warp_maps[it->data2].label);
+  age_prepare_warp();
   warp_arm(&data_warp_maps[it->data2], &data_spawns[it->data]);
   menu_close();
 }
@@ -609,10 +610,26 @@ static void build_places(void)
     menu_add_return(&m_warp_category[cat]);
 }
 
+static const char *const override_age_names[] = { "disabled", "child", "adult" };
+
+static int get_override_age(menu_item_t *it)
+{
+  return age_override() + 1;
+}
+
+static void set_override_age(menu_item_t *it, int choice)
+{
+  age_set_override(choice - 1);
+}
+
 static void build_warps(void)
 {
-  menu_init(&m_warps, "warps", 7);
+  menu_init(&m_warps, "warps", 8);
   menu_add_submenu(&m_warps, "places", &m_places);
+  menu_item_t *override_age = menu_add_option(&m_warps, "override age", ARRAY_LEN(override_age_names),
+                                              override_age_names, get_override_age, set_override_age, 0);
+  if (override_age)
+    override_age->hint = "warp at this age, also into maps made for the other age (e.g. child in gerudo fortress)";
   menu_add_action(&m_warps, "cancel warp", act_cancel_warp, 0);
   menu_add_check(&m_warps, "arrival cutscenes", get_arrival, set_arrival, 0);
   menu_add_return(&m_warps);

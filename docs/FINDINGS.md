@@ -1653,6 +1653,11 @@ and **safety flags** watches read it (`safety.c`).
     `ChangeBanc.module` N7–N9 and auto-clears to `false`.
   - `DebugParam.IsSetChildhoodManually` (`0x86724737`, `Bool`): makes `LoadBancImpl.module` N29–N35 honor the existing
     `Sequence_IsChildhood` value and auto-clears to `false`.
+    The scene setup (1.1.1 `main+0x9B76A0`) reads it again later in the load: with it off, it writes the scene's
+    `GameBancParam.IsChildWhenInitializingScene` to `Sequence_IsChildhood`. A map that forces an age
+    (`IsForceSwitchChildOrAdult`, e.g. `GerudoFortress_Adult`) therefore keeps Link's age only if the flag is set
+    again after `LoadBancImpl` clears it; warps > override age writes it every frame until the map has loaded
+    (checked in game on 1.1.1: child Link in Gerudo Fortress).
   - `DebugParam.IsOverrideTraversePos` (`0x7325CE62`, `Bool`) + `DebugParam.OverrideTraversePos` (`0x527FA715`,
     `Vector3`): overrides chunk/actor traverse coordinates in `OnLoadBancParam.module` N12–N16 (not auto-cleared by the
     engine).
@@ -2159,3 +2164,22 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   Then, from the explorer: call the room change for the room the camera is on (or override what the manager reads
   for Link), and give the room back to Link's own when exploring ends. If actors are also made by distance from
   Link, a traverse position at the room may be needed too; if that can't be done, moving Link stays.
+### 9.34 A spawned horse of one's own: the owned horse and the rodeo bit (1.1.1 addresses, 1.0.0 in brackets)
+- **Why a spawned Epona won't be ridden:** a ridden horse whose **rodeo bit** is set bucks the rider off. It's bit 3
+  of the u32 at QuadrupedComponent `+0x2E8`, QuadrupedComponent `[[actor+0x270]+0x388]` (`QueryQuadrupedCanRodeo`
+  `0x2ACB9F0` [`0x2A789A0`], `OneShotQuadrupedChangeCanRodeo` `0x2916B00`). `Animal_Epona_Adult`'s QuadrupedParam has
+  `CanRodeoDefault` true (`Animal_Horse`'s false). The component's init (`0x9784D8`) sets it from that and clears it
+  for the owned horse (the actor's id `+0x18` equal to OwnedHorseMgr `+0x80` or `+0xB0`); the horse's setup clears it
+  after the Lon Lon race (`Step_Get_Epona` == AfterWonGambleRace), and the rodeo clears it when it succeeds. A spawned
+  Epona is none of these, so she bucks, adult Link included, on a save that has her or not.
+- **Owned:** OwnedHorseMgr is `0xB3CC40` [`0x26AD4E0`] `(scene manager [main+scene_mgr_ptr])`; `0x329D990`
+  [`0x323E840`] `(mgr, horse)` registers a horse as the owned one (what the map's horse setup and the horse component
+  call; it does nothing unless the horse's kind is 1 or 2), after which `+0x80` is the horse's id. It doesn't touch
+  the rodeo bit (the init ran before it), so quick spawn's **epona (owned)** registers her and clears the bit for 60
+  frames (the init can set it again just after she appears).
+- **Checked in game** (24th November 2026, 1.1.1): adult Link in Gerudo Fortress, on a save that never won Epona,
+  mounts and rides her (registered alone, or with the Epona quest at Complete, she still bucked); child Link in Lon
+  Lon Ranch mounts her too, slowly and with odd poses (his model has no horse animations). 1.0.0's addresses are
+  masked-signature matches through the callers, not run. Not tried: whether Epona's Song then calls her (the save
+  had no song).
+

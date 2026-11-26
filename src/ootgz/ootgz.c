@@ -46,7 +46,10 @@
 #include "timeofday.h"
 #include "title.h"
 #include "tpose.h"
+#include "gamepatch.h"
 #include "hsstore.h"
+#include "lank.h"
+#include "remake.h"
 #include "actorsmenu.h"
 #include "freecam.h"
 #include "placer.h"
@@ -486,6 +489,8 @@ static void frame(void)
   eventskip_frame();
   tod_frame();
   age_frame();
+  remake_frame();    /* beta: Link made again through the other age (remake.h) */
+  gamepatch_frame(); /* beta: the search for copies of switched game files (gamepatch.h) */
   memfile_binds_frame(controls_taken);
   memfile_frame(); /* a memfile save/load: after the warp, Link moved the following frames */
   gfx_hud_hidden = hud_hidden();
@@ -582,6 +587,10 @@ __attribute__((used)) void ootgz_module_init(void)
   /* main's imports: NVN for drawing, nn::hid to hide input while the menu is open */
   const char *error = nvn_hook_game(z64hd_main);
   log_raw(error ? "NVN hook failed" : "NVN hook installed");
+  if (error)
+    log_raw(error);
+  lank_init(); /* beta: game file patches are registered before the file hooks go in */
+  error = gamepatch_hook_game(z64hd_main);
   if (error)
     log_raw(error);
   error = input_hook_game(z64hd_main);

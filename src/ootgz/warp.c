@@ -173,6 +173,13 @@ static void log_refusal(uintptr_t manager)
              pending, sys_ptr(manager + 0x68) != 0);
 }
 
+bool warp_event_running(void)
+{
+  uintptr_t manager_holder = sys_ptr(MAIN(z64hd_game->event_mgr_ptr));
+  uintptr_t manager = manager_holder ? sys_ptr(manager_holder) : 0;
+  return manager && sys_ptr(manager + 0x68) != 0; /* the running event, as the acceptance checks (log_refusal) */
+}
+
 /* Start a request for the event `name` in `request`, as the node does; the event manager, or 0 (nothing built). */
 static void *begin_request(const char *name)
 {

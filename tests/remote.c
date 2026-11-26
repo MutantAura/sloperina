@@ -197,6 +197,9 @@ static bool magic;
 static int speed = 1, rupees = 10, reloads, closes;
 static const char *const speeds[] = { "slow", "normal", "fast" };
 
+void menu_open(menu_t *root) { menu_current = root; }
+void menu_goto(menu_t *m) { menu_current = m; }
+
 void menu_close(void)
 {
   menu_current = 0;
@@ -487,12 +490,12 @@ int main(void)
   out_has(" 2 ok 1 actors within 3 m\n");
   out_has(" 3 err actors: a distance in metres\n");
 
-  /* spawn: only the names spawn actor by name offers, any case; 2 m (or as said) in front of Link, facing him; the
+  /* spawn: only the names the game has, any case; 2 m (or as said) in front of Link, facing him; the
    * line ends when the actor is there; the game's refusal is passed on */
   run_script("spawn enemy_wolfos\nspawn Obj_Pot_A_01 3.5\nspawn Enemy_Nope\nspawn\nspawn Enemy_Wolfos x\n");
   out_has(" 1 ok spawn Enemy_Wolfos: made after 3 frames\n");
   out_has(" 2 ok spawn Obj_Pot_A_01: made after 3 frames\n");
-  out_has(" 3 err spawn: Enemy_Nope isn't one of the 2 actors spawn actor by name offers\n");
+  out_has(" 3 err spawn: Enemy_Nope isn't one of the 2 actors the game has\n");
   out_has(" 4 err spawn: an actor's name");
   out_has(" 5 err spawn: an actor's name");
   assert(spawned_now == 2);

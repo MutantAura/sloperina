@@ -49,6 +49,7 @@ int save_backup_kinds = SAVE_BACKUP_BOTH;
 bool voidmap_shown, voidmap_ground, voidmap_deadly = true, voidmap_ring = true, voidmap_shift = true, voidmap_areas = true, voidmap_bounds = true, voidmap_xray;
 bool hsstore_shown;
 bool remote_enabled;
+bool placer_take_link, tools_show_watches, tools_show_input; /* settings.c: the explorer's and the tools' settings */
 bool tod_get(uint32_t *seconds) { (void)seconds; return false; } /* no game clock here */
 static char archive_folder[SAVE_FOLDER_LEN];
 const char *savebackup_archive_folder(void) { return archive_folder; }

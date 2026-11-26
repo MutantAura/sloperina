@@ -18,7 +18,7 @@ extern bool placer_take_link;
 /* place `name`, starting where the free camera looks if it's on, else in front of Link; closes nothing (the caller
  * closes the menu). False, with a notice, if there's no camera to look through. */
 bool placer_start(const char *name);
-/* the same with nothing to place (debug > actors > look at actors): stepping from actor to actor, killing them;
+/* the same with nothing to place (debug > actors > browse currently loaded actors): stepping from actor to actor, killing them;
  * d-left/right go through the actors of `kind` first (PLACER_ALL ...), which ZL / ZR change */
 enum { PLACER_ALL, PLACER_ENEMIES, PLACER_NPCS, PLACER_OBJECTS, PLACER_KINDS };
 extern const char *const placer_kind_names[PLACER_KINDS]; /* "all kinds", "enemies", "npcs", "objects" */

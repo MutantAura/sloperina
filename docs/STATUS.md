@@ -1,6 +1,7 @@
 # Status
 
-Where the work stands, for picking it up again. Last updated 24th November 2026, after the 0.0.12 release.
+Where the work stands, for picking it up again. Last updated 26th November 2026: 0.0.13 built (not tagged or
+published).
 
 ## Released
 
@@ -20,6 +21,30 @@ Where the work stands, for picking it up again. Last updated 24th November 2026,
 - CONTRIBUTORS from GitHub's contributors list.
 
 The game patches are the same as 0.0.11's (patch v6).
+
+## On master, not released: 0.0.13
+
+VERSION is 0.0.13 and `release/sloperinaGZ-0.0.13.zip` is built from master, but there's no `v0.0.13` tag or GitHub
+release yet (tag, rebuild after `./docker-make clean` so the version string is plain, then publish). Since 0.0.12:
+
+- **debug > actors** reworked: **browse currently loaded actors** (the free camera over a beam: d-left/right from
+  actor to actor, L/R the kind, A go to, Y kill or despawn; **look at** under it), **quick spawn** with a short list
+  of each kind and every actor of it the game has (a name filter, a five-row scroller; **character equipment** under
+  characters), placing with the sticks (Sims style; **spawn where**). Browse current actors, the actor's own menu and
+  spawn actor by name or type are gone; their list is in `docs/reference/spawnable-actors.xlsx` for review.
+- **scene > explorer**: a map's dungeon rooms, grottos and interiors (data/places.json, tools/places.py), with take
+  Link on/off. FINDINGS 9.33.
+- **debug > free camera** reworked to the explorer's controls (zoom, height, back to Link, L3 control Link/camera,
+  follow Link, R3 hide controls; its up kept straight, FINDINGS 9.30); **R + right stick up** toggles it.
+- The tools' controls in a bar at the bottom centre with the game's button glyphs, fading in and out; watches and
+  input display hidden meanwhile unless **menu settings** says otherwise; the module's other commands wait.
+- Menus moved: equips under link, story under debug, **save / memfile management** (save management, memfiles)
+  above debug, reload map at the foot of scene, return to title screen at the foot of debug. Labels no longer pushed in
+  by a checkbox next to them; a scroller keeps the panel at its longest line.
+- Merged pull requests: #54 quick spawn (FINDINGS 9.34), #55 warps > override age, #57 lank / lunk mode (beta,
+  FINDINGS 9.35).
+- Remote control: `open <menu path>` (the menu on screen there), `get` reads a row's own text, `do` presses a list's
+  arrow.
 
 ## Open pull requests
 
@@ -59,8 +84,9 @@ The game patches are the same as 0.0.11's (patch v6).
   with the camera would, but sets off loading zones, triggers and voids.
 - **Actors**: fetch (an actor to Link) was dropped (FINDINGS 9.28); whether a room that opens when its enemies die
   counts kills made with **kill** isn't checked.
-- **Remote control**: a script can't open a submenu (`do` on one says it's a menu), so pages like an actor's menu or
-  **known watches** can't be reached from a script.
+- **Remote control**: `open` shows a submenu, but a script still can't type into the on-screen keyboard, so the
+  quick spawn list shrinking to what its name filter finds (no padding rows, no arrows when it fits) isn't checked.
+- **Remove spawned on an owned Epona** reported "0 removed" while she did stop; not looked into.
 
 ## Notes for the next session
 

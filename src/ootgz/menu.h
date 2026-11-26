@@ -80,6 +80,8 @@ struct menu {
   /* a list inside this one (the watches): items [inner_first, + inner_rows) show `inner_items` things from
    * `inner_top` on; the game's style draws its scroll bar beside them. inner_rows 0: none */
   int inner_first, inner_rows, inner_items, inner_top;
+  const char *inner_widest; /* its longest line, or 0: the panel kept that wide as it scrolls (even with no rows) */
+  int inner_indent;         /* ... at its rows' indent (menu_item_t.indent) */
   int footer;       /* the last this many items (read-only lines) show under the list, a gap above them: not
                        part of it (they don't scroll, and the scroll bar is the list's), above the hint */
 };

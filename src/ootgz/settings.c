@@ -13,7 +13,7 @@
  *   hide_over_item_wheel=0|1 (the same while its item wheel is up)
  *   hide_world_over_item_wheel=0|1 (the world overlays fade out while the item wheel is up; on by default)
  *   explorer_take_link=0|1 (explorer: going to a dungeon room takes Link into it, which wakes it; on by default)
- *   watches_while_exploring=0|1, input_display_while_exploring=0|1 (kept on screen in the explorer, look at actors,
+ *   watches_while_exploring=0|1, input_display_while_exploring=0|1 (kept on screen in the explorer, browsing actors,
  *   placing and the free camera; off by default)
  *   save_backups=0|1 (copy the game's save folder to the SD card after every save, savebackup.h)
  *   save_backup_location=0|1 (the save's location after the date in their folder names)

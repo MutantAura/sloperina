@@ -339,7 +339,7 @@ void freecam_frame(bool menu_open)
     if (pressed & BTN_RSTICK)
       freecam_ui_hidden = !freecam_ui_hidden;
     if (!freecam_ui_hidden) /* L3: what it does next */
-      gfx_guide(T("L3 control camera  R3 hide")); /* following or not: Y is Link's here, so it isn't said */
+      gfx_guide(T("L3 control camera  R3 hide controls")); /* following or not: Y is Link's here, so it isn't said */
     return;
   }
   if (pressed & BTN_Y) { /* follow Link from here, or stay */
@@ -355,7 +355,7 @@ void freecam_frame(bool menu_open)
     char bar[GFX_HINT_LEN];
     snprintf(bar, sizeof(bar),
              TF("LS move  RS look  d-up/down height  ZL/ZR zoom  X faster  A back to Link\n" /* moving on top */
-                "Y follow Link: %s  L3 control Link  R3 hide  B done"), /* L3: what it does next */
+                "Y follow Link: %s  L3 control Link  R3 hide controls  B done"), /* L3: what it does next */
              follow ? T("on") : T("off"));
     gfx_guide(bar);
   }

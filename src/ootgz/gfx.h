@@ -16,6 +16,7 @@
 #define GFX_COLS 64
 #define GFX_ROWS 26
 #define GFX_VALUE_LEN 24 /* gfx_row_value's texts, with their 0 */
+#define GFX_WIDEST_LEN 64 /* gfx_inner_widest's text, with its 0 */
 #define GFX_PANELS 4
 #define GFX_PANEL_HUD 1   /* the watches */
 #define GFX_PANEL_LOG 2
@@ -167,6 +168,10 @@ typedef struct {
   uint16_t scroll_items, scroll_top;  /* ... how many items scroll there, and the first one shown */
   uint8_t  inner_row, inner_rows;     /* a list inside the menu's (the watches) with its own bar: its rows ... */
   uint16_t inner_items, inner_top;    /* ... and what scrolls in them, as scroll_* */
+  /* the longest line that list can show and its indent (menu_item_t.indent): the game's style keeps the panel
+   * that wide, so it doesn't change size as the list scrolls ("": none) */
+  char     inner_widest[GFX_WIDEST_LEN];
+  uint8_t  inner_indent;
   /* the menu: a row's value as it is now and the widest it can be (a number's maximum, an option's longest
    * choice), so the value column keeps room for that and doesn't move as the value changes ("": none) */
   char     value_shown[GFX_ROWS][GFX_VALUE_LEN], value_widest[GFX_ROWS][GFX_VALUE_LEN];
@@ -187,6 +192,8 @@ void gfx_hint(const char *s);    /* the hint shown in the hint's rows, unwrapped
 void gfx_scroll(int row, int rows, int items, int top);
 /* a list inside it (the watches): the same, its bar beside its rows, a level in */
 void gfx_inner_scroll(int row, int rows, int items, int top);
+/* that list's longest line and its rows' indent (gfx_panel_t.inner_widest) */
+void gfx_inner_widest(const char *s, int indent);
 void gfx_end(void);
 void gfx_clear(void);            /* menu closed */
 /* gz_log: a line in the log at the bottom right, shown a second and then faded out */

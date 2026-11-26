@@ -565,7 +565,7 @@ static void panel(void)
   if (mode == MODE_EXPLORE)
     snprintf(title, sizeof(title), "%s", T("explorer"));
   else if (mode == MODE_LOOK)
-    snprintf(title, sizeof(title), "%s", T("look at actors"));
+    snprintf(title, sizeof(title), "%s", T("browse actors"));
   else
     snprintf(title, sizeof(title), TF("place %s"), name);
   actor_read_t a;
@@ -606,18 +606,18 @@ static void panel(void)
    * three short lines in the panel */
   static const char *const guide[3] = { /* MODE_PLACE, MODE_LOOK, MODE_EXPLORE: moving on top, acting under it */
     "LS move  d-up/down height  RS camera  ZL/ZR zoom  X faster  L3 back to Link\n"
-    "d-left/right next  L/R turn  A spawn  Y kill/despawn  R3 hide  B done",
+    "d-left/right next  L/R turn  A spawn  Y kill/despawn  R3 hide controls  B done",
     "LS move  d-up/down height  RS camera  ZL/ZR zoom  X faster  L3 back to Link\n"
-    "d-left/right next  L/R kind  A go to  Y kill/despawn  R3 hide  B done",
+    "d-left/right next  L/R kind  A go to  Y kill/despawn  R3 hide controls  B done",
     "LS move  d-up/down height  RS camera  ZL/ZR zoom  X faster  L3 back to Link\n"
-    "d-left/right next  L/R kind  A go to  Y take Link: %s  R3 hide  B done", /* on / off */
+    "d-left/right next  L/R kind  A go to  Y take Link: %s  R3 hide controls  B done", /* on / off */
   };
   static const char *const hints[3][3] = { /* short: the panel is as wide as its widest line */
-    { "LS move  d-up/down height  L3 back to Link  R3 hide", "RS camera  ZL/ZR zoom  X faster  d-left/right next",
+    { "LS move  d-up/down height  L3 back to Link  R3 hide controls", "RS camera  ZL/ZR zoom  X faster  d-left/right next",
       "L/R turn  A spawn  Y kill/despawn  B done" },
-    { "LS move  d-up/down height  L3 back to Link  R3 hide", "RS camera  ZL/ZR zoom  X faster  d-left/right next",
+    { "LS move  d-up/down height  L3 back to Link  R3 hide controls", "RS camera  ZL/ZR zoom  X faster  d-left/right next",
       "L/R kind  A go to  Y kill/despawn  B done" },
-    { "LS move  d-up/down height  L3 back to Link  R3 hide", "RS camera  ZL/ZR zoom  X faster  d-left/right next",
+    { "LS move  d-up/down height  L3 back to Link  R3 hide controls", "RS camera  ZL/ZR zoom  X faster  d-left/right next",
       "L/R kind  A go to  Y take Link: %s  B done" },
   };
   bool in_guide = gfx_style == GFX_STYLE_GAME;

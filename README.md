@@ -25,21 +25,20 @@ goes back. As in gz, every control can be rebound in **settings > rebind command
 
 ## Features
 
-- **link**: health, heart containers, rupees, age and reload map; position, speed and map.
+- **link**: health, heart containers, rupees, age and reload map; position, speed and map; what Link wears (equips).
 - **warps**: any map and spawn point, at once, with the game's own fade.
-- **scene**: reload the map; the map's air walls drawn over the game (collision); where Link voids out.
-- **memfiles**: 4 in-memory snapshot slots (full GameData, unsaved session flags, map, time, Link and camera), with fast in-place same-map reloads.
+- **scene**: the map's air walls drawn over the game (collision); where Link voids out; reload the map.
 - **cheats**: infinite health, rupees, magic and ammo; 2x movement speed.
 - **inventory**: items, equipment, collection (upgrades, strength, scale, magic), bottles, quest items, songs,
   dungeon items and small keys, all through the game's own code where it needs it.
-- **equips**.
 - **watches**: gz's watch list: built-in watches (position, speed, angles, camera, input, timer, lag...) and
   memory watches, with display types, labels (gz's keyboard), show/hide, reordering and the wrench to see the value
   in memory; the box can go in any corner or anywhere.
-- **save management**: a copy of the game's save folder on the SD card after each save, named and numbered
-  archives on demand, and restoring one in place of the save.
-- **story** (quest stages, tutorials).
-- **debug**: heap, gz's memory viewer (edit, add watches, follow pointers), flag logging and the log.
+- **save / memfile management**:
+  - **save management**: a copy of the game's save folder on the SD card after each save, named and numbered
+    archives on demand, and restoring one in place of the save.
+  - **memfiles**: 4 in-memory snapshot slots (full GameData, unsaved session flags, map, time, Link and camera), with fast in-place same-map reloads.
+- **debug**: heap, gz's memory viewer (edit, add watches, follow pointers), flag logging, the log and story (quest stages, tutorials).
 - **settings**: language, menu size and background, the input display (gz's row or a Switch 2 Pro Controller),
   levitate (L3 toggle, held X/B up/down, release to hover), frame advance (L, L + L3 to run) with gz's pause icons, and gz's commands menu (**rebind commands**) to rebind every control
   (the menu's own buttons too).

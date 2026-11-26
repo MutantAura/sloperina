@@ -100,6 +100,12 @@ void gfx_inner_scroll(int row, int rows, int items, int top)
   menu_panel.inner_top = (uint16_t)top;
 }
 
+void gfx_inner_widest(const char *s, int indent)
+{
+  snprintf(menu_panel.inner_widest, sizeof(menu_panel.inner_widest), "%s", s ? s : "");
+  menu_panel.inner_indent = (uint8_t)indent;
+}
+
 void gfx_end(void) {}
 
 static char guide_text[GFX_HINT_LEN];
@@ -471,6 +477,8 @@ static void measure_panel(gfx_panel_t *panel)
   hash = hash_mix(hash, panel->scroll_items);
   hash = hash_mix(hash, (uint32_t)panel->inner_row << 24 ^ (uint32_t)panel->inner_rows << 16 ^ panel->inner_top);
   hash = hash_mix(hash, panel->inner_items);
+  for (const char *v = panel->inner_widest; *v; v++)
+    hash = hash_mix(hash, (uint8_t)*v ^ 0x200u);
   panel->hash = hash ? hash : 1;
 }
 

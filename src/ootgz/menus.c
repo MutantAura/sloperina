@@ -179,6 +179,7 @@ static uint32_t is_get_hash(const char *item)
 /* --- link ------------------------------------------------------------------------------------ */
 
 static menu_t m_link, m_link_status, m_link_scene, m_link_position, m_link_actions;
+static menu_t m_equips; /* built with the inventory (build_equips), shown under link */
 
 static bool get_lock_x(menu_item_t *it) { return lock_is_set(LOCK_X); }
 static bool get_lock_y(menu_item_t *it) { return lock_is_set(LOCK_Y); }
@@ -524,11 +525,12 @@ static void build_link(void)
   }
   menu_add_return(&m_link_actions);
 
-  menu_init(&m_link, "link", 17);
+  menu_init(&m_link, "link", 18);
   menu_add_submenu(&m_link, "status", &m_link_status);
   menu_add_submenu(&m_link, "scene interaction", &m_link_scene);
   menu_add_submenu(&m_link, "position", &m_link_position);
   menu_add_submenu(&m_link, "actions", &m_link_actions);
+  menu_add_submenu(&m_link, "equips", &m_equips);
   lank_menu_add(&m_link); /* beta (lank.c) */
   menu_add_return(&m_link);
   /* what can only be read, under return after a blank line */
@@ -2948,9 +2950,6 @@ static void build_scene(void)
   build_savepos();
   build_voids();
   menu_init(&m_scene, "scene", 13);
-  menu_item_t *reload = menu_add_action(&m_scene, "reload map", act_reload_map, 0);
-  if (reload)
-    reload->hint = "L: reload this map (at the age set in the link menu)";
   menu_item_t *end_cutscene = menu_add_action(&m_scene, "end cutscene", act_end_cutscene, 0);
   if (end_cutscene)
     end_cutscene->hint = "L: end the cutscene or event that's playing";
@@ -2975,6 +2974,9 @@ static void build_scene(void)
     hp_xray->log_label = "enemy health through walls:";
     hp_xray->indent = 2; /* under enemy health */
   }
+  menu_item_t *reload = menu_add_action(&m_scene, "reload map", act_reload_map, 0);
+  if (reload)
+    reload->hint = "L: reload this map (at the age set in the link menu)";
   menu_add_return(&m_scene);
 
   menu_init(&m_collision, "environment", 9);
@@ -4084,11 +4086,11 @@ static void build_menu_settings(void)
   menu_item_t *tools_watches = menu_add_check(&m_menu_settings, "watches while exploring", get_tools_watches,
                                               set_tools_watches, 0);
   if (tools_watches)
-    tools_watches->hint = "keep the watches on screen in the explorer, look at actors, placing and the free camera";
+    tools_watches->hint = "keep the watches on screen in the explorer, browsing actors, placing and the free camera";
   menu_item_t *tools_input = menu_add_check(&m_menu_settings, "input display while exploring", get_tools_input,
                                             set_tools_input, 0);
   if (tools_input)
-    tools_input->hint = "keep the input display on screen in the explorer, look at actors, placing and the free camera";
+    tools_input->hint = "keep the input display on screen in the explorer, browsing actors, placing and the free camera";
   menu_item_t *keyboard = menu_add_check(&m_menu_settings, "switch keyboard", get_switch_keyboard,
                                          set_switch_keyboard, 0);
   if (keyboard) {
@@ -4447,24 +4449,23 @@ static void build_debug(void)
 {
   build_pause_research();
   build_flaglog();
-  menu_init(&m_debug, "debug", 10);
+  menu_init(&m_debug, "debug", 11);
   menu_item_t *freecam = menu_add_check(&m_debug, "free camera", get_freecam, set_freecam, 0);
   if (freecam) /* no hint: its controls are in its own bar while it's on */
     freecam->log_label = "free camera:";
   menu_item_t *actors = menu_add_submenu(&m_debug, "actors", actorsmenu_build());
   if (actors)
-    actors->hint = "browse the actors loaded in the scene (go to, copy or kill one), or spawn any actor";
+    actors->hint = "browse the actors loaded in the scene (go to or kill one), or spawn any actor";
   menu_add_submenu(&m_debug, "tests", &m_tests);
   menu_add_submenu(&m_debug, "heap", &m_heap);
   menu_add_submenu(&m_debug, "memory", &memview_menu);
   menu_add_submenu(&m_debug, "pause research", &m_pause_research);
   menu_add_submenu(&m_debug, "flag logging", &m_flaglog);
   menu_add_submenu(&m_debug, "log", &m_log);
+  menu_add_submenu(&m_debug, "story", &m_story);
   menu_item_t *to_title = menu_add_action(&m_debug, "return to title screen", act_return_to_title, 0);
-  if (to_title) {
-    to_title->hint = "L: back to the title screen from anything: cutscenes, menus, game over (what isn't saved is lost)";
+  if (to_title) /* no hint: the menu shows all its lines without one */
     to_title->log_label = "return to title screen";
-  }
   menu_add_return(&m_debug);
   memview_build(&m_watches);
 
@@ -4754,19 +4755,23 @@ static void build_about(void)
   menu_add_return(&m_about);
 }
 
+static menu_t m_saves;
+
 static void build_root(void)
 {
+  menu_init(&m_saves, "save / memfile management", 3);
+  menu_add_submenu(&m_saves, "save management", &m_save_backups);
+  menu_add_submenu(&m_saves, "memfiles", &m_memfiles);
+  menu_add_return(&m_saves);
+
   menu_init(&menu_root, "sloperinaGZ", 15);
   menu_add_submenu(&menu_root, "link", &m_link);
   menu_add_submenu(&menu_root, "warps", &m_warps);
   menu_add_submenu(&menu_root, "scene", &m_scene);
-  menu_add_submenu(&menu_root, "memfiles", &m_memfiles);
   menu_add_submenu(&menu_root, "cheats", &m_cheats);
   menu_add_submenu(&menu_root, "inventory", &m_inventory);
-  menu_add_submenu(&menu_root, "equips", &m_equips);
   menu_add_submenu(&menu_root, "watches", &m_watches);
-  menu_add_submenu(&menu_root, "save management", &m_save_backups);
-  menu_add_submenu(&menu_root, "story", &m_story);
+  menu_add_submenu(&menu_root, "save / memfile management", &m_saves);
   menu_add_submenu(&menu_root, "debug", &m_debug);
   menu_add_submenu(&menu_root, "settings", &m_settings);
   menu_add_submenu(&menu_root, "about", &m_about);

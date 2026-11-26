@@ -8,7 +8,7 @@
 #include "menu.h"
 
 menu_t *actorsmenu_build(void); /* from menus_build: the menu, for debug's submenu item */
-void actorsmenu_frame(void);    /* each frame, game thread: reads the list again when the menu is entered */
+void actorsmenu_frame(void);    /* each frame, game thread: follows the spawn requests and the deaths asked for */
 
 /* game thread: the game asked to make `name` at `at`, facing yaw degrees (0: +z), then watched for until it appears
  * (with notices); false, with a notice, if the game refused it. The actor placer's A (placer.c). */

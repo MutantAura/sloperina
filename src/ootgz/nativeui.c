@@ -1084,6 +1084,8 @@ typedef struct {
   float switch_shift; /* ... moved right this far */
   int indent_from;    /* an item under a heading (GFX_ROW_INDENT): its cells from this one ... */
   float indent_shift; /* ... moved this far (left: gz's indent is two cells, wide in the game's type) */
+  int box_from;       /* a checkbox's item: its cells from its box on ... */
+  float box_shift;    /* ... moved left this far, so the box starts where the other items' labels do */
   int opens_at;       /* an item that opens a menu: its " >" cell, or -1 */
   int crumb_end;      /* title rows: the path up to this cell of the last one, then the menu's name */
   bool grid;          /* a character a cell (GFX_ROW_GRID) */
@@ -1098,7 +1100,7 @@ typedef struct {
 static float col_x(const mrow_t *r, int col)
 {
   return (float)cell_x(col, r->scale) + (col >= r->indent_from ? r->indent_shift : 0) +
-         (col >= r->switch_from ? r->switch_shift : 0);
+         (col >= r->box_from ? r->box_shift : 0) + (col >= r->switch_from ? r->switch_shift : 0);
 }
 
 /* the hint's buttons, drawn as the game's button glyphs */
@@ -1510,6 +1512,8 @@ static bool row_setup(mrow_t *r)
    * it's INDENT_EM in from the heading's start, every row of the group moved alike so their columns stay */
   r->indent_from = r->cols;
   r->indent_shift = 0;
+  r->box_from = r->cols;
+  r->box_shift = 0;
   if ((panel->kind[r->row] & GFX_ROW_INDENT) && !r->grid) {
     int levels = panel->kind[r->row] & GFX_ROW_INDENT2 ? 2 : 1; /* GFX_ROW_INDENT2: under an item, a level more */
     int from = LIST_COL + (ITEM_INDENT_COL - LIST_COL) * levels;
@@ -1535,6 +1539,13 @@ static bool row_setup(mrow_t *r)
   if (first_text < 0)
     return false;
   if (r->kind == GFX_ROW_ITEM && !r->grid) {
+    unsigned char first = (unsigned char)ch[first_text];
+    if (first == GFX_CHECK_OFF || first == GFX_CHECK_ON) {
+      /* menu_icon draws the box at the right of its two cells: the row moved left by the room before it, so
+       * the box lines up with the labels of the items round it rather than looking indented under them */
+      r->box_from = first_text;
+      r->box_shift = -(2 * CELL_W * fp_px - checkbox_size(r) - r->em * 0.4f);
+    }
     if (panel->kind[r->row] & GFX_ROW_OPENS) { /* its line's " >": a chevron at the right edge instead */
       for (int c = r->cols - 1; c > first_text; c--) {
         if (ch[c] == '>') {
@@ -1897,6 +1908,13 @@ static void menu_layout(const gfx_panel_t *panel, int cols, int scale, float *va
       continue;
     }
     float end = menu_cells(&r, 0, false) + (r.opens_at >= 0 ? r.em * 1.4f : 0); /* room for its chevron */
+    ends = end > ends ? end : ends;
+  }
+  if (panel->inner_widest[0]) { /* a list inside it: as wide as its longest line, at its rows' indent (row_setup) */
+    int text_h = (int)(row_fp[GFX_ROW_ITEM].text * fp_px + 0.5f);
+    int em = gamefont_em_for_height(GF_REGULAR, text_h);
+    float end = (float)cell_x(LIST_COL, scale) + em * INDENT_EM * panel->inner_indent +
+                plain_width(styles[GFX_SELECTED].face, em, panel->inner_widest);
     ends = end > ends ? end : ends;
   }
   style_force = force;
@@ -2721,10 +2739,19 @@ static void draw_list(const gfx_panel_t *panel, float x, float y, float w, float
     /* the game's scroll bar left of the list (in gz's column of its ^ / v) */
     scroll_bar(x + cell_x(SCROLL_MARK_COL, scale) + (CELL_W - SCROLL_W) / 2 * fp_px, y, row_top,
                panel->scroll_row, panel->scroll_rows, panel->scroll_items, panel->scroll_top);
-  if (menu && panel->inner_rows && panel->inner_row + panel->inner_rows <= rows && scroll_bar_shown(panel))
-    /* a list inside it (the watches): its own bar in the room its rows are indented by, under the heading */
-    scroll_bar(x + (cell_x(LIST_COL, scale) + cell_x(ITEM_INDENT_COL, scale)) / 2.0f - SCROLL_W * fp_px / 2, y,
-               row_top, panel->inner_row, panel->inner_rows, panel->inner_items, panel->inner_top);
+  if (menu && panel->inner_rows && panel->inner_row + panel->inner_rows <= rows && scroll_bar_shown(panel)) {
+    /* a list inside it: its own bar in the room its rows are indented by, under the heading. On gz's grid (the
+     * watches) that's half way to their cells; in the game's type (the log, quick spawn's lists) a row's indent is
+     * INDENT_EM a level (row_setup), so the bar is a quarter em in from the heading: clear of a level-1 row's
+     * text, and of a level-2 row's cursor box */
+    float bar_mid = (cell_x(LIST_COL, scale) + cell_x(ITEM_INDENT_COL, scale)) / 2.0f;
+    if (!(panel->kind[panel->inner_row] & GFX_ROW_GRID)) {
+      int text_h = (int)(row_fp[kind_of(panel, panel->inner_row)].text * fp_px + 0.5f);
+      bar_mid = (float)cell_x(LIST_COL, scale) + gamefont_em_for_height(GF_REGULAR, text_h) * INDENT_EM / 2;
+    }
+    scroll_bar(x + bar_mid - SCROLL_W * fp_px / 2, y, row_top, panel->inner_row, panel->inner_rows,
+               panel->inner_items, panel->inner_top);
+  }
   top += row_fp[GFX_ROW_GAP].height * fp_px;
   r.h = GUIDE_FP * fp_px;
   if (shows_controls(panel) && top + r.h <= h) {

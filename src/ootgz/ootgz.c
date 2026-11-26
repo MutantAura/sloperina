@@ -216,7 +216,7 @@ static void command_context(void)
 }
 
 /* settings > menu settings > watches / input display while exploring: left out while a camera tool has the
- * controller (the free camera, the explorer, look at actors, placing), unless kept */
+ * controller (the free camera, the explorer, browsing actors, placing), unless kept */
 static void tools_hide_panels(void)
 {
   bool tool = (placer_active || freecam_on) && !menu_current;

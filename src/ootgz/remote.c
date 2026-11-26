@@ -378,13 +378,11 @@ static void item_value(menu_item_t *item, char *buf, size_t cap)
           snprintf(buf, cap, "%d", (int)number);
       }
       break;
-    case MI_TEXT:
+    default: /* a text line, or another item whose line is written as it's shown (a list's rows and arrows) */
       if (item->text) {
         item->text(item, text, sizeof(text));
         plain_name(text, buf, cap);
       }
-      break;
-    default:
       break;
   }
 }
@@ -397,9 +395,12 @@ static const char *choose(menu_item_t *item)
   switch (item->kind) {
     case MI_ACTION:
     case MI_NUMBER:
-      if (!item->action)
+      if (item->action)
+        item->action(item);
+      else if (item->press)
+        item->press(item, 0); /* a list's scroll arrow, say */
+      else
         return "nothing to do on it";
-      item->action(item);
       break;
     case MI_CHECK:
       if (!item->get_check || !item->set_check)
@@ -686,8 +687,8 @@ static void run_place(char *args)
 #define ACTORS_MAX 24
 
 /* "spawn <actor> [metres]": the game makes that actor that far in front of Link (2 m unless said), facing him, as
- * debug > actors > spawn actor by name does, through the create request's handle (actor_spawn_handle, FINDINGS 9.29
- * and 9.34); the line ends when the actor made is running. Only the names that menu offers (actornames.c): a name the
+ * debug > actors > quick spawn does, through the create request's handle (actor_spawn_handle, FINDINGS 9.29
+ * and 9.34); the line ends when the actor made is running. Only the names the game has (actornames.c): a name the
  * game has no ActorInfo row for would take a template slot for good. */
 #define SPAWN_AHEAD 2.0
 #define SPAWN_WAIT 600 /* frames to wait for it (its pack may have to load) */
@@ -721,7 +722,7 @@ static void run_spawn(char *args)
   vec3f_t me;
   double fx = 0, fz = 1;
   if (!actor) {
-    result(false, "spawn: %s isn't one of the %d actors spawn actor by name offers", name, actor_names_count);
+    result(false, "spawn: %s isn't one of the %d actors the game has", name, actor_names_count);
     return;
   }
   if (!link_drawn_pos(&me)) {
@@ -939,6 +940,20 @@ static void run_line(char *line, bool held)
       result(false, "list: %s", problem);
     else
       list_menu(item ? item->submenu : menu);
+  } else if (same(verb, "open")) {
+    /* the menu on screen at that menu, or at that item of its menu (for a look at it) */
+    problem = resolve(args, &menu, &item);
+    if (problem)
+      result(false, "open: %s", problem);
+    else {
+      menu_t *target = item && item->kind == MI_SUBMENU && item->submenu ? item->submenu : menu;
+      if (!menu_current)
+        menu_open(&menu_root);
+      menu_goto(target);
+      if (item && target == menu)
+        target->selected = (int)(item - menu->items);
+      result(true, "open %s", target->title);
+    }
   } else if (same(verb, "pause")) {
     if (held)
       result(true, "paused");

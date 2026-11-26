@@ -38,7 +38,7 @@
 #define BUILD_VERSION "unknown" /* not menu text */
 #endif
 
-void *aligned_alloc(size_t align, size_t size); /* from main */
+void *aligned_alloc(size_t align, size_t size); /* from main (fallback when BSS pool is full) */
 void  free(void *p);                             /* from main */
 float sqrtf(float x);                            /* from sdk */
 float atan2f(float y, float x);                  /* from sdk */
@@ -72,8 +72,11 @@ float atan2f(float y, float x);                  /* from sdk */
 #define GD_FLAG_SAVE_REQ    0x01u
 #define GD_FLAG_LOAD_REQ    0x02u
 #define GD_FLAG_SAVE_WORK   0x04u
-#define GD_SAVE_MAGIC       0x01020304u
-#define GD_MAX_SAVE_BUF     (4u << 20)
+#define GD_SAVE_MAGIC        0x01020304u
+#define GD_MAX_SAVE_BUF      (4u << 20)
+#define MEMFILE_POOL_SIZE    (4u << 20) /* 4 MiB BSS pool (small enough not to crowd nnMain's startup heap) */
+#define SESSION_SCALARS_MAX  1024u      /* > memfilefields_count */
+#define SESSION_STRS_MAX     128u       /* > total String64 fields */
 
 /* --- timings & limits -------------------------------------------------------------------------- */
 
@@ -260,12 +263,202 @@ static int       camera_reapplies;  /* times the angle was put back again while 
 static char      status[96];
 static bool      log_why;
 
-/* --- small helpers ----------------------------------------------------------------------------- */
+/* --- BSS storage pool (outside main's small CRT heap, FINDINGS §9.6) --------------------------- */
+
+/* Keep memfiles in a compact 4 MiB .bss pool (small enough to stay well inside nnMain's startup
+ * memory budget) with immediate boundary-tag coalescing and in-place shrinking (finish_save trims
+ * save_buf from GD_DESC_BUF_SIZE down to the actual written bytes with zero copy). If a transient
+ * buffer or full pool exceeds the 4 MiB pool, alloc16 falls back to main's aligned_alloc. */
+static _Alignas(16) uint8_t memfile_pool[MEMFILE_POOL_SIZE];
+static bool memfile_pool_ready;
+
+typedef struct {
+  uint32_t size;      /* total block bytes including this 16-byte header (multiple of 16) */
+  uint32_t prev_size; /* total bytes of immediately preceding block, or 0 for first */
+  uint32_t used;      /* 1 = allocated, 0 = free */
+  uint32_t pad;
+} pool_hdr_t;
+_Static_assert(sizeof(pool_hdr_t) == 16, "16-byte pool block header");
+
+static void pool_init(void)
+{
+  if (memfile_pool_ready)
+    return;
+  *(pool_hdr_t *)memfile_pool = (pool_hdr_t){ MEMFILE_POOL_SIZE, 0, 0, 0 };
+  memfile_pool_ready = true;
+}
+
+static bool in_pool(const void *p)
+{
+  uintptr_t base = (uintptr_t)memfile_pool;
+  uintptr_t addr = (uintptr_t)p;
+  return memfile_pool_ready && addr >= base + sizeof(pool_hdr_t) && addr < base + MEMFILE_POOL_SIZE;
+}
+
+static void *pool_alloc(size_t n)
+{
+  pool_init();
+  if (n > MEMFILE_POOL_SIZE - sizeof(pool_hdr_t))
+    return 0;
+  size_t payload = n ? ((n + 15u) & ~(size_t)15u) : 16u;
+  if (payload > MEMFILE_POOL_SIZE - sizeof(pool_hdr_t))
+    return 0;
+  uint32_t need = (uint32_t)(sizeof(pool_hdr_t) + payload);
+  uint32_t best_off = MEMFILE_POOL_SIZE, best_size = MEMFILE_POOL_SIZE + 1u;
+  for (uint32_t off = 0; off < MEMFILE_POOL_SIZE;) {
+    pool_hdr_t *h = (pool_hdr_t *)(memfile_pool + off);
+    if (!h->size || h->size > MEMFILE_POOL_SIZE - off)
+      return 0;
+    if (!h->used && h->size >= need && h->size < best_size) {
+      best_off = off;
+      best_size = h->size;
+      if (best_size == need)
+        break;
+    }
+    off += h->size;
+  }
+  if (best_off >= MEMFILE_POOL_SIZE)
+    return 0;
+  pool_hdr_t *best = (pool_hdr_t *)(memfile_pool + best_off);
+  if (best->size - need >= sizeof(pool_hdr_t) + 16u) {
+    uint32_t rem = best->size - need;
+    uint32_t next_off = best_off + need;
+    *(pool_hdr_t *)(memfile_pool + next_off) = (pool_hdr_t){ rem, need, 0, 0 };
+    best->size = need;
+    if (next_off + rem < MEMFILE_POOL_SIZE)
+      ((pool_hdr_t *)(memfile_pool + next_off + rem))->prev_size = rem;
+  }
+  best->used = 1;
+  return memfile_pool + best_off + sizeof(pool_hdr_t);
+}
 
 static void *alloc16(size_t n)
 {
+  void *p = pool_alloc(n);
+  if (p)
+    return p;
   size_t sz = n ? ((n + 15u) & ~(size_t)15u) : 16u;
   return aligned_alloc(16, sz);
+}
+
+static void free16(void *p)
+{
+  if (!p)
+    return;
+  if (!in_pool(p)) {
+    free(p);
+    return;
+  }
+  uint32_t off = (uint32_t)((uintptr_t)p - (uintptr_t)memfile_pool - sizeof(pool_hdr_t));
+  if (off & 15u)
+    return;
+  pool_hdr_t *h = (pool_hdr_t *)(memfile_pool + off);
+  if (!h->used || !h->size || h->size > MEMFILE_POOL_SIZE - off)
+    return;
+  h->used = 0;
+  uint32_t next_off = off + h->size;
+  if (next_off < MEMFILE_POOL_SIZE) {
+    pool_hdr_t *next = (pool_hdr_t *)(memfile_pool + next_off);
+    if (!next->used) {
+      h->size += next->size;
+      uint32_t after = off + h->size;
+      if (after < MEMFILE_POOL_SIZE)
+        ((pool_hdr_t *)(memfile_pool + after))->prev_size = h->size;
+    }
+  }
+  if (h->prev_size && h->prev_size <= off) {
+    uint32_t prev_off = off - h->prev_size;
+    pool_hdr_t *prev = (pool_hdr_t *)(memfile_pool + prev_off);
+    if (!prev->used) {
+      prev->size += h->size;
+      uint32_t after = prev_off + prev->size;
+      if (after < MEMFILE_POOL_SIZE)
+        ((pool_hdr_t *)(memfile_pool + after))->prev_size = prev->size;
+    }
+  }
+}
+
+/* Shrink an in-pool block in place, returning the unused tail to the pool and coalescing with next. */
+static void pool_shrink(void *p, size_t new_n)
+{
+  if (!in_pool(p))
+    return;
+  uint32_t off = (uint32_t)((uintptr_t)p - (uintptr_t)memfile_pool - sizeof(pool_hdr_t));
+  if (off & 15u)
+    return;
+  pool_hdr_t *h = (pool_hdr_t *)(memfile_pool + off);
+  if (!h->used || !h->size || h->size > MEMFILE_POOL_SIZE - off)
+    return;
+  size_t payload = new_n ? ((new_n + 15u) & ~(size_t)15u) : 16u;
+  if (payload > h->size - sizeof(pool_hdr_t))
+    return;
+  uint32_t need = (uint32_t)(sizeof(pool_hdr_t) + payload);
+  if (h->size - need < sizeof(pool_hdr_t) + 16u)
+    return;
+  uint32_t rem = h->size - need;
+  uint32_t tail_off = off + need;
+  pool_hdr_t *tail = (pool_hdr_t *)(memfile_pool + tail_off);
+  *tail = (pool_hdr_t){ rem, need, 0, 0 };
+  h->size = need;
+  uint32_t after = tail_off + rem;
+  if (after < MEMFILE_POOL_SIZE) {
+    pool_hdr_t *next = (pool_hdr_t *)(memfile_pool + after);
+    if (!next->used) {
+      tail->size += next->size;
+      after = tail_off + tail->size;
+      if (after < MEMFILE_POOL_SIZE)
+        ((pool_hdr_t *)(memfile_pool + after))->prev_size = tail->size;
+    } else {
+      next->prev_size = tail->size;
+    }
+  }
+}
+
+static size_t pool_free_bytes(void)
+{
+  pool_init();
+  size_t total = 0;
+  for (uint32_t off = 0; off < MEMFILE_POOL_SIZE;) {
+    const pool_hdr_t *h = (const pool_hdr_t *)(memfile_pool + off);
+    if (!h->size || h->size > MEMFILE_POOL_SIZE - off)
+      break;
+    if (!h->used && h->size > sizeof(pool_hdr_t))
+      total += h->size - sizeof(pool_hdr_t);
+    off += h->size;
+  }
+  return total;
+}
+
+static bool pool_owns_in_memfile(const memfile_t *m, uint32_t off)
+{
+  const void *p = memfile_pool + off + sizeof(pool_hdr_t);
+  return p == m->save_buf || p == m->s_scalars || p == m->s_strs || p == m->actors || p == m->actor_bb;
+}
+
+static bool pool_would_fit_reclaiming(size_t n, const memfile_t *reclaim)
+{
+  pool_init();
+  if (n > MEMFILE_POOL_SIZE - sizeof(pool_hdr_t))
+    return false;
+  size_t payload = n ? ((n + 15u) & ~(size_t)15u) : 16u;
+  if (payload > MEMFILE_POOL_SIZE - sizeof(pool_hdr_t))
+    return false;
+  uint32_t need = (uint32_t)(sizeof(pool_hdr_t) + payload);
+  uint32_t run = 0;
+  for (uint32_t off = 0; off < MEMFILE_POOL_SIZE;) {
+    const pool_hdr_t *h = (const pool_hdr_t *)(memfile_pool + off);
+    if (!h->size || h->size > MEMFILE_POOL_SIZE - off)
+      return false;
+    if (!h->used || (reclaim && pool_owns_in_memfile(reclaim, off))) {
+      run += h->size;
+      if (run >= need)
+        return true;
+    } else {
+      run = 0;
+    }
+    off += h->size;
+  }
+  return false;
 }
 
 static bool str_equal(const char *a, const char *b)
@@ -286,11 +479,11 @@ static bool bytes_equal(const void *a, const void *b, size_t n)
 
 static void free_memfile(memfile_t *st)
 {
-  free(st->save_buf);
-  free(st->s_scalars);
-  free(st->s_strs);
-  free(st->actors);
-  free(st->actor_bb);
+  free16(st->save_buf);
+  free16(st->s_scalars);
+  free16(st->s_strs);
+  free16(st->actors);
+  free16(st->actor_bb);
   *st = (memfile_t){ 0 };
 }
 
@@ -334,7 +527,7 @@ static void retire_inflight_buf(void)
   uint8_t *desc0 = gd_file0_desc(&mgr, 0);
   if (!desc0 || !(desc0[GD_DESC_FLAGS] & GD_FLAG_SAVE_WORK) ||
       sys_ptr((uintptr_t)(desc0 + GD_DESC_SAVE_BUF)) != (uintptr_t)inflight_save_buf) {
-    free(inflight_save_buf);
+    free16(inflight_save_buf);
     inflight_save_buf = 0;
   }
 }
@@ -490,20 +683,25 @@ static const char *field_name(uint32_t hash)
   return 0;
 }
 
-static bool capture_session(memfile_t *st)
+enum { CAP_OK = 0, CAP_OOM = 1, CAP_BAD_GD = 2 };
+
+static session_scalar_t cap_scalars[SESSION_SCALARS_MAX];
+static session_str_t    cap_strs[SESSION_STRS_MAX];
+
+static int capture_session(memfile_t *st)
 {
-  st->s_scalars = alloc16((size_t)(memfilefields_count > 0 ? memfilefields_count : 1) * sizeof(session_scalar_t));
-  st->s_strs = alloc16(16 * sizeof(session_str_t));
-  if (!st->s_scalars || !st->s_strs)
-    return false;
-  uint32_t str_cap = 16;
+  uint32_t scalar_n = 0, str_n = 0;
+  uint32_t scalar_cap = memfilefields_count > 0 ? (uint32_t)memfilefields_count : 0u;
+  if (scalar_cap > SESSION_SCALARS_MAX)
+    scalar_cap = SESSION_SCALARS_MAX;
   for (int k = 0; k < K_COUNT; k++) {
     uint32_t stride, value_off;
     gd_type_t *t = kind_type(k, &stride, &value_off);
     if (!t) {
       if (k == K_UINT || k == K_VEC3)
         continue;
-      return false;
+      log_printf("memfile save: session %s table unreadable", kind_names[k]); /* not menu text */
+      return CAP_BAD_GD;
     }
     for (uint32_t s_i = 0; s_i < t->table_size; s_i++) {
       uint32_t hash = t->table[2 * s_i], idx = t->table[2 * s_i + 1];
@@ -513,22 +711,14 @@ static bool capture_session(memfile_t *st)
       if (!v)
         continue;
       if (k == K_STR) {
-        if (st->s_str_count >= str_cap) {
-          uint32_t ncap = str_cap * 2;
-          session_str_t *nb = alloc16((size_t)ncap * sizeof(session_str_t));
-          if (!nb)
-            return false;
-          memcpy(nb, st->s_strs, (size_t)st->s_str_count * sizeof(session_str_t));
-          free(st->s_strs);
-          st->s_strs = nb;
-          str_cap = ncap;
+        if (str_n < SESSION_STRS_MAX) {
+          session_str_t *e = &cap_strs[str_n++];
+          e->hash = hash;
+          memcpy(e->val, v, GD_STR_LEN);
+          e->val[GD_STR_LEN - 1] = 0;
         }
-        session_str_t *e = &st->s_strs[st->s_str_count++];
-        e->hash = hash;
-        memcpy(e->val, v, GD_STR_LEN);
-        e->val[GD_STR_LEN - 1] = 0;
-      } else if ((int)st->s_scalar_count < memfilefields_count) {
-        session_scalar_t *e = &st->s_scalars[st->s_scalar_count++];
+      } else if (scalar_n < scalar_cap) {
+        session_scalar_t *e = &cap_scalars[scalar_n++];
         e->hash = hash;
         e->kind = (uint8_t)k;
         e->width = kind_width[k];
@@ -537,7 +727,29 @@ static bool capture_session(memfile_t *st)
       }
     }
   }
-  return true;
+  if (scalar_n) {
+    size_t bytes = (size_t)scalar_n * sizeof(session_scalar_t);
+    st->s_scalars = alloc16(bytes);
+    if (!st->s_scalars) {
+      log_printf("memfile save: out of pool memory for %u session scalars (%u bytes, %u KiB free)", /* not menu text */
+                 (unsigned)scalar_n, (unsigned)bytes, (unsigned)(pool_free_bytes() >> 10));
+      return CAP_OOM;
+    }
+    memcpy(st->s_scalars, cap_scalars, bytes);
+    st->s_scalar_count = scalar_n;
+  }
+  if (str_n) {
+    size_t bytes = (size_t)str_n * sizeof(session_str_t);
+    st->s_strs = alloc16(bytes);
+    if (!st->s_strs) {
+      log_printf("memfile save: out of pool memory for %u session strings (%u bytes, %u KiB free)", /* not menu text */
+                 (unsigned)str_n, (unsigned)bytes, (unsigned)(pool_free_bytes() >> 10));
+      return CAP_OOM;
+    }
+    memcpy(st->s_strs, cap_strs, bytes);
+    st->s_str_count = str_n;
+  }
+  return CAP_OK;
 }
 
 static void log_restored_field(int k, uint32_t hash, int *logged)
@@ -1853,15 +2065,20 @@ static void walk_actor_tree(actor_visit_fn fn, void *ctx)
 #define SEEN_IDS_MAX 1024u
 
 typedef struct {
-  memfile_t *st;
-  uintptr_t  link, cam_actor;
-  uint8_t   *bb_pool;
-  uint32_t   bb_at;
-  uint8_t    prio[MEMFILE_ACTORS_MAX];
-  uint64_t   seen_id[SEEN_IDS_MAX];
-  uint8_t    seen_dup[SEEN_IDS_MAX];
-  uint32_t   seen_count, dup_count;
+  memfile_t       *st;
+  memfile_actor_t *actors;
+  uintptr_t        link, cam_actor;
+  uint8_t         *bb_pool;
+  uint32_t         bb_at;
+  uint8_t          prio[MEMFILE_ACTORS_MAX];
+  uint64_t         seen_id[SEEN_IDS_MAX];
+  uint8_t          seen_dup[SEEN_IDS_MAX];
+  uint32_t         seen_count, dup_count;
 } actor_cap_ctx_t;
+
+static memfile_actor_t cap_actors[MEMFILE_ACTORS_MAX];
+static uint8_t         cap_bb_pool[MEMFILE_BB_POOL_MAX];
+static actor_cap_ctx_t cap_actor_ctx;
 
 /* Track every instance_id in the scene: if two distinct actors share an ID, poison it so neither is saved. */
 static bool mark_id_unique(actor_cap_ctx_t *c, uint64_t id)
@@ -1873,9 +2090,9 @@ static bool mark_id_unique(actor_cap_ctx_t *c, uint64_t id)
         c->dup_count++;
         /* remove any already-captured entry with this colliding ID */
         for (uint32_t k = 0; k < c->st->actor_count; k++) {
-          if (c->st->actors[k].instance_id == id) {
+          if (c->actors[k].instance_id == id) {
             uint32_t last = --c->st->actor_count;
-            c->st->actors[k] = c->st->actors[last];
+            c->actors[k] = c->actors[last];
             c->prio[k] = c->prio[last];
             break;
           }
@@ -1931,7 +2148,7 @@ static void capture_actor_cb(uintptr_t actor, void *vctx)
     c->st->actor_count++;
   }
 
-  memfile_actor_t *e = &c->st->actors[dst_idx];
+  memfile_actor_t *e = &c->actors[dst_idx];
   *e = (memfile_actor_t){ 0 };
   e->instance_id = id;
   e->name_hash = fnv1a_str(name);
@@ -1956,43 +2173,41 @@ static bool capture_actors(memfile_t *st)
   uintptr_t mgr = sys_ptr(MAIN(z64hd_game->actor_mgr_ptr));
   if (!mgr || (mgr & 7u) || !sys_mapped(mgr + AMGR_TREE_ROOT, 8, SYS_PERM_R))
     return true;
-  st->actors = alloc16(MEMFILE_ACTORS_MAX * sizeof(memfile_actor_t));
-  uint8_t *bb_pool = alloc16(MEMFILE_BB_POOL_MAX);
-  actor_cap_ctx_t *ctx = alloc16(sizeof(*ctx));
-  if (!st->actors || !bb_pool || !ctx) {
-    free(st->actors);
-    free(bb_pool);
-    free(ctx);
-    st->actors = 0;
-    return false;
-  }
   uintptr_t cam_actor = 0;
   resolve_camera(&cam_actor);
-  *ctx = (actor_cap_ctx_t){ st, link_actor(), cam_actor, bb_pool, 0, { 0 }, { 0 }, { 0 }, 0, 0 };
-  walk_actor_tree(capture_actor_cb, ctx);
-  if (ctx->dup_count)
-    log_printf("memfiles: skipped %u colliding actor ID(s) during capture", (unsigned)ctx->dup_count); /* not menu text */
-  uint32_t bb_used = ctx->bb_at;
-  free(ctx);
+  cap_actor_ctx = (actor_cap_ctx_t){
+    .st = st,
+    .actors = cap_actors,
+    .link = link_actor(),
+    .cam_actor = cam_actor,
+    .bb_pool = cap_bb_pool,
+  };
+  walk_actor_tree(capture_actor_cb, &cap_actor_ctx);
+  if (cap_actor_ctx.dup_count)
+    log_printf("memfiles: skipped %u colliding actor ID(s) during capture", (unsigned)cap_actor_ctx.dup_count); /* not menu text */
+  uint32_t bb_used = cap_actor_ctx.bb_at;
+  if (st->actor_count) {
+    size_t bytes = (size_t)st->actor_count * sizeof(memfile_actor_t);
+    st->actors = alloc16(bytes);
+    if (!st->actors) {
+      log_printf("memfile save: out of pool memory for %u actors (%u bytes, %u KiB free)", /* not menu text */
+                 (unsigned)st->actor_count, (unsigned)bytes, (unsigned)(pool_free_bytes() >> 10));
+      st->actor_count = 0;
+      return false;
+    }
+    memcpy(st->actors, cap_actors, bytes);
+  }
   if (bb_used) {
     st->actor_bb = alloc16(bb_used);
-    if (st->actor_bb) {
-      memcpy(st->actor_bb, bb_pool, bb_used);
-      st->actor_bb_size = bb_used;
+    if (!st->actor_bb) {
+      log_printf("memfile save: out of pool memory for actor blackboard (%u bytes, %u KiB free)", /* not menu text */
+                 (unsigned)bb_used, (unsigned)(pool_free_bytes() >> 10));
+      return false;
     }
+    memcpy(st->actor_bb, cap_bb_pool, bb_used);
+    st->actor_bb_size = bb_used;
   }
-  free(bb_pool);
   st->have_actors = true;
-  if (st->actor_count < MEMFILE_ACTORS_MAX) {
-    uint32_t keep = st->actor_count ? st->actor_count : 1u;
-    memfile_actor_t *shrunk = alloc16((size_t)keep * sizeof(memfile_actor_t));
-    if (shrunk) {
-      if (st->actor_count)
-        memcpy(shrunk, st->actors, (size_t)st->actor_count * sizeof(memfile_actor_t));
-      free(st->actors);
-      st->actors = shrunk;
-    }
-  }
   return true;
 }
 
@@ -2214,6 +2429,26 @@ static void finish_save(const uint8_t *desc0)
     save_fail("can't save a memfile: game data not readable");
     return;
   }
+  uint32_t orig_cap = staging.save_cap;
+  if (in_pool(staging.save_buf)) {
+    pool_shrink(staging.save_buf, written);
+    staging.save_cap = written;
+  } else {
+    /* staging.save_buf fell back to main's CRT heap: move the compact snapshot into the BSS pool if it fits */
+    uint8_t *packed = pool_alloc(written);
+    if (!packed && memfiles[active_slot].used && pool_would_fit_reclaiming(written, &memfiles[active_slot])) {
+      free_memfile(&memfiles[active_slot]);
+      packed = pool_alloc(written);
+    }
+    if (!packed && written + 4096u < staging.save_cap)
+      packed = aligned_alloc(16, (written + 15u) & ~(size_t)15u);
+    if (packed) {
+      memcpy(packed, staging.save_buf, written);
+      free(staging.save_buf);
+      staging.save_buf = packed;
+      staging.save_cap = written;
+    }
+  }
   staging.save_size = written;
   staging.used = true;
   free_memfile(&memfiles[active_slot]);
@@ -2223,10 +2458,11 @@ static void finish_save(const uint8_t *desc0)
   set_phase(L_IDLE);
   const memfile_t *st = &memfiles[active_slot];
   log_printf("memfile %d saved: %s at \"%s\", %.2f %.2f %.2f facing %.3f,%.3f, life %d, magic %d, time %02u:%02u, "
-             "%u bytes binary, %u scalars + %u strings session, %u actors%s", /* not menu text */
+             "%u/%u bytes binary (%u KiB pool free), %u scalars + %u strings session, %u actors%s", /* not menu text */
              active_slot + 1, st->map, st->start, st->x, st->y, st->z, st->fx, st->fz, (int)st->life, (int)st->magic,
              st->have_time ? (unsigned)(st->time / 3600) : 99u, st->have_time ? (unsigned)(st->time / 60 % 60) : 99u,
-             (unsigned)st->save_size, (unsigned)st->s_scalar_count, (unsigned)st->s_str_count,
+             (unsigned)st->save_size, (unsigned)orig_cap, (unsigned)(pool_free_bytes() >> 10),
+             (unsigned)st->s_scalar_count, (unsigned)st->s_str_count,
              (unsigned)st->actor_count, st->actors_truncated ? " (capped)" : "");
   gfx_logf("memfile %d saved", active_slot + 1);
 }
@@ -2288,9 +2524,25 @@ bool memfile_save(int s)
   }
 
   free_memfile(&staging);
+  /* Capture small session/actor metadata first so staging.save_buf sits at the tail of the pool and
+   * pool_shrink() in finish_save() coalesces its unused tail directly into the remaining free space. */
+  int sess = capture_session(&staging);
+  if (sess != CAP_OK) {
+    free_memfile(&staging);
+    gfx_notice(sess == CAP_BAD_GD ? "can't save a memfile: game data not readable"
+                                  : "can't save a memfile: out of memory");
+    return false;
+  }
+  if (!capture_actors(&staging)) {
+    free_memfile(&staging);
+    gfx_notice("can't save a memfile: out of memory");
+    return false;
+  }
   staging.save_buf = alloc16(buf_size);
   staging.save_cap = buf_size;
-  if (!staging.save_buf || !capture_session(&staging) || !capture_actors(&staging)) {
+  if (!staging.save_buf) {
+    log_printf("memfile %d save: out of memory for %u-byte save buffer (%u KiB pool free)", /* not menu text */
+               s + 1, (unsigned)buf_size, (unsigned)(pool_free_bytes() >> 10));
     free_memfile(&staging);
     gfx_notice("can't save a memfile: out of memory");
     return false;
@@ -2906,7 +3158,7 @@ static void out_blob(szm_out_t *o, const void *b, uint32_t n)
   out_bytes(o, b, n);
 }
 
-/* the memfile as a .szm file's bytes (heap; the caller frees), or 0 */
+/* the memfile as a .szm file's bytes (the caller frees with free16), or 0 */
 static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size_out)
 {
   uint32_t cap = (uint32_t)sizeof(szm_header_t) + st->save_size + st->s_scalar_count * SZM_SCALAR_SIZE +
@@ -3029,7 +3281,7 @@ static uint8_t *szm_encode(const memfile_t *st, const char *name, uint32_t *size
   }
 
   if (!o.ok) {
-    free(o.p);
+    free16(o.p);
     return 0;
   }
   szm_header_t h = { 0 };
@@ -3129,7 +3381,9 @@ static uint32_t in_records(const uint8_t **p, uint32_t size, uint32_t min_record
 static bool szm_scalars(const uint8_t *p, uint32_t size, memfile_t *st)
 {
   uint32_t record = 0, count = in_records(&p, size, SZM_SCALAR_SIZE, &record);
-  st->s_scalars = alloc16((size_t)(count ? count : 1) * sizeof(session_scalar_t));
+  if (!count)
+    return true;
+  st->s_scalars = alloc16((size_t)count * sizeof(session_scalar_t));
   if (!st->s_scalars)
     return false;
   for (uint32_t i = 0; i < count; i++, p += record) {
@@ -3148,7 +3402,9 @@ static bool szm_scalars(const uint8_t *p, uint32_t size, memfile_t *st)
 static bool szm_strings(const uint8_t *p, uint32_t size, memfile_t *st)
 {
   uint32_t record = 0, count = in_records(&p, size, SZM_STRING_SIZE, &record);
-  st->s_strs = alloc16((size_t)(count ? count : 1) * sizeof(session_str_t));
+  if (!count)
+    return true;
+  st->s_strs = alloc16((size_t)count * sizeof(session_str_t));
   if (!st->s_strs)
     return false;
   for (uint32_t i = 0; i < count; i++, p += record) {
@@ -3172,28 +3428,30 @@ static bool szm_actors(const uint8_t *p, uint32_t size, memfile_t *st)
     count = MEMFILE_ACTORS_MAX;
     aflags |= ACTORS_TRUNCATED;
   }
-  st->actors = alloc16((size_t)(count ? count : 1u) * sizeof(memfile_actor_t));
-  if (!st->actors)
-    return false;
-  for (uint32_t i = 0; i < count; i++, p += record) {
-    memfile_actor_t e = { 0 };
-    memcpy(&e.instance_id, p, 8);
-    memcpy(e.pos, p + 8, 12);
-    memcpy(e.rot, p + 20, 36);
-    memcpy(&e.life, p + 56, 4);
-    memcpy(&e.max_life, p + 60, 4);
-    e.state = p[64];
-    e.flags = p[65];
-    if (record >= 70u)
-      memcpy(&e.name_hash, p + 66, 4);
-    if (record >= 78u) {
-      memcpy(&e.bb_off, p + 70, 4);
-      memcpy(&e.bb_len, p + 74, 4);
-    } else {
-      e.flags &= (uint8_t)~ACTOR_F_BB;
+  if (count) {
+    st->actors = alloc16((size_t)count * sizeof(memfile_actor_t));
+    if (!st->actors)
+      return false;
+    for (uint32_t i = 0; i < count; i++, p += record) {
+      memfile_actor_t e = { 0 };
+      memcpy(&e.instance_id, p, 8);
+      memcpy(e.pos, p + 8, 12);
+      memcpy(e.rot, p + 20, 36);
+      memcpy(&e.life, p + 56, 4);
+      memcpy(&e.max_life, p + 60, 4);
+      e.state = p[64];
+      e.flags = p[65];
+      if (record >= 70u)
+        memcpy(&e.name_hash, p + 66, 4);
+      if (record >= 78u) {
+        memcpy(&e.bb_off, p + 70, 4);
+        memcpy(&e.bb_len, p + 74, 4);
+      } else {
+        e.flags &= (uint8_t)~ACTOR_F_BB;
+      }
+      if (e.instance_id && e.instance_id != UINT64_MAX && e.instance_id != 0xFFFFFFFFull)
+        st->actors[st->actor_count++] = e;
     }
-    if (e.instance_id && e.instance_id != UINT64_MAX && e.instance_id != 0xFFFFFFFFull)
-      st->actors[st->actor_count++] = e;
   }
   st->have_actors = true;
   st->actors_truncated = (aflags & ACTORS_TRUNCATED) != 0;
@@ -3226,6 +3484,8 @@ static void szm_extra(szm_in_t *in, memfile_t *st)
   }
 }
 
+static const char szm_no_mem[] = "not enough memory for that memfile";
+
 /* read a .szm file's bytes into st (zeroed; free_memfile it either way): 0, or why it can't be used */
 static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
 {
@@ -3246,7 +3506,7 @@ static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
   if (h.body_size != n - h.header_size || crc32(p + h.header_size, h.body_size) != h.body_crc)
     return "that memfile is damaged";
 
-  bool have_state = false;
+  bool have_state = false, seen_scalars = false, seen_strs = false, seen_actors = false;
   for (uint32_t at = h.header_size; at < n;) {
     uint32_t tag, size;
     if (n - at < 8)
@@ -3264,26 +3524,29 @@ static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
       if (st->save_buf || size < 16u || size > GD_MAX_SAVE_BUF || (memcpy(&magic, body, 4), magic != GD_SAVE_MAGIC))
         return "that memfile's game data isn't readable";
       if (!(st->save_buf = alloc16(size)))
-        return "not enough memory for that memfile";
+        return szm_no_mem;
       memcpy(st->save_buf, body, size);
       st->save_cap = st->save_size = size;
-    } else if (tag == SZM_SCALARS && !st->s_scalars) {
+    } else if (tag == SZM_SCALARS && !seen_scalars) {
+      seen_scalars = true;
       if (!szm_scalars(body, size, st))
-        return "not enough memory for that memfile";
-    } else if (tag == SZM_STRINGS && !st->s_strs) {
+        return szm_no_mem;
+    } else if (tag == SZM_STRINGS && !seen_strs) {
+      seen_strs = true;
       if (!szm_strings(body, size, st))
-        return "not enough memory for that memfile";
+        return szm_no_mem;
     } else if (tag == SZM_STATE) {
       have_state = szm_state(&in, st);
     } else if (tag == SZM_CAMERA) {
       szm_camera(&in, st);
-    } else if (tag == SZM_ACTORS && !st->actors) {
+    } else if (tag == SZM_ACTORS && !seen_actors) {
+      seen_actors = true;
       if (!szm_actors(body, size, st))
-        return "not enough memory for that memfile";
+        return szm_no_mem;
     } else if (tag == SZM_ACTOR_BB && !st->actor_bb) {
       if (size && size <= MEMFILE_BB_POOL_MAX) {
         if (!(st->actor_bb = alloc16(size)))
-          return "not enough memory for that memfile";
+          return szm_no_mem;
         memcpy(st->actor_bb, body, size);
         st->actor_bb_size = size;
       }
@@ -3293,8 +3556,6 @@ static const char *szm_decode(const uint8_t *p, uint32_t n, memfile_t *st)
   }
   if (!st->save_buf || !have_state)
     return "that memfile is damaged";
-  if ((!st->s_scalars && !szm_scalars(p, 0, st)) || (!st->s_strs && !szm_strings(p, 0, st)))
-    return "not enough memory for that memfile";
   copy_str(st->map, sizeof(st->map), h.map);
   st->map[GD_STR_LEN - 1] = 0;
   if (!st->map[0])
@@ -3401,7 +3662,8 @@ bool memfile_export(int s, const char *typed)
     gfx_notice("that memfile is empty");
     return false;
   }
-  if (memfile_busy()) {
+  retire_inflight_buf();
+  if (memfile_busy() || inflight_save_buf) {
     gfx_notice("memfile is busy");
     return false;
   }
@@ -3441,7 +3703,7 @@ bool memfile_export(int s, const char *typed)
     if (!ok)
       fs_delete_file(path);
   }
-  free(bytes);
+  free16(bytes);
   if (!ok) {
     gfx_notice("couldn't write the memfile to the SD card");
     return false;
@@ -3605,7 +3867,8 @@ bool memfile_import(int i, int s)
   if (i < folder_count || i >= file_count || s < 0 || s >= MEMFILE_SLOTS)
     return false;
   end_camera_guard();
-  if (phase != L_IDLE) {
+  retire_inflight_buf();
+  if (phase != L_IDLE || inflight_save_buf) {
     gfx_notice("memfile is busy");
     return false;
   }
@@ -3628,15 +3891,25 @@ bool memfile_import(int i, int s)
             got == (size_t)size;
   fs_close(f);
   if (!ok) {
-    free(bytes);
+    free16(bytes);
     gfx_notice(size > (int64_t)SZM_FILE_MAX ? "that file isn't a memfile" : "couldn't read that memfile");
     return false;
   }
   static memfile_t loaded;
   loaded = (memfile_t){ 0 };
   const char *why = szm_decode(bytes, (uint32_t)size, &loaded);
-  free(bytes);
+  if (why == szm_no_mem && memfiles[s].used) {
+    free_memfile(&loaded);
+    if (pool_would_fit_reclaiming((size_t)size + 16384u, &memfiles[s])) {
+      free_memfile(&memfiles[s]);
+      why = szm_decode(bytes, (uint32_t)size, &loaded);
+    }
+  }
+  free16(bytes);
   if (why) {
+    if (why == szm_no_mem)
+      log_printf("memfile %d import: out of pool memory for %u-byte file (%u KiB free)", /* not menu text */
+                 s + 1, (unsigned)size, (unsigned)(pool_free_bytes() >> 10));
     free_memfile(&loaded);
     gfx_notice(why);
     return false;

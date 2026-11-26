@@ -15,6 +15,9 @@ bool warp_arm_silent(const warp_map_t *map, const spawn_t *spawn);
 void warp_cancel(void);
 void warp_frame(void);              /* frame hook */
 const char *warp_state(void);       /* for the warps menu */
+/* where the last warp_arm / warp_arm_silent led (0 and a null map: none yet): the game keeps no start point for an
+ * arrival by warp, so a reload of that map can come back to it */
+const spawn_t *warp_last_target(const warp_map_t **map);
 bool warp_pending(void);            /* requested or armed, not yet happened */
 bool warp_abandoned(void);          /* cancelled or timed out before Link left the map */
 /* the last warp_arm/warp_arm_silent went through the game's event (instant), not the exit fallback */

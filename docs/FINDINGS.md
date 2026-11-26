@@ -2183,7 +2183,7 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   masked-signature matches through the callers, not run. Not tried: whether Epona's Song then calls her (the save
   had no song).
 
-### 9.35 Lank and Lonk, and changing the game's files at run time (beta; 1.1.1; checked in game, 24th November 2026)
+### 9.35 Lank and Lonk, and changing the game's files at run time (beta; 1.1.1; checked in game, 26th November 2026)
 - **What decides the proportions:** child and adult Link are two actors (`Player_Child`, `Player_Adult`), each with
   its own model and its own `Component/AnimationParam` in its pack (`content:/Pack/Actor/Player_Child.pack.zs`,
   `Player_Adult.pack.zs`). Its AnimationResources name the animation sets by ModelProjectName: the child's
@@ -2204,18 +2204,26 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   frame) for its anchor, a 4-byte aligned word, in memory regions up to the patch's size limit. For these packs
   that's regions up to 1 MiB: 1.1 GiB of the 9.6 GiB of readable and writable memory, about 4 s; all of it took
   20 s and cost frames. The copies found are remembered for the next switch.
-- **remake.c (making Link again):** asked for, the next **reload map** goes to the other age and back (age.c calls
-  it at a reload's start; the age, sword, shield and clothes come back), waiting for the first load's arrival
-  event to end (a warp asked for during it is refused). For any change that shows when Link is made.
-- **lank.c:** two patches whose fix swaps `Child` and `Adult` in the six shared names (the same length, so nothing
-  moves), after checking the key and the age's list are there (the actor database also lists the names, without
-  the key), and the **link > lank / lonk mode (beta)** menu: a mode, applied, then a reload. Not kept in the
-  settings.
+- **remake.c (making Link again):** `remake_start(age)` reloads the map Link is in, as it is named, with his age
+  forced (age.c's `age_reload_map_as`: the age set and DebugParam.IsSetChildhoodManually held through the load, as
+  warps > override age does), so it works in a map with no version for the other age (GerudoFortress_Adult). One
+  load when that changes his age, else two, through the other age and back (sword, shield and clothes come back).
+  It starts once the search for kept copies has ended and no event runs, waits for each load's arrival event to
+  end (a warp asked for during it is refused), and puts Link back where he stood. For any change that shows when
+  Link is made.
+- **lank.c:** two patches, one on each age's pack, whose fix swaps `Child` and `Adult` in the six shared names (the
+  same length, so nothing moves), after checking the key and the age's list are there (the actor database also
+  lists the names, without the key), and the **link > lank / lonk mode (beta)** menu: a mode (nothing, lank: the
+  child's patch on, lonk: the adult's) and **apply and reload**, which switches the patches, sets warps > override
+  age to the mode's age (nothing: disabled again) and makes Link again at that age (nothing: the age the map's
+  name gives). Not kept in the settings.
 - **Beyond these:** a new change to the game's files is a client of gamepatch.h (and remake.h when it's read as
   Link is made); the shared files only call the modules' init, frame and menu functions.
-- **Checked in game:** off at boot, then lank & lonk applied and the map reloaded: Lank; off and reloaded: the
-  normal child; lank & lonk with an age change: Lonk, also in a child map through warps > override age. No
-  restart in between. Not checked: 1.0.0, which has the same imports and files.
+- **Checked in game (26th November 2026, through the menu's own buttons):** in Kokiri Forest (child map) lank
+  (two loads: Lank), lonk (one load: Lonk, an adult in the child map), nothing (the normal child); in Gerudo
+  Fortress (adult only) lank (one load: Lank, a child in the adult map), lonk, nothing (two loads through the
+  child: the normal adult). Link ended each where he stood. No restart in between. Not checked: 1.0.0, which has
+  the same imports and files.
 - **What didn't work:** changing the names only in memory once (the pack may be read again), the
   `Model/%s.anim.bfres` formatter calls (they name cutscene and model files, not these sets) and the BYML
   string-field reader of the parameter files (`main+0x2B5C480`, never called for them).

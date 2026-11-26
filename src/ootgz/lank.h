@@ -1,8 +1,9 @@
-/* Lank and Lonk, beta (link > lank / lonk mode): child Link plays adult Link's animation sets and adult Link the
- * child's, so each model takes the other age's proportions, as in the cutscenes played at the wrong age. Two game
- * file patches (gamepatch.h) on the Player packs; a mode is chosen, then applied, and shows once the game makes Link
- * again (remake.h: the next reload map, an age change or a file load). Not kept in the settings: a beta that edits
- * the game's files in memory starts off. FINDINGS 9.35. */
+/* Lank and Lonk, beta (link > lank / lonk mode): Lank is child Link playing adult Link's animation sets, Lonk adult
+ * Link playing the child's, so the model takes the other age's proportions, as in the cutscenes played at the wrong
+ * age. Two game file patches (gamepatch.h), one on each age's Player pack; a mode (nothing, lank, lonk) is chosen,
+ * then applied: that age's patch goes on, and the map Link is in is reloaded with him at the mode's age, whatever
+ * age the map was made for (remake.h), which makes him again. Not kept in the settings: a beta that edits the game's
+ * files in memory starts off. FINDINGS 9.35. */
 #ifndef LANK_H
 #define LANK_H
 
@@ -13,7 +14,7 @@
 enum { LANK_CHILD, LANK_ADULT };
 
 /* the modes; LANK_MODES is how many */
-enum { LANK_MODE_OFF, LANK_MODE_SWAP, LANK_MODES };
+enum { LANK_MODE_OFF, LANK_MODE_LANK, LANK_MODE_LONK, LANK_MODES };
 extern const char *const lank_mode_names[LANK_MODES];
 
 /* at module init, before gamepatch_hook_game */
@@ -23,8 +24,9 @@ struct menu;
 void lank_menu_add(struct menu *link_menu);
 int lank_mode_chosen(void);
 void lank_mode_choose(int mode);
-/* make the chosen mode the one in force; it shows once the game makes Link again (remake.h) */
-void lank_apply(void);
+/* Make the chosen mode the one in force and reload the map with Link as it has him (remake.h); warps > override
+ * age is set to the mode's age (and put back by nothing). True once the reload is on its way. */
+bool lank_apply(void);
 int lank_mode_applied(void);
 
 /* In `data`, the `age`'s AnimationParam string table (its key ModelProjectName, then the sets' names: the child's six,

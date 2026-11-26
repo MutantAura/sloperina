@@ -133,8 +133,8 @@ Beta: it changes the game's own files as the game reads them and in memory. It s
 
 | Item | What it does |
 |---|---|
-| **mode** | **off**, or **lank & lonk**: each age plays the other's animations, as in the cutscenes played at the wrong age, so child Link is stretched to adult proportions (Lank) and adult Link squashed to the child's (Lonk). |
-| **apply** | Makes the chosen mode the one in force and reloads the map at once (as **scene interaction > reload map** does; the menu closes to watch it): that reload goes to the other age and back, since the game makes Link anew only when his age changes; age, sword, shield and clothes come back. On the title screen, before a file is loaded, there's nothing to reload: it shows when the file loads. Applying the mode in force again only reloads if it hasn't been since. An age change or a file load applies it too. |
+| **mode** | **nothing** (Link as the game has him), **lank** (child Link playing the adult's animations, so stretched to adult proportions) or **lonk** (adult Link playing the child's, so squashed to the child's), as in the cutscenes played at the wrong age. |
+| **apply and reload** | Makes the chosen mode the one in force and reloads the map you're in with Link as the mode has him: the child for lank, the adult for lonk, in any map, also one made for the other age (Lank in Gerudo Fortress). The game makes Link anew only when his age changes, so when he already has that age the reload goes through the other age and back (two loads; sword, shield and clothes come back). He ends where he stood. It also sets **warps > override age** to the mode's age, so warps from the menu keep him that way; **nothing** puts that back to disabled and reloads the map at the age it was made for. An exit taken on foot lets the next map decide his age as usual. |
 
 ### 2.2 Warps
 

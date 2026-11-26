@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "age.h"
+#include "gamedata.h"
 #include "gamefile.h"
 #include "gamepatch.h"
 #include "gfx.h"
@@ -111,9 +112,10 @@ static gamepatch_t patches[2] = {
     .user = LANK_ADULT },
 };
 
-const char *const lank_mode_names[LANK_MODES] = { "off", "lank & lonk" };
+const char *const lank_mode_names[LANK_MODES] = { "nothing", "lank", "lonk" };
 
 static int chosen, applied;
+static bool set_override; /* the mode in force set warps > override age: nothing puts it back */
 
 void lank_init(void)
 {
@@ -137,36 +139,51 @@ int lank_mode_applied(void)
   return applied;
 }
 
-/* the map reloaded at once (link > scene interaction > reload map), so Link is made again with the files as patched */
-static void reload_now(void)
+/* the age the map Link is in was made for, by its name; the age he is when it has none */
+static int map_age(void)
 {
-  log_printf("lank / lonk: reloading the map");
-  age_reload_map();
-  menu_close(); /* so the reload can be watched */
+  const char *map = gd_get_str(GD_STR_MAP);
+  for (const char *p = map; p && *p; p++) {
+    if (p[0] == '_' && p[1] == 'C' && p[2] == 'h' && p[3] == 'i' && p[4] == 'l' && p[5] == 'd')
+      return AGE_CHILD;
+    if (p[0] == '_' && p[1] == 'A' && p[2] == 'd' && p[3] == 'u' && p[4] == 'l' && p[5] == 't')
+      return AGE_ADULT;
+  }
+  return age_current();
 }
 
-void lank_apply(void)
+bool lank_apply(void)
 {
   if (!gamepatch_available())
-    return;
-  if (chosen == applied) {
-    if (remake_pending())
-      reload_now(); /* applied, but not reloaded yet */
-    else
-      gfx_notice("already applied");
-    return;
+    return false;
+  if (remake_pending()) {
+    gfx_notice("link is being made again: wait for it");
+    return false;
+  }
+  bool made = link_actor() != 0 && age_current() >= 0;
+  /* Lank is the child and Lonk the adult, in any map; nothing leaves Link the age the map is for */
+  int age = chosen == LANK_MODE_LANK ? AGE_CHILD : chosen == LANK_MODE_LONK ? AGE_ADULT : map_age();
+  if (chosen == applied && (!made || age_current() == age)) {
+    gfx_notice("already applied");
+    return false;
   }
   applied = chosen;
-  bool swap = applied == LANK_MODE_SWAP;
-  gamepatch_set(&patches[0], swap);
-  gamepatch_set(&patches[1], swap);
-  bool made = link_actor() != 0;
-  remake_request(made); /* before a file is loaded, Link will be made with it anyway */
+  gamepatch_set(&patches[0], applied == LANK_MODE_LANK);
+  gamepatch_set(&patches[1], applied == LANK_MODE_LONK);
+  /* menu warps keep the mode's age (warps > override age), in maps made for the other age too */
+  if (applied != LANK_MODE_OFF) {
+    age_set_override(age);
+    set_override = true;
+  } else if (set_override) {
+    age_set_override(-1);
+    set_override = false;
+  }
   log_printf("lank / lonk: %s applied", lank_mode_names[applied]);
-  if (made)
-    reload_now();
-  else
+  if (!made) { /* before a file is loaded: Link will be made with it anyway */
     gfx_notice("applied: it shows when a file is loaded");
+    return false;
+  }
+  return remake_start(age);
 }
 
 /* --- the menu ------------------------------------------------------------------------------------ */
@@ -175,7 +192,12 @@ static menu_t m_lank;
 
 static int get_mode(menu_item_t *it) { return lank_mode_chosen(); }
 static void set_mode(menu_item_t *it, int mode) { lank_mode_choose(mode); }
-static void act_apply(menu_item_t *it) { lank_apply(); }
+
+static void act_apply(menu_item_t *it)
+{
+  if (lank_apply())
+    menu_close(); /* so the reload can be watched */
+}
 
 static void text_blank(menu_item_t *it, char *buf, int len)
 {
@@ -185,7 +207,7 @@ static void text_blank(menu_item_t *it, char *buf, int len)
 static void text_applied(menu_item_t *it, char *buf, int len)
 {
   snprintf(buf, len, TF("applied: %s%s"), T(lank_mode_names[applied]),
-           remake_pending() ? T(", once the map is reloaded") : "");
+           remake_pending() ? T(", reloading") : "");
 }
 
 void lank_menu_add(menu_t *link_menu)
@@ -195,8 +217,10 @@ void lank_menu_add(menu_t *link_menu)
   menu_init(&m_lank, "lank / lonk mode (beta)", 6);
   menu_item_t *mode = menu_add_option(&m_lank, "mode", LANK_MODES, lank_mode_names, get_mode, set_mode, 0);
   if (mode)
-    mode->hint = "lank & lonk: each age plays the other's animations (a tall child, a small adult)";
-  menu_add_action(&m_lank, "apply", act_apply, 0); /* reloads the map itself */
+    mode->hint = "lank: a tall child; lonk: a small adult; nothing: link as the game has him";
+  menu_item_t *apply = menu_add_action(&m_lank, "apply and reload", act_apply, 0);
+  if (apply)
+    apply->hint = "beta, edits the game's files in memory; reloads this map with link as the mode has him";
   menu_add_return(&m_lank);
   menu_add_text(&m_lank, text_blank, 0);
   menu_add_text(&m_lank, text_applied, 0);

@@ -20,7 +20,6 @@
 #include "gamedata.h"
 #include "gfx.h"
 #include "link.h"
-#include "remake.h"
 #include "sys.h"
 #include "warp.h"
 
@@ -215,7 +214,6 @@ void age_reload_map(void)
     gfx_notice("can't reload: game data not found");
     return;
   }
-  remake_reload_starting(current_map, current_age); /* may make this the first of two loads (remake.h) */
   int age = age_wanted();
   char name[GD_STR_LEN];
   if (!age_version(current_map, age, name, sizeof(name))) {
@@ -275,6 +273,28 @@ static void hold_override(bool on)
   log_printf("override age: override %s", on ? "on" : "off");
 }
 
+/* Give Link `age` now (the data is put back if the warp never happens: age_frame) and keep
+ * DebugParam.IsSetChildhoodManually on through the map load that follows, so the map loads at that age whatever
+ * age it was made for */
+static void force_age(int age, int current_age)
+{
+  if (age != current_age) {
+    if (undo_age < 0) {
+      undo_age = current_age;
+      snprintf(undo_tunic, sizeof(undo_tunic), "%s", gd_get_str(GD_STR_TUNIC) ? gd_get_str(GD_STR_TUNIC) : "");
+      snprintf(undo_boots, sizeof(undo_boots), "%s", gd_get_str(GD_STR_BOOTS) ? gd_get_str(GD_STR_BOOTS) : "");
+    } else if (age == undo_age) {
+      undo_age = -1;
+    }
+    apply_age(age);
+  }
+  wanted_age = -1;
+  hold_started = frame_counter();
+  hold_reserved = 0;
+  holding_override = false;
+  hold_override(true);
+}
+
 void age_prepare_warp(void)
 {
   if (override_age < 0) {
@@ -286,21 +306,39 @@ void age_prepare_warp(void)
     gfx_notice("override age: game data not found");
     return;
   }
-  if (override_age != current_age) {
-    if (undo_age < 0) {
-      undo_age = current_age;
-      snprintf(undo_tunic, sizeof(undo_tunic), "%s", gd_get_str(GD_STR_TUNIC) ? gd_get_str(GD_STR_TUNIC) : "");
-      snprintf(undo_boots, sizeof(undo_boots), "%s", gd_get_str(GD_STR_BOOTS) ? gd_get_str(GD_STR_BOOTS) : "");
-    } else if (override_age == undo_age) {
-      undo_age = -1;
-    }
-    apply_age(override_age);
+  force_age(override_age, current_age);
+}
+
+bool age_reload_map_as(int age)
+{
+  const char *current_map = gd_get_str(GD_STR_MAP);
+  const char *last_start = gd_get_str(GD_STR_SPAWN);
+  int current_age = age_current();
+  if (!current_map || !current_map[0] || current_age < 0) {
+    gfx_notice("can't reload: game data not found");
+    return false;
   }
-  wanted_age = -1;
-  hold_started = frame_counter();
-  hold_reserved = 0;
-  holding_override = false;
-  hold_override(true);
+  char name[GD_STR_LEN];
+  snprintf(name, sizeof(name), "%s", current_map); /* reload_target may keep a pointer: not the game's string */
+  const warp_map_t *map;
+  const spawn_t *spawn;
+  if (!reload_target(name, last_start, false, &map, &spawn)) {
+    gfx_notice("can't reload: no start point known for this map");
+    return false;
+  }
+  if (!(last_start && last_start[0])) { /* he came by a warp from the menu: back to that spawn, not the map's first */
+    const warp_map_t *warped_map;
+    const spawn_t *warped_spawn = warp_last_target(&warped_map);
+    if (warped_spawn && warped_map && str_equal(warped_map->name, name)) {
+      map = warped_map;
+      spawn = warped_spawn;
+    }
+  }
+  log_printf("reload: %s as %s at %s, last start point \"%s\", age %d -> %d", name,
+             age == AGE_CHILD ? "child" : "adult", spawn->pos, last_start ? last_start : "?", current_age, age);
+  force_age(age == AGE_CHILD ? AGE_CHILD : AGE_ADULT, current_age);
+  warp_arm(map, spawn);
+  return true;
 }
 
 /* keep the override on until the new map has settled, or the warp was given up */

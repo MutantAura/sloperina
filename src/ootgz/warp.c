@@ -242,6 +242,12 @@ static void arm_exit_swap(const warp_map_t *map, const spawn_t *spawn)
   gfx_notice("warp ready: walk through any exit or loading zone");
 }
 
+const spawn_t *warp_last_target(const warp_map_t **map)
+{
+  *map = target_map;
+  return target_spawn;
+}
+
 void warp_arm(const warp_map_t *map, const spawn_t *spawn)
 {
   if (state == WARP_ARMED)

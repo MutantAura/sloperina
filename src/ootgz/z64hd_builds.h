@@ -199,6 +199,18 @@ static const struct z64hd_build z64hd_builds[] = {
     .owned_horse_mgr_get = 0x26AD4E0,
     .owned_horse_register = 0x323E840,
     .gd_set_string16 = 0xF83410, /* SetString16: 1.1.1 0xF69FF0, matched over 64 instructions (FINDINGS 9.26) */
+    /* security guards (FINDINGS 9.36): 1.1.1's matched by masked signature, each unique over 24, 48 and 96 words; the
+     * on-duty query through its matched AI node (1.1.1 0x2BF580 -> 1.0.0 0x2AFB80, which calls it) */
+    .guard_param = 0x28A4DA0,
+    .guard_alert_mode = 0x28A4E70,
+    .guard_in_dark = 0x2CA5010,
+    .guard_on_duty = 0x2AFC60,
+    .guard_los_range = 0x2CA5790,
+    .guard_los_below = 0x2CA59A0,
+    .guard_los_above = 0x2CA5BA0,
+    .guard_los_angle = 0x2CA5DA0,
+    .bone_find = 0x7C6DA0,
+    .door_close_node_vtable = 0x4A96CF8,
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -338,6 +350,18 @@ static const struct z64hd_build z64hd_builds[] = {
     .owned_horse_mgr_get = 0xB3CC40,
     .owned_horse_register = 0x329D990,
     .gd_set_string16 = 0xF69FF0, /* SetString16 (FINDINGS 9.26) */
+    /* security guards (FINDINGS 9.36): the guards' AI nodes' (QueryNpcSecurityGuard*, SelectorNpcSecurityGuardCheck-
+     * CustomLOSDistance) and QueryModelGetBoneMatrix34f's bone lookup */
+    .guard_param = 0x28F72D0,
+    .guard_alert_mode = 0x28F73A0,
+    .guard_in_dark = 0x2CF8DD0,
+    .guard_on_duty = 0x2BF660,
+    .guard_los_range = 0x2CF9550,
+    .guard_los_below = 0x2CF9760,
+    .guard_los_above = 0x2CF9960,
+    .guard_los_angle = 0x2CF9B60,
+    .bone_find = 0x1B3620,
+    .door_close_node_vtable = 0x4AFBCC8,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

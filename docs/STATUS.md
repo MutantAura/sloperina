@@ -1,8 +1,30 @@
 # Status
 
-Where the work stands, for picking it up again. Last updated 26th November 2026, after the 0.0.13 release.
+Where the work stands, for picking it up again. Last updated 26th November 2026, after the 0.0.14 release.
 
 ## Released
+
+**0.0.14** (tag `v0.0.14`, GitHub release with `sloperinaGZ-0.0.14.zip`). Since 0.0.13:
+
+- **scene > environment** folded into **air walls**, **guards** and **actors** submenus.
+- **Guard vision** (guards): the Gerudo guards' and castle soldiers' sight on the ground, cut by what hides Link,
+  green searching / blue alerted / red caught / grey off duty, and their **patrol paths** (guardview.c, FINDINGS 9.36).
+  Checked on 1.1.1 in Hyrule Castle's courtyard and Gerudo's Fortress, and with spawned guards on both builds.
+- **Interaction ranges** (actors): where Link can talk to or act on an actor, each part its own option: **talk
+  radius** (a door's **open door prompt radius**), **z-target talk**, **target break line** and a door's **door
+  open/close radius** with the red half disc it pushes through as it shuts. Built as the game's own checks are, from
+  the actor's live model box (FINDINGS 9.37, checked edge by edge round Npc_Hylia_022_Shop_Child), with the game's
+  own A target and ZL candidate as markers.
+- **Actor browser**: the beam locks on to an actor it rests on and the camera follows it; **minus** opens the actor's
+  options, its own switches stacked with checkboxes in its panel: a guard's **vision** / **patrol path**, any walker's
+  **path** (the layout's rail it's linked to), the interaction parts, and for a door **close timer watch** (the **door
+  close timer** watch: frames before it shuts, 135 while held open, found in the door's AI or Link's walk-through
+  event) and **open door** / **close door** (opens it by itself as for an NPC, or shuts it even with Link holding it
+  open). x, y, z of the actor or the cursor in the browser, the explorer and the free camera (FINDINGS 9.38).
+- **link > position**: **x / y / z** moved by a **step** (0.01 to 10 m).
+- **lank / lonk mode** (renamed from Lunk): **apply** reloads the map itself.
+- Remote control: `actor`, `attention`, `findref`, `peek`, `doortimer`; tools/gdbwatch.py (the GDB stub: watch,
+  break, read), tools/interactions.py, tools/rails.py.
 
 **0.0.13** (tag `v0.0.13`, GitHub release with `sloperinaGZ-0.0.13.zip`). Since 0.0.12:
 
@@ -20,7 +42,7 @@ Where the work stands, for picking it up again. Last updated 26th November 2026,
 - Menus moved: equips under link, story under debug, **save / memfile management** (save management, memfiles)
   above debug, reload map at the foot of scene, return to title screen at the foot of debug. Labels no longer pushed in
   by a checkbox next to them; a scroller keeps the panel at its longest line.
-- Merged pull requests: #54 quick spawn (FINDINGS 9.34), #55 warps > override age, #57 lank / lunk mode (beta,
+- Merged pull requests: #54 quick spawn (FINDINGS 9.34), #55 warps > override age, #57 lank / lonk mode (beta,
   FINDINGS 9.35).
 - Remote control: `open <menu path>` (the menu on screen there), `get` reads a row's own text, `do` presses a list's
   arrow.
@@ -52,6 +74,10 @@ The game patches are the same as 0.0.11's (patch v6).
 
 ## Unfinished or not checked
 
+- **Not checked after 0.0.14**: interaction ranges for spheres, cylinder fans and the height bands; chests and other
+  doors than the Treasure Chest Shop's; an NPC's **path** (the instance id `[[actor+0x3D8]+0x88]` taken to be the
+  layout's Hash: remote `actor` prints both); guard vision in Gerudo's Fortress on duty, blue (alerted) in game, night
+  values, 1.0.0 since the paths / status / rays; the door tools and interaction ranges on 1.0.0.
 - **Explorer: waking a dungeon room without moving Link.** The game wakes a room only for where Link is, so the
   explorer takes him into each room and B puts him back. The user wants the room to wake for the camera alone, with
   Link left where he is: the plan (finding the game's room change and calling it) is in FINDINGS 9.33.
@@ -95,7 +121,9 @@ The game patches are the same as 0.0.11's (patch v6).
 - **The user's setup, changed while testing**: `remote_control=1` in settings.ini; **hide world overlays over item
   wheel** was set on by a test script; **map's outer box** was switched back off. The game's autosave recorded test
   warps on the early save (Hyrule Field); the save backups from before testing are in `sloperinaGZ/save-backups`.
-- **Local branches** merged into master and safe to delete: `feat/*` from this work (`actors-menu-tidy`,
+- **The GDB stub** (tools/gdbwatch.py, FINDINGS 9.37): Lichii's `use_gdbstub` is back to false; the game waits at boot
+  for a debugger while it's on, and this stub's `D` leaves a stopped game stopped (gdbwatch resumes with `c`).
+- **Local branches** merged into master and safe to delete: `feat/guard-vision`; `feat/*` from earlier work (`actors-menu-tidy`,
   `debug-actors`, `free-camera`, `link-menu-layout`, `no-void-outs`, `remote-title`, `time-of-day`, `title-failsafe`,
   `wheel-overlays`), `fix/remote-input-off`, `pr52`, `pr53`. Test branches to delete: `test/all`, `test/combined`,
   `test/freecam-actors`, `test/pr50`, `test/pr52`, `test/pr53`. Old worktrees to remove: the agent worktrees under

@@ -32,6 +32,8 @@
 #include "freecam.h"
 #include "placer.h"
 #include "tpose.h"
+#include "guardview.h"
+#include "interactview.h"
 #include "hsstore.h"
 #include "lank.h"
 #include "remote.h"
@@ -406,6 +408,58 @@ static void text_axis(menu_item_t *it, char *buf, int len)
   }
 }
 
+/* link > position's x / y / z: d-left/right move Link by the step (L held: ten steps), from where he is, so he isn't
+ * put on a grid. The number is his position in steps; the value shown, metres. */
+static const char *const step_names[] = { "0.01", "0.1", "1", "10" };
+static const double step_sizes[] = { 0.01, 0.1, 1.0, 10.0 };
+static int position_step = 2;
+
+static int get_position_step(menu_item_t *it) { return position_step; }
+static void set_position_step(menu_item_t *it, int step) { position_step = step; }
+
+static bool link_axis(int axis, double *value)
+{
+  vec3f_t pos;
+  if (!link_drawn_pos(&pos))
+    return false;
+  *value = axis == 0 ? pos.x : axis == 1 ? pos.y : pos.z;
+  return true;
+}
+
+static int32_t get_position_axis(menu_item_t *it)
+{
+  double value, steps;
+  if (!link_axis((int)it->data, &value))
+    return NUM_UNKNOWN;
+  steps = value / step_sizes[position_step];
+  if (steps > 1e9 || steps < -1e9)
+    return NUM_UNKNOWN;
+  return (int32_t)(steps < 0 ? steps - 0.5 : steps + 0.5);
+}
+
+static void set_position_axis(menu_item_t *it, int32_t steps)
+{
+  vec3f_t pos;
+  int32_t now = get_position_axis(it);
+  if (now == NUM_UNKNOWN || !link_drawn_pos(&pos))
+    return;
+  double delta = (double)(steps - now) * step_sizes[position_step];
+  double to[3] = { pos.x, pos.y, pos.z };
+  to[it->data] += delta;
+  if (!position_goto_quiet(to[0], to[1], to[2])) /* one still settling: this press is dropped */
+    return;
+  log_printf("link: %c %+.2f to %.2f", "xyz"[it->data], delta, to[it->data]);
+}
+
+static void text_position_axis(menu_item_t *it, char *buf, int len)
+{
+  double value;
+  if (link_axis((int)it->data, &value))
+    snprintf(buf, len, "%.2f", value);
+  else
+    snprintf(buf, len, "-");
+}
+
 static void text_age(menu_item_t *it, char *buf, int len)
 {
   int age = age_current();
@@ -485,7 +539,24 @@ static void build_link(void)
   menu_add_return(&m_link_scene);
 
   /* where he is */
-  menu_init(&m_link_position, "position", 7);
+  menu_init(&m_link_position, "position", 12);
+  static const char *const axis_labels[3] = { "x", "y", "z" };
+  static const char *const axis_hints[3] = { "d-left/right: move link along x by the step (L held: ten steps)",
+                                             "d-left/right: move link up or down by the step (L held: ten steps)",
+                                             "d-left/right: move link along z by the step (L held: ten steps)" };
+  for (int axis = 0; axis < 3; axis++) {
+    menu_item_t *edit = menu_add_number(&m_link_position, axis_labels[axis], get_position_axis, set_position_axis, 0,
+                                        0, axis);
+    if (edit) {
+      edit->num_min = INT32_MIN + 1;
+      edit->text = text_position_axis;
+      edit->hint = axis_hints[axis];
+    }
+  }
+  menu_item_t *step = menu_add_option(&m_link_position, "step (m)", 4, step_names, get_position_step,
+                                      set_position_step, 0);
+  if (step)
+    step->hint = "how far each press of x, y or z moves link";
   menu_item_t *lock_x = menu_add_check(&m_link_position, "lock X", get_lock_x, set_lock_x, 0);
   if (lock_x)
     lock_x->hint = "Hold Link's X (map North/South) where he is; off after a map change";
@@ -2228,7 +2299,7 @@ static void build_watches(void)
 
 /* --- scene ------------------------------------------------------------------------------------ */
 
-static menu_t m_scene, m_collision;
+static menu_t m_scene, m_collision, m_air_walls, m_guards, m_actor_ranges;
 
 static bool get_air_walls_shown(menu_item_t *it)
 {
@@ -2305,6 +2376,41 @@ static void text_air_wall_summary(menu_item_t *it, char *buf, int len)
   char summary[64];
   airwall_summary(summary, sizeof(summary));
   snprintf(buf, len, TF("count  %s"), summary);
+}
+
+static bool get_guard_vision(menu_item_t *it)
+{
+  return guardview_shown;
+}
+
+static void set_guard_vision(menu_item_t *it, bool on)
+{
+  guardview_shown = on;
+}
+
+static bool get_guard_paths(menu_item_t *it)
+{
+  return guardview_paths;
+}
+
+static void set_guard_paths(menu_item_t *it, bool on)
+{
+  guardview_paths = on;
+}
+
+static bool get_interact_ranges(menu_item_t *it) { return interactview_shown; }
+static void set_interact_ranges(menu_item_t *it, bool on) { interactview_shown = on; }
+static bool get_interact_part(menu_item_t *it) { return interactview_parts[it->data]; }
+static void set_interact_part(menu_item_t *it, bool on) { interactview_parts[it->data] = on; }
+
+static void text_interact_ranges(menu_item_t *it, char *buf, int len)
+{
+  interactview_text(buf, len);
+}
+
+static void text_guard_vision(menu_item_t *it, char *buf, int len)
+{
+  guardview_text(buf, len);
 }
 
 static void text_air_wall_link(menu_item_t *it, char *buf, int len)
@@ -2979,43 +3085,95 @@ static void build_scene(void)
     reload->hint = "L: reload this map (at the age set in the link menu)";
   menu_add_return(&m_scene);
 
-  menu_init(&m_collision, "environment", 9);
-  menu_add_heading(&m_collision, "air walls");
-  menu_item_t *show = menu_add_check(&m_collision, "show", get_air_walls_shown, set_air_walls_shown, 0);
+  /* environment: a submenu for each kind of thing it draws */
+  menu_init(&m_collision, "environment", 4);
+  menu_item_t *sub = menu_add_submenu(&m_collision, "air walls", &m_air_walls);
+  if (sub)
+    sub->hint = "the map's invisible walls, drawn as outlines";
+  sub = menu_add_submenu(&m_collision, "guards", &m_guards);
+  if (sub)
+    sub->hint = "where guards catch link, and the paths they walk";
+  sub = menu_add_submenu(&m_collision, "actors", &m_actor_ranges);
+  if (sub)
+    sub->hint = "where link can talk to or act on what's near";
+  menu_add_return(&m_collision);
+
+  menu_init(&m_air_walls, "air walls", 8);
+  menu_item_t *show = menu_add_check(&m_air_walls, "show", get_air_walls_shown, set_air_walls_shown, 0);
   if (show) {
     show->hint = "the kinds ticked under it   red: link is inside it";
     show->log_label = "air walls:";
   }
   /* show's options, nested under it */
-  menu_item_t *push = menu_add_check(&m_collision, "that push link back", get_air_walls_push, set_air_walls_push, 0);
+  menu_item_t *push = menu_add_check(&m_air_walls, "that push link back", get_air_walls_push, set_air_walls_push, 0);
   if (push) {
     push->hint = "amber: he can't stand on them and is pushed off (forest temple ledge)";
     push->log_label = "air walls that push link back:";
     push->indent = 2;
   }
-  menu_item_t *block = menu_add_check(&m_collision, "that stop link", get_air_walls_block, set_air_walls_block, 0);
+  menu_item_t *block = menu_add_check(&m_air_walls, "that stop link", get_air_walls_block, set_air_walls_block, 0);
   if (block) {
     block->hint = "cyan: invisible walls he can't go through (rocks in the lost woods)";
     block->log_label = "air walls that stop link:";
     block->indent = 2;
   }
-  menu_item_t *all_kinds = menu_add_check(&m_collision, "other kinds", get_air_walls_all, set_air_walls_all, 0);
+  menu_item_t *all_kinds = menu_add_check(&m_air_walls, "other kinds", get_air_walls_all, set_air_walls_all, 0);
   if (all_kinds) {
     all_kinds->hint = "violet: walls for enemies, NPCs, animals, Epona, the camera, climbing";
     all_kinds->log_label = "other air walls:";
     all_kinds->indent = 2;
   }
-  menu_item_t *xray = menu_add_check(&m_collision, "through link", get_air_walls_xray, set_air_walls_xray, 0);
+  menu_item_t *xray = menu_add_check(&m_air_walls, "through link", get_air_walls_xray, set_air_walls_xray, 0);
   if (xray) {
     xray->hint = "also where link is in front of them (the game's style)";
     xray->log_label = "air walls through link:";
     xray->indent = 2;
   }
-  menu_add_return(&m_collision);
+  menu_add_return(&m_air_walls);
   /* the map's walls and link's: under the list, not part of it */
-  menu_add_text(&m_collision, text_air_wall_summary, 0);
-  menu_add_text(&m_collision, text_air_wall_link, 0);
-  m_collision.footer = 2;
+  menu_add_text(&m_air_walls, text_air_wall_summary, 0);
+  menu_add_text(&m_air_walls, text_air_wall_link, 0);
+  m_air_walls.footer = 2;
+
+  menu_init(&m_guards, "guards", 4);
+  menu_item_t *guards = menu_add_check(&m_guards, "guard vision", get_guard_vision, set_guard_vision, 0);
+  if (guards) {
+    guards->hint = "where guards catch link   green searching, blue alerted, red caught";
+    guards->log_label = "guard vision:";
+  }
+  menu_item_t *paths = menu_add_check(&m_guards, "patrol paths", get_guard_paths, set_guard_paths, 0);
+  if (paths) {
+    paths->hint = "the paths they walk; a ring where they stop and look round";
+    paths->log_label = "patrol paths:";
+    paths->indent = 2;
+  }
+  menu_add_return(&m_guards);
+  menu_add_text(&m_guards, text_guard_vision, 0); /* how many near: under the list */
+  m_guards.footer = 1;
+
+  menu_init(&m_actor_ranges, "actors", 3 + IV_PARTS);
+  menu_item_t *talk = menu_add_check(&m_actor_ranges, "interaction ranges", get_interact_ranges, set_interact_ranges, 0);
+  if (talk) {
+    talk->hint = "where link can talk to or act on what's near   cyan talk, lilac check / open...   bright: in range";
+    talk->log_label = "interaction ranges:";
+  }
+  static const char *const parts[IV_PARTS] = { "talk radius", "z-target talk", "target break line", "door open/close radius" };
+  static const char *const part_hints[IV_PARTS] = {
+    "where A works: talk, check, open... (cyan talk, lilac the rest)",
+    "the further reach while z-targeting (an outline)",
+    "dashed: where each breaks as link walks away",
+    "orange: a door stays open while anyone's here; leave it and it closes 135 frames later",
+  };
+  for (int part = 0; part < IV_PARTS; part++) {
+    menu_item_t *it = menu_add_check(&m_actor_ranges, parts[part], get_interact_part, set_interact_part, part);
+    if (it) {
+      it->hint = part_hints[part];
+      it->indent = 2;
+    }
+  }
+  menu_add_return(&m_actor_ranges);
+  menu_add_text(&m_actor_ranges, text_interact_ranges, 0);
+  m_actor_ranges.footer = 1;
 }
 
 /* --- settings --------------------------------------------------------------------------------- */

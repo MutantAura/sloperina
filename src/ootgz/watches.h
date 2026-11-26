@@ -9,6 +9,7 @@ typedef enum {
   W_X, W_Y, W_Z, W_FACING, W_MOVE_ANGLE, W_SPEED, W_Y_SPEED, W_CAMERA_ANGLE, W_CAMERA_PITCH,
   W_CAMERA_DIST, W_INPUT, W_STICK, W_LAG, W_TIMER, W_FRAME, W_MAP, W_AIRWALL,
   W_JS_HEIGHT, W_SAFETY, W_SAFETY_FLAGS, W_TIME_OF_DAY,
+  W_DOOR_CLOSE, /* "door close timer": the door chosen in the actor browser: frames before it shuts (interactview.h) */
   W_COUNT /* append only: built-in IDs are saved in settings.ini */
 } watch_t;
 

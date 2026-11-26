@@ -594,6 +594,7 @@ static void fill_common(void)
 menu_t *actorsmenu_build(void)
 {
   menu_init(&m_actors, "actors", 6);
+  placer_menu_build();
   menu_init(&m_common, "quick spawn", N_COMMONS + 1);
   fill_common();
   menu_item_t *item = menu_add_action(&m_actors, "browse currently loaded actors", act_look, 0);

@@ -65,6 +65,20 @@ void gfx_text(int col, int row, gfx_style_t style, const char *s)
   put_text(&menu_panel, col, row, style, s);
 }
 
+int gfx_position(int col, int row, const char *heading, const float pos[3])
+{
+  static const char axes[3] = { 'x', 'y', 'z' };
+  gfx_text(col, row, GFX_DIM, heading); /* a heading, as the menu draws one */
+  gfx_row(row++, GFX_ROW_HEADING);
+  for (int i = 0; i < 3; i++, row++) { /* its lines, indented under it */
+    char line[32];
+    snprintf(line, sizeof(line), "%c %9.2f", axes[i], (double)pos[i]); /* one width: the panel doesn't jump */
+    gfx_text(col + 2, row, GFX_NORMAL, line);
+    gfx_row(row, GFX_ROW_LINE | GFX_ROW_INDENT);
+  }
+  return row;
+}
+
 void gfx_row(int row, int kind)
 {
   if (row >= 0 && row < GFX_ROWS)

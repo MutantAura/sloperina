@@ -47,6 +47,8 @@ bool overlayui_on_gpu(void)
  * this many lines, the nearest walls' first (airwall.c sorts them), and the nearest of them a glow */
 #define FACE_ALPHA 0.16f  /* the void columns' and fence's sides */
 #define GROUND_FACE_ALPHA 0.24f /* translucent green/red ground shift shading */
+#define GUARD_FACE_ALPHA 0.24f  /* a guard's sight on the ground (guardview.c) */
+#define GUARD_FAR_ALPHA 0.10f   /* ... its alert sight's further band */
 #define MAX_LINES_DRAWN 1400
 #define MAX_GLOWS 500
 
@@ -73,6 +75,23 @@ static const gpu_colour_t line_colours[AW_NCOLORS] = {
   [AW_PLACER] = { 1.0f, 0.94f, 0.10f, 1 },        /* yellow: where the actor placer will make it (placer.c) */
   [AW_PLACER_AIR] = { 1.0f, 0.55f, 0.10f, 1 },    /* orange: ... with no ground under it */
   [AW_PLACER_TARGET] = { 1.0f, 0.22f, 0.22f, 1 }, /* red: ... locked on to an actor (B kills it) */
+  [AW_GUARD_SEARCH] = { 0.22f, 0.92f, 0.38f, 1 },     /* green: a guard searching (guardview.c) */
+  [AW_GUARD_ALERTED] = { 0.28f, 0.58f, 1.0f, 1 },     /* blue: alerted */
+  [AW_GUARD_CAUGHT] = { 1.0f, 0.18f, 0.16f, 1 },      /* red: Link caught, or seen now */
+  [AW_GUARD_OFF] = { 0.62f, 0.62f, 0.62f, 1 },        /* grey: off duty */
+  [AW_GUARD_SEARCH_FAR] = { 0.22f, 0.92f, 0.38f, 1 }, /* the same, the alert sight's further band (fainter faces) */
+  [AW_GUARD_ALERTED_FAR] = { 0.28f, 0.58f, 1.0f, 1 },
+  [AW_GUARD_CAUGHT_FAR] = { 1.0f, 0.18f, 0.16f, 1 },
+  [AW_GUARD_OFF_FAR] = { 0.62f, 0.62f, 0.62f, 1 },
+  [AW_GUARD_PATH] = { 1.0f, 0.95f, 0.58f, 1 },        /* pale yellow: a guard's patrol path */
+  [AW_TALK] = { 0.28f, 0.86f, 1.0f, 1 },              /* cyan: where Link can talk to it (interactview.c) */
+  [AW_TALK_IN] = { 0.78f, 1.0f, 1.0f, 1 },            /* pale cyan: ... and he's in range now */
+  [AW_TALK_LOCK] = { 0.18f, 0.56f, 0.72f, 1 },        /* dark cyan: ... while Z-targeting */
+  [AW_ACT] = { 0.82f, 0.56f, 1.0f, 1 },               /* lilac: where Link can act on it (check, open...) */
+  [AW_ACT_IN] = { 0.96f, 0.86f, 1.0f, 1 },            /* pale lilac: ... and he's in range now */
+  [AW_ACT_LOCK] = { 0.54f, 0.38f, 0.72f, 1 },         /* dark lilac: ... while Z-targeting */
+  [AW_DOOR] = { 1.0f, 0.64f, 0.20f, 1 },              /* orange: where anyone holds a door open */
+  [AW_DOOR_IN] = { 1.0f, 0.86f, 0.56f, 1 },           /* pale orange: ... and Link does now */
 };
 
 /* budget: the quads the lines may take. Short of them, the glows go first, then the farthest lines. */
@@ -95,8 +114,21 @@ static bool draw_lines(float w, float h, float px, int budget)
   for (int i = 0; i < n_faces; i++) {
     uint8_t ci = faces[i].color < AW_NCOLORS ? faces[i].color : 0;
     gpu_colour_t c = line_colours[ci];
-    c.a = ((ci == AW_VOID_SHIFT_OK || ci == AW_VOID_SHIFT_FAIL) ? GROUND_FACE_ALPHA : FACE_ALPHA) * fade;
-    gpuui_face(faces[i].corner, faces[i].u, faces[i].v, c, faces[i].scene);
+    bool guard = (ci >= AW_GUARD_SEARCH && ci <= AW_GUARD_OFF) || (ci >= AW_TALK && ci <= AW_DOOR_IN),
+         far = ci >= AW_GUARD_SEARCH_FAR && ci <= AW_GUARD_OFF_FAR;
+    c.a = (far     ? GUARD_FAR_ALPHA
+           : guard ? GUARD_FACE_ALPHA
+           : (ci == AW_VOID_SHIFT_OK || ci == AW_VOID_SHIFT_FAIL) ? GROUND_FACE_ALPHA
+                                                                 : FACE_ALPHA) *
+          fade;
+    if (faces[i].triangle) {
+      const float *a = faces[i].corner;
+      float b[3] = { a[0] + faces[i].u[0], a[1] + faces[i].u[1], a[2] + faces[i].u[2] };
+      float d[3] = { a[0] + faces[i].v[0], a[1] + faces[i].v[1], a[2] + faces[i].v[2] };
+      gpuui_triangle(a, b, d, c, faces[i].scene);
+    } else {
+      gpuui_face(faces[i].corner, faces[i].u, faces[i].v, c, faces[i].scene);
+    }
   }
   budget -= n_faces;
   if (!lines || !n || budget <= 0)

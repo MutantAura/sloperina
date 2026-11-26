@@ -26,10 +26,12 @@
 #include "savepos.h"
 #include "swkbd.h"
 #include "voidmap.h"
+#include "guardview.h"
+#include "interactview.h"
 
 _Static_assert(sizeof(uintptr_t) == 8 && sizeof(float) == 4, "requires a 64-bit host with f32");
 _Static_assert(W_X == 0 && W_AIRWALL == 16 && W_JS_HEIGHT == 17, "keep saved watch IDs stable");
-_Static_assert(W_SAFETY == 18 && W_SAFETY_FLAGS == 19 && W_TIME_OF_DAY == 20 && W_COUNT == 21,
+_Static_assert(W_SAFETY == 18 && W_SAFETY_FLAGS == 19 && W_TIME_OF_DAY == 20 && W_DOOR_CLOSE == 21 && W_COUNT == 22,
                "keep saved watch IDs stable");
 
 uintptr_t z64hd_main;
@@ -134,6 +136,9 @@ bool input_combo(uint32_t mask) { (void)mask; return false; }
 void input_sticks(int32_t *a, int32_t *b, int32_t *c, int32_t *d) { *a = *b = *c = *d = 0; }
 const char *gd_get_str(int field) { (void)field; return "test"; }
 void airwall_link_text(char *buf, int len) { snprintf(buf, len, "outside"); }
+void interactview_door_text(char *buf, int len) { snprintf(buf, len, "closed"); }
+bool guardview_shown, guardview_paths; /* settings.c saves scene > environment's guards and actors options */
+bool interactview_shown, interactview_parts[IV_PARTS];
 const char *T(const char *s) { return s; }
 const char *TF(const char *s) { return s; }
 void lang_init(void) {}

@@ -27,6 +27,13 @@ bool placer_look(int kind);
  * interiors (data_places), ZL / ZR choose which, A goes there; no killing */
 bool placer_explore(void);
 void placer_stop(void); /* the camera back as it was */
+/* browsing or placing: the actor the beam is on or locked on to (0: none, or not browsing), and the spot on the
+ * ground the camera looks at (false: not browsing); for the overlays that draw round actors near Link, to draw round
+ * these too */
+uintptr_t placer_selected(void);
+bool placer_spot(float out[3]);
+/* from actorsmenu_build: an actor's options (minus while browsing, on a guard): its vision and patrol path */
+void placer_menu_build(void);
 
 /* each frame, game thread, before the overlays are built: the sticks and buttons while the menu is closed */
 void placer_frame(bool menu_open);

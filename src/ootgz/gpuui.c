@@ -615,6 +615,7 @@ typedef struct {
   uint8_t material;    /* 0 the plain material, else 1 + a frame's mapping */
   bool depth_tested;   /* hidden where the frame's depth is nearer (gpuui_line_depth) */
   bool world;          /* its matrix puts it in the world: drawn with the camera's view (gpuui_face) */
+  bool triangle;       /* only its first three corners: (0, 0), (w, 0), (0, h) (gpuui_triangle) */
   uint8_t layer;       /* depth_tested: its colour's layer */
   float scale, sx, sy; /* gpuui_scale's when it was made */
   float alpha;         /* gpuui_alpha's */
@@ -691,6 +692,7 @@ static quad_t *new_quad(void)
     quads[n_quads].material = 0;
     quads[n_quads].depth_tested = false;
     quads[n_quads].world = false;
+    quads[n_quads].triangle = false;
     quads[n_quads].scale = quad_scale, quads[n_quads].sx = quad_sx, quads[n_quads].sy = quad_sy;
     quads[n_quads].alpha = quad_alpha;
     return &quads[n_quads++];
@@ -977,6 +979,15 @@ void gpuui_face(const float corner[3], const float u[3], const float v[3], gpu_c
   q->textured = false;
   q->depth_tested = true;
   q->world = true;
+}
+
+void gpuui_triangle(const float a[3], const float b[3], const float c[3], gpu_colour_t colour, bool scene)
+{
+  float u[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, v[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+  int before = n_quads;
+  gpuui_face(a, u, v, colour, scene);
+  if (n_quads > before)
+    quads[n_quads - 1].triangle = true;
 }
 
 void gpuui_rect_turned(float cx, float cy, float w, float h, float angle, gpu_colour_t colour)
@@ -1395,7 +1406,7 @@ static bool draw_quad(nvn_obj_t *cmd, const quad_t *q, size_t at, size_t materia
   }
   write_element(data_mem + at, q);
   g.cmd_storage(cmd, STAGE_VERTEX, 6, data_gpu + at, ELEMENT_SIZE);
-  g.cmd_draw(cmd, PRIM_TRIANGLE_STRIP, 0, 4);
+  g.cmd_draw(cmd, PRIM_TRIANGLE_STRIP, 0, q->triangle ? 3 : 4); /* the strip's first triangle is half the quad */
   return true;
 }
 

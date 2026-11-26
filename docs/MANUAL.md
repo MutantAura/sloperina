@@ -86,7 +86,7 @@ have none at first.
 
 ### 2.1 Link
 
-Five submenus (**equips** the last), then **lank / lunk mode**, then under **return** what can only be read: Link's **position** (x, y, z), his **current age**, the **map** and whether he has **hookshot storage** (yes / no; - without a hookshot).
+Five submenus (**equips** the last), then **lank / lonk mode**, then under **return** what can only be read: Link's **position** (x, y, z), his **current age**, the **map** and whether he has **hookshot storage** (yes / no; - without a hookshot).
 
 #### 2.1.1 Status
 
@@ -109,6 +109,8 @@ Five submenus (**equips** the last), then **lank / lunk mode**, then under **ret
 
 | Item | What it does |
 |---|---|
+| **x / y / z** | Link's position, in metres. **d-left** / **d-right** move him along that axis by the **step** (with **L** held, ten steps), from where he is, as **load position** moves him; locked or not (the locks hold him at the new spot). A press while the last move is still settling is dropped. |
+| **step (m)** | How far each press of **x**, **y** or **z** moves him: **0.01**, **0.1**, **1** (to start with) or **10**. |
 | **lock X / lock Y / lock Z** | Hold Link's X (map North/South), Y (height) or Z (map East/West) where he is. They let go after a map change. |
 | **save position (R + d-up)** | Remembers where Link is, which way he faces and the map (gz's save position). Works at the first press, anywhere. |
 | **load position (R + d-down)** | Puts Link back there, facing the same way. Only in the same map. With nothing saved: "No position saved yet". |
@@ -125,14 +127,14 @@ Five submenus (**equips** the last), then **lank / lunk mode**, then under **ret
 
 What Link is wearing and holding right now (read only).
 
-#### 2.1.6 Lank / lunk mode (beta)
+#### 2.1.6 Lank / lonk mode (beta)
 
 Beta: it changes the game's own files as the game reads them and in memory. It starts off each time the game starts.
 
 | Item | What it does |
 |---|---|
-| **mode** | **off**, or **lank & lunk**: each age plays the other's animations, as in the cutscenes played at the wrong age, so child Link is stretched to adult proportions (Lank) and adult Link squashed to the child's (Lunk). |
-| **apply** | Makes the chosen mode the one in force, then asks for a **reload map** (**scene interaction**): that reload goes to the other age and back, since the game makes Link anew only when his age changes; age, sword, shield and clothes come back. An age change or a file load applies it too. |
+| **mode** | **off**, or **lank & lonk**: each age plays the other's animations, as in the cutscenes played at the wrong age, so child Link is stretched to adult proportions (Lank) and adult Link squashed to the child's (Lonk). |
+| **apply** | Makes the chosen mode the one in force and reloads the map at once (as **scene interaction > reload map** does; the menu closes to watch it): that reload goes to the other age and back, since the game makes Link anew only when his age changes; age, sword, shield and clothes come back. On the title screen, before a file is loaded, there's nothing to reload: it shows when the file loads. Applying the mode in force again only reloads if it hasn't been since. An age change or a file load applies it too. |
 
 ### 2.2 Warps
 
@@ -165,6 +167,8 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 
 #### 2.3.1 Environment
 
+Three submenus: **air walls**, **guards** and **actors**.
+
 **air walls**: the map's invisible walls, drawn as outlines over the game.
 
 | Item | What it does |
@@ -175,9 +179,57 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 | **other kinds** | **Violet**: walls that don't touch Link on foot: those for enemies, NPCs, animals, Epona, the camera, bombs and the hookshot, and those that only stop him while he climbs. |
 | **through link** | Also draw them where Link is in front of them (in the game's style they're hidden behind him). |
 
-The two lines under the menu, below **return** and apart from its options, count the walls in this map and those near you, and say whether Link is inside one
+The two lines under the air walls menu, below **return** and apart from its options, count the walls in this map and those near you, and say whether Link is inside one
 (how deep, and which way the game will push him out). Outlines show through the scenery; in the game's style
 Link stays in front of them.
+
+**guards**: its **guard vision** draws, on the ground round each security guard within 60 m of Link (the Gerudo
+fortress's guards, Hyrule Castle's soldiers, the castle courtyard's child soldiers), where it catches him. The
+numbers are the game's own for that guard as it is now, read each frame (FINDINGS 9.36).
+
+- **The cone**: where the guard finds Link. It starts at the guard's head and turns as the head looks round. A Gerudo
+  in daylight: 45° either side, 14 m; a courtyard soldier: 50° either side, 12 m; at night or on horseback the
+  game's other values. Link counts only within the guard's height band (a few metres above or below the head).
+  Where the guard has a further alert sight (the Gerudo, the courtyard soldiers) it's drawn past the cone, fainter.
+  A Hyrule Castle soldier on the engine's ordinary sight: 7.5 m, drawn 90° either side.
+- **What hides Link**: rays from the guard's head across its sight stop at walls, hedges, crates and the like (the
+  collision the guards' own sight rays test), and the cone stops with them.
+- **The ring** round each guard: closer than this (3 m in daylight, 2 m in the dark) it finds Link whichever way it
+  faces.
+- **The colour is what the guard is doing** (its AI's state): **green** searching (on duty, patrolling or looking
+  round), **blue** alerted (it's noticed something), **red** it's caught Link, or Link is inside its sight now;
+  **grey** off duty, so it doesn't catch him.
+
+**patrol paths** (indented under it; on at first): the path each guard walks, in pale yellow: back and forth, or
+round a loop, with a ring where it stops to look round and a tick the way it faces there.
+
+Under them: how many guards are near, how many on duty, and how many are alerted or have caught Link. Hearing isn't
+drawn. In **debug > actors > browse currently loaded actors** each guard has switches of its own (off at first): see
+**actor options** there.
+
+**actors**: its **interaction ranges** draws, in four parts each with its own option under it (all on at first):
+**talk radius** (the filled area where A works), **z-target talk** (the further outline while Z-targeting), **target
+break line** (dashed: where each breaks walking away; it goes with the parts that are on, or both when it's on alone) and
+**door open/close radius** (orange: a swinging door is held open while anyone, Link or an NPC, is within 2 m of it on the side it
+swings to; once nobody is, it closes 135 frames later; bright while Link is holding it). It draws round everything near Link (within 20 m) that he can talk to or act on,
+where he can: an NPC's **Talk** in **cyan**, anything else (a sign's **Check**, **Open Door**, **Open Treasure Box**,
+**Lift**, **Grab**...) in **lilac**, both brighter while Link is in range now. The game's test is a fan in front of
+Link: the actor has to be within its reach (2 m for most NPCs) and within its angle of the way he faces (60° either way
+for most), and within a height band. So the filled disc is where he has to stand, and he has to face it there.
+Some add a shape of the actor's own (a sign: the half in front of it; a shopkeeper: a box in front of his counter;
+a door: a box beside it), and then only where both hold is filled. A darker outline further out: the reach while Z-targeting (3.5 m for most NPCs). The reach is to the actor's edge, so
+its own size is added, read from the actor as the game does (its model's bounds: 0.4 m for a Gerudo guard, so Talk
+comes up at 2.4 m from her), and a box is built out from those bounds (a broad shopkeeper's box is 3.2 m across before
+it's grown). **Dashed**, round each: where it
+breaks as you walk away. Once something has Link's attention its reach holds a little further (its margin, 0.5 m
+for most), and while Z-targeting the way he faces stops mattering: a Gerudo guard's Z-targeted Talk breaks at 4.4 m
+(3.5 + 0.5 + her 0.4, measured walking backwards with ZL held). The bright colour holds until you pass the dashed
+line. The numbers come from each actor's files (tools/interactions.py) and its model; the game also checks things
+not drawn here (a clear line to it, that it's on screen for a Z-targeted one, the story's flags, being on a horse):
+treat them as a guide. **The game's own answer**: a pale diamond on a stem over the actor the A prompt is for right
+now, read from Link's attention (not worked out), and its name on the menu's line (**A: ...**); its areas are drawn
+bright while it is. Without one, a darker diamond over what **ZL** would take for an action (a shopkeeper you have to
+Z-target to talk to), whether ZL is held or not, and **ZL: ...** on the line.
 
 #### 2.3.2 Save position
 
@@ -474,7 +526,7 @@ Caveats:
 
 **actors**: like gz's actors menu.
 
-- **browse currently loaded actors**: the free camera over a beam on the ground, as when placing (below) but with nothing to place: for going from actor to actor, going to them and killing them. What **d-left** and **d-right** go through starts as **look at** says, under it: **all kinds** (enemies, NPCs, objects and items; to start with), **enemies**, **npcs** or **objects**. While browsing, **L** and **R** change it, moving on to the nearest of them at once. (Placing, they go through all kinds.)
+- **browse currently loaded actors**: the free camera over a beam on the ground, as when placing (below) but with nothing to place: for going from actor to actor, going to them and killing them. What **d-left** and **d-right** go through starts as **look at** says, under it: **all kinds** (enemies, NPCs, objects and items; to start with), **enemies**, **npcs** or **objects**. While browsing, **L** and **R** change it, moving on to the nearest of them at once. (Placing, they go through all kinds.) Leaving the beam on an actor (letting go of the stick) locks on to it, as **d-left** and **d-right** do, and the camera follows it as it walks (a guard on its patrol); moving the stick lets go. **Actor options**: the panel lists the switches the actor has, one under another with a checkbox each, off at first: a guard's **vision** and **patrol path**; any other actor the map gives a path to walk (a townsperson, a dog, a cucco, a moving platform: the layout links it to its rail) its **path**, drawn as a guard's is; and for anything Link can talk to or act on its **talk radius**, **z-target talk** and **target break line** (named by what A does: a sign's **check radius**, a door's **open door prompt radius**, its A prompt's reach, apart from its **door open/close radius**), and a door's **door open/close radius** ([2.3.1](#231-environment)) and **close timer watch**: ticked, the **door close timer** watch joins the watches (and the watches are turned on) for that door: the frames before it shuts once nobody holds it open (135 while someone does: it counts down from there and shuts at 0). A door counts in its own AI when it was opened for an NPC and in its opening event when Link opened it; the watch shows whichever is counting. The counts are looked for while the door is watched, so a new one can take a moment to show; **closed** before the door has been opened. Unticking takes the watch off; it's forgotten when the door goes (a map change). A door's menu also has **open door** while it's shut and **close door** while it's open (the pose of its panel, however it was opened; the item changes as the door does). **open door** opens it by itself, as it opens for an NPC, wherever Link is; **close door** shuts it at once, even with Link (or anyone) in the half disc that would hold it open, pushing whoever is in the way. Either is done once, and the door then goes on as it does (open, it shuts 135 frames after nobody is near). Neither needs the watch. **door open/close radius** also draws, in red, where the door pushes whatever is in its way as it shuts: a half disc as wide as the door, on the side it swings to. They're its own, whatever scene > environment says (that draws them for everything near). **minus** (**actor options** in the controls bar) opens a menu of them for that actor; **return** closes it and you're back browsing, on the same actor. They're forgotten when it goes (a map change). The browser also looks round its own spot, so an actor far from Link is drawn too. Under its switches, a **position** heading with the actor's x, y and z, or, when the beam isn't on an actor, a **cursor** heading with the beam's spot (it follows the sticks). The explorer shows its cursor the same way, and the free camera a small panel with the camera's position. What NPCs hold (a guard's spear) isn't stepped to: it stands where its NPC does.
   - **A** goes to the actor: Link is put where it is, the way **load position** moves him, without changing your saved position. Inside something solid (a bed, a door) the game puts him straight back.
   - **Y** kills or despawns it, sending the actor the game's own death request, the one a fall into a bottomless pit sends: it fades out, with no drop. Where the game refuses it (bosses and the like, and some NPCs), where the actor has no death of its own, or where it's taken but the actor is still standing half a second later, the actor is despawned instead: the game's own delete, as its AI uses, with no death, drop or respawn flag. A despawned boss's fight won't finish as it should. Scenery, the game's system actors and Link are never touched. A killed or despawned actor may be back when the map reloads.
 - **quick spawn**: the actors to make, by kind: **animals** (Epona, a cucco, a bug, a cow...), **enemies**,
@@ -733,7 +785,7 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | Line | What it does |
 |---|---|
 | `fire <command> [frames]` | A command of **rebind commands**, by its name in the settings file (`savepos`, `loadpos`, `ragdoll`, `levitate`, `timer`...), as if its buttons were pressed now; held for that many frames more (`rise`, `sink`, `hover`). |
-| `do <menu path>` | Chooses a menu item: an action runs, a checkbox flips, an option moves to its next choice. |
+| `do <menu path>` | Chooses a menu item: an action runs, a checkbox flips, an option moves to its next choice, a **return** goes back a level in the menu on screen. |
 | `set <menu path> = <value>` | Sets a checkbox (`on` / `off`), an option (a choice's text or number) or a number. |
 | `get <menu path>` | The item's value. |
 | `list [<menu path>]` | A menu's items: number, kind, name and value. Without a path, the top menu. |
@@ -751,9 +803,13 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | `place <x> <y> <z> [facing]` | Puts Link on that spot of this map as **load position** does (wait some frames for it). With a facing (degrees, 0 = +z) he is turned to it; without, he faces as he did. |
 | `title` | Goes back to the game's title screen from whatever the game is doing (as **debug > return to title screen**), also with the game held (it's let go). `ok` once Link is gone and the game is at (or fading to) its title screen; `err` with the reason if it couldn't start (already at the title screen) or the game didn't leave play within a minute. Whatever isn't saved is lost, as with the pause screen's Return to Title. |
 | `echo <text>` | Puts the text in `out.txt` (a marker). |
+| `peek <hex address> [bytes]` | Memory at that address (rounded down to 8), as 8-byte words, 64 bytes or up to 256: for finding where the game keeps something. |
+| `actor <name>` | Each actor of that name: its address, its layout instance id and how many paths it walks (the **path** option). |
+| `doortimer <name>` | Puts the door close watch on the first door of that name (as **close timer watch** does, without adding the watch to the list) and says what it reads now: the frames left, or **closed**. |
+| `findref <hex>` | For finding what the game keeps: where Link's components (two pointers deep) hold that value, or for an actor's address also its components, attention sender and id. |
 | `id <word>` | The word that starts this script's lines in `out.txt` (otherwise `-`), to tell them from another's. |
 
-A **menu path** is the names from the top menu down with `/` between them, in any case: `cheats/infinite magic`,
+A **menu path** is the names from the top menu down with `/` between them (or, starting `~/`, from the menu on the screen: a guard's menu opened from the actor browser, `~/vision`), in any case: `cheats/infinite magic`,
 `scene/end cutscene`, `settings/frame advance/enabled`. `name#2` is the second item of that name in its menu and `@7`
 the menu's item number 7 (as `list` numbers them), for lines with no name. The names are the English ones whatever the
 language. An item that opens something to type or pick in (a keyboard, a list) needs the menu and isn't run.
@@ -781,6 +837,7 @@ The name and version, the build date ("Build Date: ..."), and the website.
 | Input display | Bottom left, or the corner you choose, or anywhere, or attached above or below the watches | [2.9.1](#291-input-display); in the bottom left, it moves above the watches if they're there too. |
 | Pause icon | Top left | Two bars: paused by frame advance. |
 | Air walls | Over the game | [2.3.1](#231-environment) |
+| Guard vision | Over the game | [2.3.1](#231-environment) |
 | Save slots | Over the game | [2.3.2](#232-save-position) |
 | Void out | Over the game | [2.3.3](#233-void-out) |
 

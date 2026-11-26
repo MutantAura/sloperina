@@ -41,13 +41,17 @@
 #include "data.h"
 #include "gamedata.h"
 #include "gfx.h"
+#include "guardview.h"
+#include "interactview.h"
 #include "input.h"
 #include "lang.h"
 #include "link.h"
 #include "menu.h"
+#include "menus.h" /* menu_root */
 #include "position.h"
 #include "sys.h"
 #include "voidmap.h"
+#include "watches.h"
 
 float sinf(float x), cosf(float x), atan2f(float y, float x); /* from sdk */
 
@@ -249,10 +253,13 @@ static bool starts_with(const char *s, const char *prefix)
 }
 
 /* the kinds debug > actors > kill can take: enemies by their death, NPCs and things deleted; not Link's own
- * companions, which go with him and are always nearest (B would delete Navi) */
+ * companions, which go with him and are always nearest (B would delete Navi), nor what NPCs hold, which stands where
+ * they do and was stepped to in their place */
 static bool kind_of(const char *n, int kind)
 {
   if (starts_with(n, "Npc_Navi") || starts_with(n, "Item_Ocarina")) /* not menu text */
+    return false;
+  if (starts_with(n, "Npc_Equipment")) /* what an NPC holds (a guard's spear): it goes with its NPC; not menu text */
     return false;
   bool enemy = starts_with(n, "Enemy_"), npc = starts_with(n, "Npc_") || starts_with(n, "Animal_"), /* animals with */
        object = starts_with(n, "Obj_") || starts_with(n, "Item_");                                      /* the npcs */
@@ -555,6 +562,12 @@ static void grid_line(const char *src, char *dst, int len)
   dst[n] = 0;
 }
 
+/* a door's close countdown in the watches (the door close watch, W_DOOR_CLOSE): on for this door */
+static bool door_watched(uintptr_t actor)
+{
+  return actor && interactview_door_watched() == actor && watch_has(W_DOOR_CLOSE);
+}
+
 static void panel(void)
 {
   if (freecam_ui_hidden) { /* R3: none of it, for a clear picture */
@@ -622,13 +635,23 @@ static void panel(void)
   };
   bool in_guide = gfx_style == GFX_STYLE_GAME;
   const char *const *h = hints[mode];
+  /* browsing, on a guard: its vision and path too */
+  static const char *const guard_guide = "LS move  d-up/down height  RS camera  ZL/ZR zoom  X faster  L3 back to Link\n"
+                                         "d-left/right next  L/R kind  A go to  Y kill/despawn  minus actor options  "
+                                         "R3 hide controls  B done";
+  static const char *const guard_hints[3] = { "LS move  d-up/down height  L3 back to Link  R3 hide controls",
+                                              "RS camera  ZL/ZR zoom  X faster  d-left/right next",
+                                              "L/R kind  A go to  Y kill  minus actor options  B done" };
+  bool on_guard = mode == MODE_LOOK && at && (guardview_has_path(at) || interactview_has(at)); /* it has options */
+  if (on_guard)
+    h = guard_hints;
   const char *take = placer_take_link ? T("on") : T("off"); /* exploring: Y take Link, as it is now */
   char hint[GFX_HINT_LEN], last[96], line_text[GFX_HINT_LEN]; /* last: one short line */
   snprintf(last, sizeof(last), mode == MODE_EXPLORE ? TF(h[2]) : "%s", mode == MODE_EXPLORE ? take : T(h[2]));
   snprintf(hint, sizeof(hint), "%s\n%s\n%s", T(h[0]), T(h[1]), last);
   if (in_guide) {
     snprintf(line_text, sizeof(line_text), mode == MODE_EXPLORE ? TF(guide[mode]) : "%s",
-             mode == MODE_EXPLORE ? take : T(guide[mode]));
+             mode == MODE_EXPLORE ? take : on_guard ? T(guard_guide) : T(guide[mode]));
     gfx_guide(line_text);
   }
   gfx_begin();
@@ -637,15 +660,49 @@ static void panel(void)
   gfx_row(1, GFX_ROW_GAP);
   gfx_text(PANEL_COL, 2, at ? GFX_NORMAL : GFX_DIM, under);
   gfx_row(2, GFX_ROW_LINE);
-  gfx_text(PANEL_COL, 3, GFX_NORMAL, stats[0] ? stats : "\x7F"); /* 0x7F: an empty line that's still a line */
-  gfx_row(3, GFX_ROW_LINE);
-  gfx_text(PANEL_COL, 4, GFX_DIM, list);
-  gfx_row(4, GFX_ROW_LINE);
-  int row = 5;
+  /* its own switches (its options, minus), one under another with their checkboxes as the menu draws them */
+  char check[64];
+  const char *labels[2 + IV_PARTS + 1];
+  bool on[2 + IV_PARTS + 1];
+  int n_checks = 0;
+  if (mode == MODE_LOOK && at) {
+    if (guardview_is_guard(at)) {
+      labels[n_checks] = T("vision"), on[n_checks++] = guardview_own(at, GV_VISION);
+      labels[n_checks] = T("patrol path"), on[n_checks++] = guardview_own(at, GV_PATH);
+    } else if (guardview_has_path(at)) { /* a townsperson, a dog, a platform: the rail it walks */
+      labels[n_checks] = T("path"), on[n_checks++] = guardview_own(at, GV_PATH);
+    }
+    if (interactview_has(at)) /* talk radius, z-target talk, target break line; a door's door close */
+      for (int part = 0; part < IV_PARTS; part++)
+        if (part != IV_DOOR || interactview_is_door(at))
+          labels[n_checks] = interactview_part_label(at, part), on[n_checks++] = interactview_own(at, part);
+    if (interactview_is_door(at)) {
+      labels[n_checks] = T("close timer watch"), on[n_checks++] = door_watched(at);
+    }
+  }
+  int row = 3;
+  if (stats[0] || !n_checks) { /* its stats (an empty line kept for one with none, so the panel doesn't jump) */
+    gfx_text(PANEL_COL, row, GFX_NORMAL, stats[0] ? stats : "\x7F"); /* 0x7F: an empty line that's still a line */
+    gfx_row(row++, GFX_ROW_LINE);
+  }
+  {
+    for (int i = 0; i < n_checks; i++, row++) {
+      snprintf(check, sizeof(check), "%c%c %s", on[i] ? GFX_CHECK_ON : GFX_CHECK_OFF, GFX_WIDE_REST, labels[i]);
+      gfx_text(PANEL_COL, row, GFX_NORMAL, check);
+      gfx_row(row, GFX_ROW_LINE);
+    }
+  }
+  gfx_text(PANEL_COL, row, GFX_DIM, list);
+  gfx_row(row++, GFX_ROW_LINE);
   if (mode == MODE_EXPLORE) { /* the count's line, kept when empty so the panel doesn't jump */
     gfx_text(PANEL_COL, row, GFX_DIM, count[0] ? count : "\x7F");
     gfx_row(row++, GFX_ROW_LINE);
   }
+  /* where it is: the actor on or under the beam, else the cursor (the beam's spot), under a heading of its own */
+  float where[3];
+  bool on_actor = mode != MODE_EXPLORE && at && actor_read(at, &a);
+  memcpy(where, on_actor ? a.pos : spot, sizeof(where));
+  row = gfx_position(PANEL_COL, row, on_actor ? T("position") : T("cursor"), where);
   if (in_guide) {
     gfx_end();
     return;
@@ -661,10 +718,159 @@ static void panel(void)
   gfx_end();
 }
 
+uintptr_t placer_selected(void) { return placer_active && mode == MODE_LOOK ? (target ? target : hover) : 0; }
+
+bool placer_spot(float out[3])
+{
+  if (!placer_active)
+    return false;
+  memcpy(out, spot, sizeof(spot));
+  return true;
+}
+
+/* --- an actor's options (minus while browsing, on a guard or anything Link can talk to or act on) ----------- */
+
+static menu_t m_guard;
+static uintptr_t menu_guard;  /* the actor it's for */
+static char menu_title[64];   /* its name */
+static char menu_actions[IV_PARTS][40]; /* "talk radius", "z-target talk", "target break line" */
+
+static bool get_guard_vision(menu_item_t *it) { return guardview_own(menu_guard, GV_VISION); }
+static bool get_guard_path(menu_item_t *it) { return guardview_own(menu_guard, GV_PATH); }
+
+static void set_guard_vision(menu_item_t *it, bool on)
+{
+  if (guardview_own(menu_guard, GV_VISION) != on)
+    guardview_toggle(menu_guard, GV_VISION);
+}
+
+static void set_guard_path(menu_item_t *it, bool on)
+{
+  if (guardview_own(menu_guard, GV_PATH) != on)
+    guardview_toggle(menu_guard, GV_PATH);
+}
+
+static bool get_door_watch(menu_item_t *it) { return door_watched(menu_guard); }
+
+static void set_door_watch(menu_item_t *it, bool on)
+{
+  if (on) {
+    interactview_door_watch(menu_guard);
+    watch_add(W_DOOR_CLOSE); /* already there: it moves to this door */
+    watches_shown = true;    /* so it's seen */
+    log_printf("placer: door close watch on");
+    return;
+  }
+  for (int i = 0; i < watch_count; i++)
+    if (watch_list[i].id == W_DOOR_CLOSE)
+      watch_remove(i--);
+  interactview_door_watch(0);
+  log_printf("placer: door close watch off");
+}
+
+/* "open door" while it's shut, "close door" while it's open (its panel's pose): opens it by itself, as for an NPC, or
+ * shuts it at once whoever is in the way (interactview.c); the menu can stay open, the door's AI runs. Its label
+ * follows the door (door_action_label, kept up by placer_frame). */
+static menu_item_t *door_action;
+
+static const char *door_action_label(uintptr_t door)
+{
+  return interactview_door_is_open(door) == 1 ? "close door" : "open door";
+}
+
+static void act_door(menu_item_t *it)
+{
+  bool open = interactview_door_is_open(menu_guard) == 1;
+  log_printf("placer: %s (turned %.1f deg)", open ? "close door" : "open door",
+             (double)interactview_door_angle(menu_guard));
+  if (open)
+    interactview_door_close_now(menu_guard);
+  else if (interactview_door_open(menu_guard))
+    gfx_notice(T("opening the door"));
+}
+
+/* its interaction range's parts: the item's data is which (IV_*) */
+static bool get_interact(menu_item_t *it) { return interactview_own(menu_guard, (int)it->data); }
+
+static void set_interact(menu_item_t *it, bool on)
+{
+  if (interactview_own(menu_guard, (int)it->data) != on)
+    interactview_toggle(menu_guard, (int)it->data);
+}
+
+void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 4); }
+
+/* this actor's own switches, each for it alone (whatever scene > environment says): its items made again for it */
+static void open_guard_menu(uintptr_t actor)
+{
+  actor_read_t a;
+  if (!actor_read(actor, &a))
+    return;
+  menu_guard = actor;
+  snprintf(menu_title, sizeof(menu_title), "%s", a.name);
+  menu_reset(&m_guard);
+  door_action = 0;
+  m_guard.selected = 0;
+  menu_item_t *item;
+  if (guardview_is_guard(actor)) {
+    item = menu_add_check(&m_guard, "vision", get_guard_vision, set_guard_vision, 0);
+    if (item) {
+      item->hint = "this guard's sight: where it catches link";
+      item->log_label = "its vision:";
+    }
+    item = menu_add_check(&m_guard, "patrol path", get_guard_path, set_guard_path, 0);
+    if (item) {
+      item->hint = "the path this guard walks";
+      item->log_label = "its patrol path:";
+    }
+  } else if (guardview_has_path(actor)) {
+    item = menu_add_check(&m_guard, "path", get_guard_path, set_guard_path, 0);
+    if (item) {
+      item->hint = "the path it walks (the rail the map gives it)";
+      item->log_label = "its path:";
+    }
+  }
+  if (interactview_has(actor)) { /* talk radius, z-target talk, target break line: each its own */
+    static const char *const hints[IV_PARTS] = { "where link can talk to it (facing it)",
+                                                 "how far it reaches while z-targeting",
+                                                 "dashed: where each breaks as link walks away",
+                                                 "where it's held open: leave it and it closes 135 frames later" };
+    for (int part = 0; part < IV_PARTS; part++) {
+      if (part == IV_DOOR && !interactview_is_door(actor))
+        continue;
+      snprintf(menu_actions[part], sizeof(menu_actions[part]), "%s", interactview_part_label(actor, part));
+      item = menu_add_check(&m_guard, menu_actions[part], get_interact, set_interact, part);
+      if (item) {
+        item->hint = hints[part];
+        item->log_label = ""; /* interactview.c logs it */
+      }
+    }
+  }
+  if (interactview_is_door(actor)) {
+    item = menu_add_check(&m_guard, "close timer watch", get_door_watch, set_door_watch, 0);
+    if (item) {
+      item->hint = "door close timer in the watches: frames until it shuts (135 while held open)";
+      item->log_label = ""; /* logged above */
+    }
+    door_action = menu_add_action(&m_guard, door_action_label(actor), act_door, 0);
+    if (door_action) {
+      door_action->hint = "L: it opens by itself, or it shuts at once, even with link holding it open";
+      door_action->log_label = "";
+    }
+  }
+  menu_add_return(&m_guard); /* back to browsing: the menu closes, the browser is still on */
+  if (!menu_current)
+    menu_open(&menu_root);
+  menu_goto(&m_guard); /* no parent: B or return closes the menu, back to the browser */
+  log_printf("placer: %s's options", a.name);
+}
+
 /* --- each frame ------------------------------------------------------------------------------------ */
 
 void placer_frame(bool menu_open)
 {
+  if (door_action && menu_current == &m_guard) /* "open door" / "close door", as the door is now */
+    door_action->label = door_action_label(menu_guard);
   if (!placer_active)
     return;
   if (!freecam_steering()) { /* the free camera was turned off (its bind or the menu) */
@@ -726,6 +932,11 @@ void placer_frame(bool menu_open)
       if (away && home_known && !position_busy() && position_goto_quiet(home[0], home[1], home[2]))
         away = false; /* not taken along any more: back where he was */
     }
+  }
+  if (mode == MODE_LOOK && pressed & BTN_MINUS) { /* its options (a guard's vision and path, its interaction range) */
+    uintptr_t actor = target ? target : hover;
+    if (actor && (guardview_has_path(actor) || interactview_has(actor)))
+      open_guard_menu(actor);
   }
   if (mode != MODE_EXPLORE && pressed & BTN_Y) { /* the actor locked on to, or under the beam */
     uintptr_t victim = target ? target : hover;
@@ -826,6 +1037,18 @@ void placer_frame(bool menu_open)
     find_hover();
   else if (mode == MODE_EXPLORE)
     hover = 0;
+  /* browsing: the beam left resting on an actor locks on to it, so the camera follows it as it walks (a guard on
+   * its patrol); the stick lets go again */
+  if (mode == MODE_LOOK && !target && hover && !fwd && !side && !rise) {
+    actor_read_t a;
+    if (actor_read(hover, &a) && a.running) {
+      target = hover;
+      raised = false;
+      snprintf(target_name, sizeof(target_name), "%s", hover_name);
+      hover = 0;
+      log_printf("placer: locked on to %s %#lx under the beam", target_name, (unsigned long)target);
+    }
+  }
 
   if (mode != MODE_PLACE && pressed & BTN_A) { /* go to: Link to the actor, or the spot; it goes on (B ends it) */
     uintptr_t there = target ? target : hover;

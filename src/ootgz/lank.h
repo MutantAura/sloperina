@@ -1,4 +1,4 @@
-/* Lank and Lunk, beta (link > lank / lunk mode): child Link plays adult Link's animation sets and adult Link the
+/* Lank and Lonk, beta (link > lank / lonk mode): child Link plays adult Link's animation sets and adult Link the
  * child's, so each model takes the other age's proportions, as in the cutscenes played at the wrong age. Two game
  * file patches (gamepatch.h) on the Player packs; a mode is chosen, then applied, and shows once the game makes Link
  * again (remake.h: the next reload map, an age change or a file load). Not kept in the settings: a beta that edits
@@ -18,7 +18,7 @@ extern const char *const lank_mode_names[LANK_MODES];
 
 /* at module init, before gamepatch_hook_game */
 void lank_init(void);
-/* the link menu's "lank / lunk mode (beta)" submenu (left out if the file hooks couldn't be put in) */
+/* the link menu's "lank / lonk mode (beta)" submenu (left out if the file hooks couldn't be put in) */
 struct menu;
 void lank_menu_add(struct menu *link_menu);
 int lank_mode_chosen(void);

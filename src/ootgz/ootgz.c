@@ -35,6 +35,8 @@
 #include "levitate.h"
 #include "settings.h"
 #include "voidmap.h"
+#include "guardview.h"
+#include "interactview.h"
 #include "warp.h"
 #include "watches.h"
 #include "nvn.h"
@@ -470,6 +472,8 @@ static void frame(void)
   bool overlays_on_gpu = overlayui_on_gpu(); /* lines and bars for the GPU, else rectangles */
   placer_frame(menu_current != 0); /* the actor placer: before its beam is drawn */
   voidmap_frame();
+  guardview_frame(); /* the guards' sight: before airwall_frame draws it */
+  interactview_frame(); /* where Link can talk to or act on actors: the same */
   airwall_frame(overlays_on_gpu);
   enemyhp_frame(overlays_on_gpu);
   menus_research_frame();

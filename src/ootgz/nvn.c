@@ -1386,6 +1386,23 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_PLACER] = { 1.0f, 0.94f, 0.08f, 1.0f },       /* yellow: where the actor placer will make it (placer.c) */
   [AW_PLACER_AIR] = { 1.0f, 0.55f, 0.08f, 1.0f },   /* orange: ... with no ground under it */
   [AW_PLACER_TARGET] = { 1.0f, 0.20f, 0.20f, 1.0f }, /* red: ... locked on to an actor (B kills it) */
+  [AW_GUARD_SEARCH] = { 0.20f, 0.92f, 0.36f, 1.0f },     /* green: a guard searching (guardview.c) */
+  [AW_GUARD_ALERTED] = { 0.26f, 0.56f, 1.0f, 1.0f },     /* blue: alerted */
+  [AW_GUARD_CAUGHT] = { 1.0f, 0.16f, 0.14f, 1.0f },      /* red: Link caught, or seen now */
+  [AW_GUARD_OFF] = { 0.62f, 0.62f, 0.62f, 1.0f },        /* grey: off duty */
+  [AW_GUARD_SEARCH_FAR] = { 0.20f, 0.92f, 0.36f, 1.0f }, /* the same, the alert sight's further band */
+  [AW_GUARD_ALERTED_FAR] = { 0.26f, 0.56f, 1.0f, 1.0f },
+  [AW_GUARD_CAUGHT_FAR] = { 1.0f, 0.16f, 0.14f, 1.0f },
+  [AW_GUARD_OFF_FAR] = { 0.62f, 0.62f, 0.62f, 1.0f },
+  [AW_GUARD_PATH] = { 1.0f, 0.95f, 0.55f, 1.0f },        /* pale yellow: a guard's patrol path */
+  [AW_TALK] = { 0.25f, 0.85f, 1.0f, 1.0f },              /* cyan: where Link can talk to it (interactview.c) */
+  [AW_TALK_IN] = { 0.75f, 1.0f, 1.0f, 1.0f },            /* pale cyan: ... and he's in range now */
+  [AW_TALK_LOCK] = { 0.16f, 0.55f, 0.70f, 1.0f },        /* dark cyan: ... while Z-targeting */
+  [AW_ACT] = { 0.80f, 0.55f, 1.0f, 1.0f },               /* lilac: where Link can act on it (check, open...) */
+  [AW_ACT_IN] = { 0.95f, 0.85f, 1.0f, 1.0f },            /* pale lilac: ... and he's in range now */
+  [AW_ACT_LOCK] = { 0.52f, 0.36f, 0.70f, 1.0f },         /* dark lilac: ... while Z-targeting */
+  [AW_DOOR] = { 1.0f, 0.62f, 0.18f, 1.0f },              /* orange: where anyone holds a door open */
+  [AW_DOOR_IN] = { 1.0f, 0.86f, 0.55f, 1.0f },           /* pale orange: ... and Link does now */
 };
 
 /* enemy health (enemyhp.c) */

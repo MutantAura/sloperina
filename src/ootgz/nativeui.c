@@ -1084,6 +1084,8 @@ typedef struct {
   float switch_shift; /* ... moved right this far */
   int indent_from;    /* an item under a heading (GFX_ROW_INDENT): its cells from this one ... */
   float indent_shift; /* ... moved this far (left: gz's indent is two cells, wide in the game's type) */
+  int box_from;       /* a checkbox's item: its cells from its box on ... */
+  float box_shift;    /* ... moved left this far, so the box starts where the other items' labels do */
   int opens_at;       /* an item that opens a menu: its " >" cell, or -1 */
   int crumb_end;      /* title rows: the path up to this cell of the last one, then the menu's name */
   bool grid;          /* a character a cell (GFX_ROW_GRID) */
@@ -1098,7 +1100,7 @@ typedef struct {
 static float col_x(const mrow_t *r, int col)
 {
   return (float)cell_x(col, r->scale) + (col >= r->indent_from ? r->indent_shift : 0) +
-         (col >= r->switch_from ? r->switch_shift : 0);
+         (col >= r->box_from ? r->box_shift : 0) + (col >= r->switch_from ? r->switch_shift : 0);
 }
 
 /* the hint's buttons, drawn as the game's button glyphs */
@@ -1115,6 +1117,7 @@ static const struct { const char *word; uint32_t glyph, other; } buttons[] = {
   { "ls-down", GF_LSTICK_DOWN, 0 }, { "rs-up", GF_RSTICK, 0 }, { "rs-left", GF_RSTICK, 0 }, /* not menu text */
   { "rs-right", GF_RSTICK, 0 }, { "ls-up", GF_LSTICK, 0 }, { "ls-left", GF_LSTICK, 0 }, /* not menu text */
   { "ls-right", GF_LSTICK, 0 }, /* not menu text */
+  { "LS", GF_LSTICK, 0 }, { "RS", GF_RSTICK, 0 }, /* the sticks themselves (the actor placer's panel) */
 };
 
 /* a bind's button (binds.h: input.h's bit number) as a glyph; 0 for SL / SR, which have none */
@@ -1509,6 +1512,8 @@ static bool row_setup(mrow_t *r)
    * it's INDENT_EM in from the heading's start, every row of the group moved alike so their columns stay */
   r->indent_from = r->cols;
   r->indent_shift = 0;
+  r->box_from = r->cols;
+  r->box_shift = 0;
   if ((panel->kind[r->row] & GFX_ROW_INDENT) && !r->grid) {
     int levels = panel->kind[r->row] & GFX_ROW_INDENT2 ? 2 : 1; /* GFX_ROW_INDENT2: under an item, a level more */
     int from = LIST_COL + (ITEM_INDENT_COL - LIST_COL) * levels;
@@ -1534,6 +1539,13 @@ static bool row_setup(mrow_t *r)
   if (first_text < 0)
     return false;
   if (r->kind == GFX_ROW_ITEM && !r->grid) {
+    unsigned char first = (unsigned char)ch[first_text];
+    if (first == GFX_CHECK_OFF || first == GFX_CHECK_ON) {
+      /* menu_icon draws the box at the right of its two cells: the row moved left by the room before it, so
+       * the box lines up with the labels of the items round it rather than looking indented under them */
+      r->box_from = first_text;
+      r->box_shift = -(2 * CELL_W * fp_px - checkbox_size(r) - r->em * 0.4f);
+    }
     if (panel->kind[r->row] & GFX_ROW_OPENS) { /* its line's " >": a chevron at the right edge instead */
       for (int c = r->cols - 1; c > first_text; c--) {
         if (ch[c] == '>') {
@@ -1896,6 +1908,13 @@ static void menu_layout(const gfx_panel_t *panel, int cols, int scale, float *va
       continue;
     }
     float end = menu_cells(&r, 0, false) + (r.opens_at >= 0 ? r.em * 1.4f : 0); /* room for its chevron */
+    ends = end > ends ? end : ends;
+  }
+  if (panel->inner_widest[0]) { /* a list inside it: as wide as its longest line, at its rows' indent (row_setup) */
+    int text_h = (int)(row_fp[GFX_ROW_ITEM].text * fp_px + 0.5f);
+    int em = gamefont_em_for_height(GF_REGULAR, text_h);
+    float end = (float)cell_x(LIST_COL, scale) + em * INDENT_EM * panel->inner_indent +
+                plain_width(styles[GFX_SELECTED].face, em, panel->inner_widest);
     ends = end > ends ? end : ends;
   }
   style_force = force;
@@ -2720,10 +2739,19 @@ static void draw_list(const gfx_panel_t *panel, float x, float y, float w, float
     /* the game's scroll bar left of the list (in gz's column of its ^ / v) */
     scroll_bar(x + cell_x(SCROLL_MARK_COL, scale) + (CELL_W - SCROLL_W) / 2 * fp_px, y, row_top,
                panel->scroll_row, panel->scroll_rows, panel->scroll_items, panel->scroll_top);
-  if (menu && panel->inner_rows && panel->inner_row + panel->inner_rows <= rows && scroll_bar_shown(panel))
-    /* a list inside it (the watches): its own bar in the room its rows are indented by, under the heading */
-    scroll_bar(x + (cell_x(LIST_COL, scale) + cell_x(ITEM_INDENT_COL, scale)) / 2.0f - SCROLL_W * fp_px / 2, y,
-               row_top, panel->inner_row, panel->inner_rows, panel->inner_items, panel->inner_top);
+  if (menu && panel->inner_rows && panel->inner_row + panel->inner_rows <= rows && scroll_bar_shown(panel)) {
+    /* a list inside it: its own bar in the room its rows are indented by, under the heading. On gz's grid (the
+     * watches) that's half way to their cells; in the game's type (the log, quick spawn's lists) a row's indent is
+     * INDENT_EM a level (row_setup), so the bar is a quarter em in from the heading: clear of a level-1 row's
+     * text, and of a level-2 row's cursor box */
+    float bar_mid = (cell_x(LIST_COL, scale) + cell_x(ITEM_INDENT_COL, scale)) / 2.0f;
+    if (!(panel->kind[panel->inner_row] & GFX_ROW_GRID)) {
+      int text_h = (int)(row_fp[kind_of(panel, panel->inner_row)].text * fp_px + 0.5f);
+      bar_mid = (float)cell_x(LIST_COL, scale) + gamefont_em_for_height(GF_REGULAR, text_h) * INDENT_EM / 2;
+    }
+    scroll_bar(x + bar_mid - SCROLL_W * fp_px / 2, y, row_top, panel->inner_row, panel->inner_rows,
+               panel->inner_items, panel->inner_top);
+  }
   top += row_fp[GFX_ROW_GAP].height * fp_px;
   r.h = GUIDE_FP * fp_px;
   if (shows_controls(panel) && top + r.h <= h) {
@@ -2870,6 +2898,59 @@ static void draw_menu_moving(const gfx_panel_t *panel, float x, float y, float w
 }
 
 int nativeui_band_scale;
+
+/* the control guide: one line of hint words (button names as glyphs) on the band the watches sit on, fading out at
+ * both ends, centred across the picture's foot */
+#define GUIDE_ROW_FP 14    /* its row: a little taller than a hint's */
+#define GUIDE_PAD_EM 0.9f  /* its text from the band's full part, each side, in its em */
+#define GUIDE_FADE_EM 2.5f /* the band's fade at each end */
+#define GUIDE_UP_FP 6      /* off the picture's foot, past the margin */
+#define GUIDE_LINES 3
+
+bool nativeui_guide(const char *text, int w, int h, int margin, int scale, float alpha)
+{
+  if (!gpuui_ready() || !nativeui_ready() || !text || !*text || w <= 0 || h <= 0 || alpha <= 0)
+    return false;
+  fp_px = (float)scale / NUI_SC_ONE;
+  mrow_t r;
+  memset(&r, 0, sizeof(r));
+  r.kind = GFX_ROW_HINT;
+  r.scale = scale;
+  r.cols = r.switch_from = r.indent_from = GFX_COLS;
+  r.opens_at = -1;
+  r.h = GUIDE_ROW_FP * fp_px;
+  row_metrics(&r);
+  int len = (int)__builtin_strlen(text);
+  gpu = true;
+  gpu_fade = alpha; /* the band and its words fade in and out together */
+  /* its lines ("\n" between them), each centred: the band as wide as the widest */
+  int from[GUIDE_LINES], to[GUIDE_LINES], lines = 0;
+  float line_w[GUIDE_LINES], text_w = 0;
+  for (int i = 0; i <= len && lines < GUIDE_LINES;) {
+    int e = i;
+    while (e < len && text[e] != '\n')
+      e++;
+    from[lines] = i, to[lines] = e;
+    line_w[lines] = hint_words(&r, text, i, e, 0, false);
+    text_w = line_w[lines] > text_w ? line_w[lines] : text_w;
+    lines++;
+    i = e + 1;
+  }
+  float fade = r.em * GUIDE_FADE_EM, pad = r.em * GUIDE_PAD_EM;
+  float bw = text_w + 2 * (fade + pad), bh = r.h * lines + pad;
+  float x = ((float)w - bw) / 2, y = (float)h - (float)margin - GUIDE_UP_FP * fp_px - bh;
+  draw_band(x, y, bw, bh, fade, fade, 0, 0, alpha);
+  gpu_fade = alpha;
+  strip_w = (int)(text_w + 1);
+  for (int l = 0; l < lines; l++) {
+    gpu_x = x + fade + pad + (text_w - line_w[l]) / 2;
+    gpu_y = y + pad / 2 + r.h * l;
+    hint_words(&r, text, from[l], to[l], 0, true);
+  }
+  gpu = false;
+  gpu_fade = 1;
+  return true;
+}
 
 bool nativeui_gpu_panel(const gfx_panel_t *panel, int x, int y, int w, int h, int scale, int opacity,
                         nui_legacy_fn legacy)

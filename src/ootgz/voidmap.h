@@ -25,6 +25,9 @@ int voidmap_lines(float ends[][2][3], uint8_t colours[], int max);
 /* game thread, after voidmap_lines: the columns', fence's and shift ground's sides as faces (airwall.h); how many */
 #define VOIDMAP_MAX_FACES 960
 int voidmap_faces(aw_face_t faces[], int max);
+/* game thread: the first of the ground Link stands on (the game's collision, his ground layer) between from and to,
+ * in any direction; false if there's none, or the raycast isn't known for this build (actor placer, placer.c) */
+bool voidmap_ground_cast(const float from[3], const float to[3], float pos[3], float normal[3]);
 /* the menu's line: "on the map", "off the map  6.8 of 8.0", "VOID  far from the ground" ... */
 void voidmap_text(char *buf, int len);
 

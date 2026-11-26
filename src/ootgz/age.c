@@ -20,6 +20,7 @@
 #include "gamedata.h"
 #include "gfx.h"
 #include "link.h"
+#include "remake.h"
 #include "sys.h"
 #include "warp.h"
 
@@ -114,6 +115,12 @@ static bool age_version(const char *name, int age, char *out, int len)
   return find_map(out) != 0;
 }
 
+bool age_map_has_version(const char *name, int age)
+{
+  char out[GD_STR_LEN];
+  return age_version(name, age, out, sizeof(out));
+}
+
 /* The spawn to reload map at: the start point Link last arrived at, else an entrance an exit leads
  * to, else the map's first. */
 static const spawn_t *find_reload_spawn(const warp_map_t *map, const char *last_start)
@@ -204,11 +211,12 @@ void age_reload_map(void)
   const char *current_map = gd_get_str(GD_STR_MAP);
   const char *last_start = gd_get_str(GD_STR_SPAWN);
   int current_age = age_current();
-  int age = age_wanted();
   if (!current_map || !current_map[0] || current_age < 0) {
     gfx_notice("can't reload: game data not found");
     return;
   }
+  remake_reload_starting(current_map, current_age); /* may make this the first of two loads (remake.h) */
+  int age = age_wanted();
   char name[GD_STR_LEN];
   if (!age_version(current_map, age, name, sizeof(name))) {
     gfx_notice(age == AGE_CHILD ? "this map has no child version" : "this map has no adult version");

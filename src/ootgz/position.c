@@ -48,6 +48,7 @@ static void use_slot(void)
 }
 
 static bool pending;  /* load pressed: waiting for the buttons to be let go */
+static bool quiet;    /* this load says nothing on screen (position_goto_quiet) */
 static int settle;    /* frames left to see Link arrive */
 static int writes;
 
@@ -107,12 +108,24 @@ void position_set(double x, double y, double z, double facing_degrees)
   log_printf("position set: %.3f %.3f %.3f facing %.1f in %s", sx, sy, sz, facing_degrees, smap);
 }
 
+bool position_busy(void) { return pending || settle; }
+
+bool position_goto_quiet(double x, double y, double z)
+{
+  if (pending || settle)
+    return false;
+  bool ok = position_goto(x, y, z);
+  quiet = ok;
+  return ok;
+}
+
 bool position_goto(double x, double y, double z)
 {
   if (pending || settle) {
     gfx_notice("a position load is still under way");
     return false;
   }
+  quiet = false;
   if (link_record_status() != REC_READY) {
     gfx_notice("go to: Link not found");
     return false;
@@ -194,7 +207,8 @@ static void settle_step(void)
   if (link_there()) {
     face_saved();
     log_printf("position loaded (%d write%s)", writes, writes == 1 ? "" : "s");
-    gfx_notice("position loaded");
+    if (!quiet)
+      gfx_notice("position loaded");
     settle_done();
     return;
   }
@@ -202,7 +216,8 @@ static void settle_step(void)
     lock_hold_set(false);
     link_record_resync();
     log_printf("position load didn't take after %d writes", writes);
-    gfx_notice("load position didn't work, try again");
+    if (!quiet)
+      gfx_notice("load position didn't work, try again");
     return;
   }
   if (writes < MAX_WRITES && (SETTLE - settle) % RETRY_EVERY == 0)

@@ -12,6 +12,7 @@
  *   set <menu path> = <value>  a checkbox (on / off), an option (its text or number) or a number
  *   get <menu path>            its value and its line as the menu shows it
  *   list [<menu path>]         a menu's items: number, kind, name, value
+ *   open [<menu path>]         the menu on screen at that menu (or at that item of its menu), for a look at it
  *   wait <frames>              the next line runs that many frames later
  *   repeat <n> ... end         the lines between, that many times (up to four inside one another); with wait
  *                              and input, a sequence of any length

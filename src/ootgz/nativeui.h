@@ -31,6 +31,10 @@ bool nativeui_rasterise(const gfx_panel_t *panel, uint8_t *dst, int scale, int w
 extern int nativeui_band_scale;
 bool nativeui_gpu_panel(const gfx_panel_t *panel, int x, int y, int w, int h, int scale, int opacity,
                         nui_legacy_fn legacy);
+/* a control guide (gfx_guide) on the GPU: a line or two (up to three, "\n" between) of hint words (button names as the
+ * game's glyphs), each centred, on the watches' band, centred across the bottom of the visible area (w x h), `margin` up from its foot, at the menu's scale, all at
+ * `alpha` (its fade); between gpuui_begin and gpuui_end. false: not drawn. */
+bool nativeui_guide(const char *text, int w, int h, int margin, int scale, float alpha);
 /* the GPU path's size of a panel at scale, in pixels, from gz's grid size of it in *w and *h: the band it
  * sits on, with the content's padding and fades, and the menu laid out the game's way (by its rows' kinds,
  * gfx_row) for its first `rows` rows; and how many of menu.c's rows fit in `space` pixels */

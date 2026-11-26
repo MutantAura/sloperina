@@ -83,7 +83,7 @@ const char *const command_group_names[CMD_GROUPS] = {
 enum {
   B_A = 0, B_B = 1, B_X = 2, B_Y = 3, B_L3 = 4, B_R3 = 5, B_L = 6, B_R = 7, B_ZL = 8, B_ZR = 9,
   B_PLUS = 10, B_MINUS = 11, B_DLEFT = 12, B_DUP = 13, B_DRIGHT = 14, B_DDOWN = 15,
-  B_RS_DOWN = 23, N_BUTTONS = 26,
+  B_RS_UP = 21, B_RS_DOWN = 23, N_BUTTONS = 26,
 };
 /* their names: the words nativeui.c draws as glyphs (not menu text: the same in every language) */
 static const char *const button_names[N_BUTTONS] = {
@@ -112,7 +112,7 @@ static const uint32_t defaults[CMD_COUNT] = {
   [CMD_WATCHES] = B2(B_R, B_DRIGHT), [CMD_TIMER] = B3(B_R, B_A, B_DLEFT), [CMD_RESET_TIMER] = B3(B_R, B_B, B_DLEFT),
   [CMD_RESET_LAG] = B3(B_R, B_B, B_DRIGHT), [CMD_RESET_JS] = B3(B_R, B_A, B_DRIGHT),
   [CMD_TITLE] = BIND_NONE, /* leaves play: only for whoever gives it buttons */
-  [CMD_FREECAM] = BIND_NONE,
+  [CMD_FREECAM] = B2(B_R, B_RS_UP), /* as the menu's R + rs-down, the other way */
 };
 
 uint32_t binds[CMD_COUNT];

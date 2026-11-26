@@ -12,16 +12,13 @@ Everything sloperinaGZ can do, menu by menu. New to it? Start with the [usage gu
   - [2.1 Link](#21-link)
   - [2.2 Warps](#22-warps)
   - [2.3 Scene](#23-scene)
-  - [2.4 Memfiles](#24-memfiles)
-  - [2.5 Cheats](#25-cheats)
-  - [2.6 Inventory](#26-inventory)
-  - [2.7 Equips](#27-equips)
-  - [2.8 Watches](#28-watches)
-  - [2.9 Save management](#29-save-management)
-  - [2.10 Story](#210-story)
-  - [2.11 Debug](#211-debug)
-  - [2.12 Settings](#212-settings)
-  - [2.13 About](#213-about)
+  - [2.4 Cheats](#24-cheats)
+  - [2.5 Inventory](#25-inventory)
+  - [2.6 Watches](#26-watches)
+  - [2.7 Save / memfile management](#27-save--memfile-management)
+  - [2.8 Debug](#28-debug)
+  - [2.9 Settings](#29-settings)
+  - [2.10 About](#210-about)
 - [3 On the screen](#3-on-the-screen)
 - [4 About frame advance](#4-about-frame-advance)
 - [5 Settings file](#5-settings-file)
@@ -46,7 +43,7 @@ emulators alike. Open the menu with **R + right stick down**.
 | **R + D-pad left** or **B** | Back one menu (closes the menu at the top) |
 
 While the menu is open the game doesn't see the controller. These are the defaults, as gz's: every one of them, and
-every shortcut below, can be changed in **settings > rebind commands** ([2.12.4](#2124-rebind-commands)). The menu's hints and the
+every shortcut below, can be changed in **settings > rebind commands** ([2.9.4](#294-rebind-commands)). The menu's hints and the
 controls at its foot show the buttons as they're bound.
 
 ### 1.2 Reading the menu
@@ -74,12 +71,13 @@ With the menu closed (the defaults; **settings > rebind commands** changes them)
 | **R + A + D-pad right** | Reset **jump height** to FLT_MAX (as after a load: the jumpslash then works at any height) |
 | **R + D-pad up** | Save position: where Link is and which way he faces |
 | **R + D-pad down** | Load position: put Link back there (same map only) |
-| **L3** | Levitate on / off (if enabled, [2.12.2](#2122-levitate)) |
+| **L3** | Levitate on / off (if enabled, [2.9.2](#292-levitate)) |
 | **X / B** held | Levitate up / down; release to hover |
 | **R3** held | Levitate: hold height even if X/B is held |
 | **R3** | Ragdoll (as a bomb hit) when not levitating |
-| **L** | Frame advance (if enabled, [2.12.3](#2123-frame-advance)) |
+| **L** | Frame advance (if enabled, [2.9.3](#293-frame-advance)) |
 | **L + L3** (either order) | Frame advance: run again |
+| **R + right stick up** | Free camera on / off ([2.8](#28-debug)) |
 
 **reload map** and **end cutscene** can be given buttons too (**settings > rebind commands**, under **scene**); they
 have none at first.
@@ -88,7 +86,7 @@ have none at first.
 
 ### 2.1 Link
 
-Four submenus, then under **return** what can only be read: Link's **position** (x, y, z), his **current age**, the **map** and whether he has **hookshot storage** (yes / no; - without a hookshot).
+Five submenus (**equips** the last), then **lank / lunk mode**, then under **return** what can only be read: Link's **position** (x, y, z), his **current age**, the **map** and whether he has **hookshot storage** (yes / no; - without a hookshot).
 
 #### 2.1.1 Status
 
@@ -123,6 +121,19 @@ Four submenus, then under **return** what can only be read: Link's **position** 
 | **bomb t-pose** | Turns on the ocarina breath glitch: Link's arms go into a T-pose while he runs holding a bomb. In the game it comes from holding one ocarina note until Link takes a breath (about 4.5 s), and lasts until an idle animation, an attack or a boots change. While ticked it stays on through those. Unticking puts the normal pose back, which also clears the glitch if the ocarina caused it. Checked on 1.1.1 and 1.0.0 as adult Link. |
 | **force hookshot storage** | Gives hookshot storage on purpose: the moment a hookshot or longshot shot starts, Link takes a bomb's medium hit, which cancels the shot before the hook flies. The next shot then skips flying and pulls Link straight towards the spot the cancelled shot aimed at, through walls if it was behind one (on another map it crashes the game). Says "hookshot storage" when it worked. A shot that uses storage isn't hit, so it can be used with this ticked. 1.0.0 only: on 1.1.1 the game lets go when nothing real is hooked, so the option isn't in the menu there. |
 
+#### 2.1.5 Equips
+
+What Link is wearing and holding right now (read only).
+
+#### 2.1.6 Lank / lunk mode (beta)
+
+Beta: it changes the game's own files as the game reads them and in memory. It starts off each time the game starts.
+
+| Item | What it does |
+|---|---|
+| **mode** | **off**, or **lank & lunk**: each age plays the other's animations, as in the cutscenes played at the wrong age, so child Link is stretched to adult proportions (Lank) and adult Link squashed to the child's (Lunk). |
+| **apply** | Makes the chosen mode the one in force, then asks for a **reload map** (**scene interaction**): that reload goes to the other age and back, since the game makes Link anew only when his age changes; age, sword, shield and clothes come back. An age change or a file load applies it too. |
+
 ### 2.2 Warps
 
 | Item | What it does |
@@ -139,9 +150,9 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 
 | Item | What it does |
 |---|---|
-| **reload map** | Reloads the current map (at the age set in **link**). |
 | **end cutscene** | Ends the cutscene (or dialogue, chest opening or other event) that's playing. A played-back cutscene is skipped the way the game's own skip does; any other event is cancelled the way the game cancels one. Flags the rest of the event would have set aren't set, so it may play again. |
 | **time of day** | The game's clock: the time now (and whether it's day, 06:00 to 18:00, or night), **hour** and **minute** to set it, **freeze time** to hold it where it is, and **dawn**, **noon**, **dusk** and **midnight** to jump to. It sets the clock the way the game's own `ExecuteWmSetTime` does. Until the story has started the clock (early in a new game it stays at 06:00), setting it does nothing. Freezing isn't saved in the settings. |
+| **explorer** | Go round this map's dungeon rooms, grottos and interiors with the free camera, and go to them. See [2.3.4](#234-explorer). |
 | *collision* | |
 | **environment** | See below. |
 | **void out** | See [2.3.3](#233-void-out). |
@@ -150,6 +161,7 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 | *enemies* | |
 | **display enemy health** | A bar with **life/max** over each living enemy within 30 m of Link (red under a quarter); it goes when the enemy reaches 0. Enemies that haven't appeared yet (Wolfos still in the ground, Stalfos before they drop) have none, and none are drawn while the game is paused. In the game's style a bar fades out while its enemy is hidden behind walls or other scenery. |
 | **display through walls** | Also show the bars of enemies hidden behind the scenery (the game's style). Indented under **display enemy health**. |
+| **reload map** | Reloads the current map (at the age set in **link**). Last, above **return**. |
 
 #### 2.3.1 Environment
 
@@ -213,31 +225,36 @@ Shadow Temple's chasm), and a few dungeon rooms' own void scripts. The
 cells round Link are read again every two seconds or when Link has moved 4 units, out to 24 units to the side, 48 units down
 (with deeper deadly cells projected upward from below) and 16 units up; where there are more lines than fit, the farthest are left out.
 
-### 2.4 Memfiles
+#### 2.3.4 Explorer
 
-In-memory snapshots stored until the game is closed, capturing full GameData (via the game's own serializer), unsaved session flags, map, time of day, Link's position/facing/health/magic/gear, and the player camera + AI action state.
+**scene > explorer** goes round the map you're in by its places: its dungeon rooms, grottos and interiors (the houses,
+shops and huts, which in this game are inside their buildings where they stand). The menu closes and the free
+camera looks down on a yellow beam, as **debug > actors > browse currently loaded actors** does ([2.8](#28-debug)):
 
-| Item | What it does |
-|---|---|
-| **slot** `< 1..5 >` | Picks which of the five memfile slots **save memfile**, **load memfile** and **import/export** use. |
-| **save memfile** | Saves the current state into the selected slot (kept in memory only). |
-| **load memfile** | Closes the menu and restores the selected slot's GameData, map, time, Link and camera. |
-| **import/export** | Opens `sloperinaGZ/memfiles` on the SD card, one folder at a time: its path at the top, a row of buttons (left/right picks one, **L** presses it), a line, then the folder itself with its folders and `.szm` files under it. The buttons: **new folder** (asks for its name, made in this one); **export here** (asks for a name, the slot's map to start with, then writes the selected slot into this folder as `<name>.szm`; a name already used there is refused); **delete this folder** (not at the top: a screen says what's in it, with **no, keep it** first, then **yes, delete it** deletes the folder and every memfile and folder in it). **L** on the folder's own row goes up a folder (at `sloperinaGZ/memfiles`, as far up as it goes, it does nothing); **L** on a folder under it opens it; **L** on a file's name reads it into the selected slot (a slot in use: **L**, then **L** again to replace it); right to the red cross after it, then **L** and **L** again, deletes the file from the SD card. |
-| **fast same-map** | When on (default), loading while already in the same map and age with no event running resets actors and gimmicks in place without a loading screen. Otherwise, triggers a silent full map reload. |
-| **session flags** | When on (default), loads also restore unsaved session fields (`save_file == -1`, such as NPC talk state, minigame state, and destructibles/room state). |
+- **d-right** and **d-left** go up and down the places, the camera gliding to each: rooms in their numbers' order
+  (d-right up, d-left down),
+  the rest nearest first. An interior or a grotto is looked at from close and low, under its roof; zoom out with
+  **ZL**. The panel at the top left says which (a room's number, a grotto or an interior), what's in it on the
+  line under (a room's or grotto's enemies and chests, an interior's people), the **type** shown, and where in
+  the list it is (**3 of 28**).
+- **L** and **R** choose which: all **places**, **rooms**, **grottos** or **interiors**, only those the map has,
+  moving on to the first of them.
+- **A** goes there: Link to the place (or, with none chosen, to where the beam stands), as **load position** moves him (your saved position stays);
+  you carry on exploring until **B**.
+- In a dungeon, going to a room takes Link into it: the game wakes a room (its enemies, chests, switches) only
+  for where Link is, so this is what shows it as it is. The room's enemies can reach him meanwhile, and a room's
+  events can start. **B** puts him back where he was when you started exploring, or where **A** last put him.
+  **Y** turns this on and off (**take Link**, on to start with and remembered; the bar at the bottom says which):
+  off, only the camera goes, Link stays where he is (or goes back there, if he was in a room), and a room shows its
+  walls but not its enemies.
+- the **left stick**, **d-up** / **d-down** (height), **L3** (back to Link), the **right stick**, **ZL** / **ZR** (zoom) and **X**
+  move the beam and the camera as when looking at actors; **B** finishes and gives the camera back.
 
-Under **return**: each of the 5 slots (showing `empty` or `<map> (child/adult)`), plus the current save/load status while busy.
+The places come from the game's map layouts (`tools/places.py`). Far from Link the world isn't loaded, so the
+beam may stand in the air (orange) until Link goes there. Some grottos have no landing point of their own, and
+the beam stands at their entrance instead. Going to a dungeon room wakes it as walking in does (checked in the Forest Temple).
 
-Memfiles also bring back Nayru's Love (on with its time left, or off), Farore's Wind's warp point and sparkle, and the 8-unit void fence anchor (older `.szm` files without a saved fence trigger a fresh scan around Link's restored position instead of keeping a stale fence).
-
-Memfiles are only written to or read from the SD card when you export or import one. A `.szm` file can be shared: it records the game version it was made on (1.0.0 or 1.1.1) and the sloperina version that wrote it, and is refused on another game version, by an older sloperina that can't read its format, or if it's damaged. Newer sloperina versions read memfiles made by older ones; a part an older file doesn't have (or a newer file has that this version doesn't know) is left as the map sets it. Memfiles exported by the early test builds of this feature (format 1) can't be imported. A memfile holds a whole save's GameData, so loading someone else's replaces your current game's progress in memory, just as loading your own does: the game's save files are only changed if the game saves afterwards.
-
-Saving is refused during a cutscene, a game over, or while the game is paused (pause screen, map, item wheel); loading is refused during a cutscene or while paused. Loading during a game over is allowed (it reloads the map).
-
-Caveats:
-- Link climbing a ladder, vine or wall isn't restored: he's put back at the spot and drops.
-
-### 2.5 Cheats
+### 2.4 Cheats
 
 **infinite**: energy, rupees, magic, deku sticks, deku nuts, deku seeds, bombs, arrows, bombchus, magic beans,
 business scrub seeds (30): each kept full while ticked.
@@ -247,7 +264,7 @@ against a wall, rock or air wall and Link walks on through it at the height he w
 or turn it. While floating, levitate's own **through walls** setting applies instead. (To keep jump height at its
 maximum, see **watches > lock jump height**.)
 
-### 2.6 Inventory
+### 2.5 Inventory
 
 | Menu | What's in it |
 |---|---|
@@ -262,11 +279,7 @@ maximum, see **watches > lock jump height**.)
 Everything goes through the game's own code where it needs it: items appear on the pause screen, the HUD
 redraws, taking away an item you're wearing takes it off Link, and an item on a button comes off the button.
 
-### 2.7 Equips
-
-What Link is wearing and holding right now (read only).
-
-### 2.8 Watches
+### 2.6 Watches
 
 gz's watch list: values shown on the screen in a box while you play.
 
@@ -361,9 +374,13 @@ freeze, not a patch of the game's setter: writes and checks within a single game
 before the mod runs. Build and host tests do not establish whether this prevents every launch restriction
 in-game; test normal jumps, sidehops, jumpslashes, scene changes, and restarts on the supported game version.
 
-### 2.9 Save management
+### 2.7 Save / memfile management
 
-The top-level **save management** menu: copies of the game's save folder on the SD card, made after each save or
+Two submenus: **save management** (the game's save on the SD card) and **memfiles** (snapshots in memory).
+
+#### 2.7.1 Save management
+
+The **save management** menu: copies of the game's save folder on the SD card, made after each save or
 when you ask, and putting one back in place of the save.
 
 **automatic save archive >** is a menu of its own: after a save the game makes, the whole save folder (every slot, and the options)
@@ -427,34 +444,70 @@ backed up**, shows after each automatic one (**save archived** after **archive n
 100; the oldest go first. To restore one with the game closed instead, copy its contents back over the game's save
 folder (on an emulator: right-click the game > *Open save data location*).
 
-### 2.10 Story
+#### 2.7.2 Memfiles
+
+In-memory snapshots stored until the game is closed, capturing full GameData (via the game's own serializer), unsaved session flags, map, time of day, Link's position/facing/health/magic/gear, and the player camera + AI action state.
 
 | Item | What it does |
 |---|---|
-| **all tutorials seen** | Marks every tutorial message as seen, so they stop popping up. |
-| *each quest* | The quest's current stage; D-pad left / right (or **L**) changes it. It takes effect after a loading zone. |
+| **slot** `< 1..5 >` | Picks which of the five memfile slots **save memfile**, **load memfile** and **import/export** use. |
+| **save memfile** | Saves the current state into the selected slot (kept in memory only). |
+| **load memfile** | Closes the menu and restores the selected slot's GameData, map, time, Link and camera. |
+| **import/export** | Opens `sloperinaGZ/memfiles` on the SD card, one folder at a time: its path at the top, a row of buttons (left/right picks one, **L** presses it), a line, then the folder itself with its folders and `.szm` files under it. The buttons: **new folder** (asks for its name, made in this one); **export here** (asks for a name, the slot's map to start with, then writes the selected slot into this folder as `<name>.szm`; a name already used there is refused); **delete this folder** (not at the top: a screen says what's in it, with **no, keep it** first, then **yes, delete it** deletes the folder and every memfile and folder in it). **L** on the folder's own row goes up a folder (at `sloperinaGZ/memfiles`, as far up as it goes, it does nothing); **L** on a folder under it opens it; **L** on a file's name reads it into the selected slot (a slot in use: **L**, then **L** again to replace it); right to the red cross after it, then **L** and **L** again, deletes the file from the SD card. |
+| **fast same-map** | When on (default), loading while already in the same map and age with no event running resets actors and gimmicks in place without a loading screen. Otherwise, triggers a silent full map reload. |
+| **session flags** | When on (default), loads also restore unsaved session fields (`save_file == -1`, such as NPC talk state, minigame state, and destructibles/room state). |
 
-### 2.11 Debug
+Under **return**: each of the 5 slots (showing `empty` or `<map> (child/adult)`), plus the current save/load status while busy.
+
+Memfiles also bring back Nayru's Love (on with its time left, or off), Farore's Wind's warp point and sparkle, and the 8-unit void fence anchor (older `.szm` files without a saved fence trigger a fresh scan around Link's restored position instead of keeping a stale fence).
+
+Memfiles are only written to or read from the SD card when you export or import one. A `.szm` file can be shared: it records the game version it was made on (1.0.0 or 1.1.1) and the sloperina version that wrote it, and is refused on another game version, by an older sloperina that can't read its format, or if it's damaged. Newer sloperina versions read memfiles made by older ones; a part an older file doesn't have (or a newer file has that this version doesn't know) is left as the map sets it. Memfiles exported by the early test builds of this feature (format 1) can't be imported. A memfile holds a whole save's GameData, so loading someone else's replaces your current game's progress in memory, just as loading your own does: the game's save files are only changed if the game saves afterwards.
+
+Saving is refused during a cutscene, a game over, or while the game is paused (pause screen, map, item wheel); loading is refused during a cutscene or while paused. Loading during a game over is allowed (it reloads the map).
+
+Caveats:
+- Link climbing a ladder, vine or wall isn't restored: he's put back at the spot and drops.
+
+### 2.8 Debug
 
 **return to title screen**: back to the game's title screen from anything: ordinary play, a cutscene or other event, a game over, the pause screen or map (it presses B for them until they've closed), the game held by frame advance (it lets the game go). A map change already on its way (an exit, a warp) is let finish first, and a save being written too; a warp waiting for the next exit is cancelled. It leaves play the way the game's own Game Over > Quit does, by ending an event with the result "Title", so it usually takes one to two seconds. Nothing is saved: whatever isn't saved is lost, as with the pause screen's Return to Title. It gives up, with a notice, if the game hasn't left play within a minute. The free camera is turned off on the way. It can be given buttons in **settings > rebind commands** (under **debug**; unbound to start with).
 
 **actors**: like gz's actors menu.
 
-- **browse current actors**: every actor loaded in the scene, at any distance and in any state, in folders by kind with their counts: **all**, **enemies** (`Enemy_`), **npcs** (`Npc_`), **objects** (`Obj_`, `Item_`), **scenery** (`Land_`) and **other** (cameras, areas, the game's system actors). **name has** narrows them to the names with a piece you type (any case). In a folder they're grouped under their names, nearest first in each, or with **sort** all nearest first, each with its distance and state (4 and 5: running; 6: not appeared yet; 7 and over: dying). Read again on entering **browse current actors** or with its **refresh**.
-- **L** on an actor in a folder opens it: its name, how far away it is and where, its state and its life if it has any, read live, then **go to**, **spawn one like it** and **kill**. An actor that has gone since the folder was read is never touched: it shows as *gone*. The last one opened is marked `>` in the folder.
-  - **go to** puts Link where the actor is, the way **load position** moves him, without changing your saved position. Inside something solid (a bed, a door) the game puts him straight back.
-  - **spawn one like it** asks the game to make another actor of the same name, 2 m in front of Link and facing him. The game makes it the way its own AI does; it says "spawned" once it's there (usually in a few frames). It gets none of the placement data the map's own copy has (links, rails, switches), so some actors may stand idle.
-  - **kill** sends the actor the game's own death request, the one a fall into a bottomless pit sends: it fades out, with no drop. Bosses and the like refuse it ("it won't die that way"), so their fights can't be skipped. An NPC or a thing with no death of its own is deleted instead (the game's own delete, as its AI uses); scenery, the game's system actors and Link are never touched. A killed enemy may be back when the map reloads.
-- **spawn actor by name or type**: any enemy, NPC, object or item the game has (1856 of them). Type a piece of the name in **name has**, pick a **type** (the same kinds as the folders), then **L** on one of the first 40 matches; it's made as **spawn one like it** makes one. Its pack is loaded if the map doesn't already have it. The `_Dictionary` actors are the enemy guide's models.
-- **quick spawn**: short lists of the likeliest actors, by kind: **animals** (Epona, a cucco, a bug, a cow...),
-  **enemies**, **characters** (the child's or the adult's, by Link's age), **objects** and **pickups**. **L** on one
-  makes it as **spawn one like it** does. **epona (owned)**, in **animals**, makes her your own horse, so she lets you ride
+- **browse currently loaded actors**: the free camera over a beam on the ground, as when placing (below) but with nothing to place: for going from actor to actor, going to them and killing them. What **d-left** and **d-right** go through starts as **look at** says, under it: **all kinds** (enemies, NPCs, objects and items; to start with), **enemies**, **npcs** or **objects**. While browsing, **L** and **R** change it, moving on to the nearest of them at once. (Placing, they go through all kinds.)
+  - **A** goes to the actor: Link is put where it is, the way **load position** moves him, without changing your saved position. Inside something solid (a bed, a door) the game puts him straight back.
+  - **Y** kills or despawns it, sending the actor the game's own death request, the one a fall into a bottomless pit sends: it fades out, with no drop. Where the game refuses it (bosses and the like, and some NPCs), where the actor has no death of its own, or where it's taken but the actor is still standing half a second later, the actor is despawned instead: the game's own delete, as its AI uses, with no death, drop or respawn flag. A despawned boss's fight won't finish as it should. Scenery, the game's system actors and Link are never touched. A killed or despawned actor may be back when the map reloads.
+- **quick spawn**: the actors to make, by kind: **animals** (Epona, a cucco, a bug, a cow...), **enemies**,
+  **characters** (the child's or the adult's, by Link's age), **objects** and **pickups**. Each starts with a short
+  list of the likeliest; under it (all but **animals**), **all enemies**, **all characters**, **all objects** or
+  **all items** has every one of that kind the game has (`Enemy_`, `Npc_`, `Obj_`, `Item_`: 341, 348, 997 and
+  139; **character equipment**, a submenu of **characters** above **all characters**, has the 31 `Npc_Equipment_` ones, kept out of **all characters**). **name has** narrows it to the names with a piece you type (any case); five show at a time, with the arrows
+  above and below them to scroll (held: it keeps going) and the scroll bar beside them, and the top arrow says which
+  of how many are showing. **L** on one asks the game to make it, placed with the sticks first (see **spawn where**)
+  or 2 m in front of Link and facing him; its pack is loaded if the map doesn't already have it. The game makes it the
+  way its own AI does and it says "spawned" once it's there (usually in a few frames). It gets none of the placement
+  data a map's own copy has (links, rails, switches), so some actors may stand idle. The `_Dictionary` actors are the enemy guide's models. **epona (owned)**, in **animals**, makes her your own horse, so she lets you ride
   her (child Link too, though his ride looks rough). Talking to a spawned character
   can start its own event, which may change flags or the save.
 - **remove spawned**: deletes every actor made in this menu that's still in the map (they go with a map change
   anyway).
+- **spawn where**: **placed with the sticks** (to start with) or **in front of Link**. Placed, the menu closes and the free camera looks down on a yellow beam standing on a ring, with an arrow for the way the actor will face, as furniture is placed in The Sims on a console. The spot starts 3 m in front of Link, or where the free camera is looking if it's already on.
 
-**free camera**: takes the picture off Link so you can fly it anywhere. Close the menu to fly: the left stick moves along the view, the right stick looks round, **ZR** rises, **ZL** sinks and holding **X** goes six times faster. The game gets no input meanwhile, so Link stands where he was; untick it (or use its bind) to get the game's camera back, as it was. What's drawn and culled is the free camera's view, and the watches, air walls and other overlays are drawn from it too. The world isn't loaded round it, though: the game streams the terrain and places the actors round Link, so far from him you see the far, simple terrain and none of the actors there. It can be given buttons in **settings > rebind commands** (under **debug**, **free camera on/off**; unbound to start with), and remote control's `input` sticks and buttons fly it too.
+  While placing or browsing, a panel at the top left names what's under the beam (with its life under the name, if it has any) and what d-left and d-right go through, and the controls are shown in a band across the bottom of the screen with the game's own button glyphs, fading in and out with it (in gz's menu style they're in the panel instead):
+  - the **left stick** moves the spot over the ground, as the camera faces; it keeps to the ground (up steps and slopes, off ledges) and turns orange where there's no ground under it, keeping its height
+  - **d-up** and **d-down** move it up and down: it turns orange, keeps that height as the left stick moves it, and a line goes down from it to the ground under it
+  - **L3** (pressing the left stick): back to Link, the spot on the ground where he stands and the camera with it
+  - **R3** (pressing the right stick; **R3 hide controls** in the bar): hides the controls bar, the beam and the panel, for a clear picture; **R3** again shows them (the game's own HUD is left as its options have it)
+  - the **right stick** swings the camera round the spot and up and down; **ZR** and **ZL** zoom in and out; holding **X** moves the spot (and its height) four times faster
+  - **d-left** and **d-right** step through the actors of the kind shown within 40 m of the spot, nearest first: **d-right** on to the next, **d-left** back to the one before. The spot locks on to each, and the camera glides to it and follows it smoothly, so one that moves doesn't jerk the view. The left stick lets go of it, carrying on from where it is (the next press then starts from the actors near there). Navi and the ocarina's fairy are never in the list.
+  - the ring turns red over an actor: the one locked on to, or one of any kind within 1 m of the beam. **Y** kills or despawns it (see above).
+  - browsing: **A** goes to the actor locked on to or under the beam, or with none, to where the beam stands (Link moved there as **load position** moves him); you carry on browsing until **B**
+  - placing: **L** and **R** turn the arrow, 15 degrees a press (it starts facing the camera), and **A** makes the actor there; you can carry on and make more
+  - **B** finishes and gives the camera back (to Link, or to the free camera if it was on).
+
+  The game gets no input meanwhile, as with the free camera. Opening the menu holds it until the menu's closed; turning the free camera off ends it. Remote control's `input` sticks and buttons work it too.
+
+**free camera**: takes the picture off Link so you can fly it anywhere. Close the menu to fly, with the same controls as the explorer where they're alike, shown in a bar across the bottom of the screen: the left stick moves along the view, the right stick looks round, **d-up** rises, **d-down** sinks and holding **X** goes six times faster; **ZR** and **ZL** zoom in and out (the camera moving along its view); **A** goes back to Link (behind him, looking at him); **R3** hides the controls bar and shows it again; **L3** hands the controller to Link and back again (the bar says which L3 goes to next: **L3 control Link** while you're moving the camera, **L3 control camera** while you're controlling Link): with Link, the game gets every button but L3 and R3 (so A is his as ever; **R3** still hides the bar) and the camera stays where it is, so you can watch him from there; **Y** follows Link (**Y follow Link: on / off** in the bar): the camera keeps its angle and where it is from him and goes with him as he moves, with you controlling him or not, and moving the camera meanwhile changes where it keeps from him; **B** turns it off and gives the game's camera back, as it was (so does unticking it, or its bind). The game gets no input meanwhile, so Link stands where he was, and the module's other shortcuts (levitate, ragdoll, frame advance...) wait until it's off. What's drawn and culled is the free camera's view, and the watches, air walls and other overlays are drawn from it too. The world isn't loaded round it, though: the game streams the terrain and places the actors round Link, so far from him you see the far, simple terrain and none of the actors there. **R + right stick up** turns it on and off too (**settings > rebind commands**, under **debug**, **free camera on/off**; settings files from before it had a bind get it once), and remote control's `input` sticks and buttons fly it too.
 
 **tests > dive tests**: **from heights** and **while moving** measure how deep Link goes into water by how he falls in. Start
 one with Link swimming at the surface (facing open water for **while moving**) and leave the controls alone: it
@@ -462,11 +515,11 @@ measures the surface, drops him again and again from set heights (from heights: 
 16 and 96 above it, 0 to 13.6 units/s the way he faces), twice each, and writes each drop's fall time, speed
 going in, and deepest point to `log.txt` ("dive test: ..."). Choose it again to stop.
 
-#### 2.11.1 Heap
+#### 2.8.1 Heap
 
 How much memory the game has and uses (refreshed every second), and **view the heap in memory**.
 
-#### 2.11.2 Memory
+#### 2.8.2 Memory
 
 gz's memory viewer.
 
@@ -480,11 +533,11 @@ gz's memory viewer.
 
 Unreadable memory shows as `??`; read-only memory can't be changed. **Editing memory can crash the game.**
 
-#### 2.11.3 Pause research
+#### 2.8.3 Pause research
 
 The game's own pause state, for development: values you can watch, change and log.
 
-#### 2.11.4 Flag logging
+#### 2.8.4 Flag logging
 
 Records changes to the game's saved progress flags while you play, to learn what each flag is for. Every named story
 flag, event flag, item flag, counter and quest stage kept in the save is compared with the frame before. Flags
@@ -500,7 +553,7 @@ files go to `sloperinaGZ/flaglog/` on the SD card. There are three, each with it
 The switches are kept in the settings, so they stay on across starts. The lines under the menu show each file and
 how many rows this session has added. While **record flag changes** is on, **Event flag written to CSV** shows in the bottom right
 when a flag changes, at most once a second ("3 event flags written to CSV" when more changed in that time). Each
-change is also kept in the log menu: choose **event flags** as its filter (2.11.5).
+change is also kept in the log menu: choose **event flags** as its filter (2.8.5).
 
 Each row has the date and time (the console's clock, e.g. `13/11/2026 15:47:02`), the seconds since this session's recording
 started, the frame, the map, Link's position, what Link was doing (`EvtTalk` while he talks), the
@@ -529,7 +582,7 @@ also adds the script (`set_by`, e.g. `SageOfWater/IceCavern_WaterSerenade` for t
 `Step04`), the NPC and the dialogue just before the change. The scripts say who *can* set a flag, so when several
 can, the `match` column says how sure the pick is; see the tool's help.
 
-#### 2.11.5 Log
+#### 2.8.5 Log
 
 Under **log history**: the last 128 messages sloperinaGZ wrote, newest first, five at a time. **↑** above them and
 **↓** below them scroll (hold **L** to keep going), and in the game's style a scroll bar beside them shows where you are.
@@ -538,7 +591,7 @@ Under **log history**: the last 128 messages sloperinaGZ wrote, newest first, fi
 |---|---|
 | **filter** `< all >` | Which messages: **all**, only **problems** (anything that couldn't be done), **event flags**, or one kind (warp, settings, notice... whatever kinds there are). |
 
-**event flags** shows the flag changes recorded by flag logging (2.11.4), each with the date and time, e.g.
+**event flags** shows the flag changes recorded by flag logging (2.8.4), each with the date and time, e.g.
 `13/11 15:47:02 HavePlayedEvent.Npc_Kokiri_Mido_Child_C1C2_TT 0 -> 1`. It keeps the last 128 flag changes in a list of
 their own, so other messages don't push them out. Flags without a known name show their hash.
 
@@ -546,10 +599,17 @@ Everything is also written to **`sloperinaGZ/log.txt`** on the SD card (on an em
 Lichii build 150+: `%APPDATA%\lichii\sdmc\sloperinaGZ\log.txt`; Fritchii v5.8+: `%APPDATA%\fritchii\sdmc\sloperinaGZ\log.txt`; Eden and older Lichii / Fritchii: `%APPDATA%\eden\sdmc\sloperinaGZ\log.txt`), with the time since the game started and the game's frame counter (`[   12.345 f742] ...`: the **frame** watch's number, to match a line to a frame), about once a
 second. It starts fresh each time the game starts. Send it along when you report a problem.
 
-### 2.12 Settings
+#### 2.8.6 Story
+
+| Item | What it does |
+|---|---|
+| **all tutorials seen** | Marks every tutorial message as seen, so they stop popping up. |
+| *each quest* | The quest's current stage; D-pad left / right (or **L**) changes it. It takes effect after a loading zone. |
+
+### 2.9 Settings
 
 The settings menu lists its menus: **menu settings**, **input display**, **levitate**, **frame advance** and **rebind
-commands**, and has the **remote control** switch ([2.12.5](#2125-remote-control)).
+commands**, and has the **remote control** switch ([2.9.5](#295-remote-control)).
 
 **menu settings**: **language** ([6](#6-languages)), **size** (auto, small 2x, medium 2.5x, large 3x: the menu, watches
 and log), **background opacity** (0 to 100%, 100% at first; below 100% the game shows through, slightly behind) and
@@ -566,6 +626,11 @@ opening and closing the wheel quickly doesn't make them flash. Off, they stay ov
 it opened (the game turns its camera for the wheel, so they no longer line up with the picture behind it). Enemy
 health bars still go and come back at once.
 
+**watches while exploring** and **input display while exploring** (both off at first): the watches and the input
+display are hidden while the explorer, **browse currently loaded actors**, placing an actor or the free camera has the controller,
+so they don't cover the picture or the controls bar. On, each stays on screen there. Either way they're back as soon
+as the tool ends, and while this menu is open over it.
+
 **switch keyboard** (on at first): naming something (an archive, a folder, a watch's label) opens the Switch's own
 keyboard, with its controls: the left stick or D-pad between keys, **L** / **R** to move the cursor in the text, **B**
 to delete, **Y** for a space, **+** to finish (touch and a USB keyboard work too). The game waits while it's up.
@@ -574,7 +639,7 @@ shown, sloperinaGZ's own keyboard is used.
 
 **watch box header** (on at first): a small **watches** header over the watches box, underlined.
 
-#### 2.12.1 Input display
+#### 2.9.1 Input display
 
 gz's input display, at the bottom left unless you move it (hidden while the menu is open).
 
@@ -589,7 +654,7 @@ gz's input display, at the bottom left unless you move it (hidden while the menu
 | **position** | The corner it's in on its own, or **custom** (where **move input display position** left it), as the watches box. Not used while it's attached to the watches. |
 | **move input display position** | Move it anywhere: the D-pad glides it (hold to speed up), **L** leaves it there. It's shown while you move it, and so are the watches if they're on. |
 
-#### 2.12.2 Levitate
+#### 2.9.2 Levitate
 
 | Item | What it does |
 |---|---|
@@ -617,7 +682,7 @@ and no landing damage. This does not establish behavior at every surface or duri
 Void protection is not included (what voids Link can be seen with [2.3.3](#233-void-out)). Camera-follow and stationary-position
 pause behavior have not been separately fixed.
 
-#### 2.12.3 Frame advance
+#### 2.9.3 Frame advance
 
 | Item | What it does |
 |---|---|
@@ -629,11 +694,11 @@ Its buttons are the **frame advance** and **run again** commands (**L** and **L 
 rebind commands**). Bound to one button, the game doesn't see that button while frame advance is on; a combination's buttons
 stay the game's. Settings from before the commands with frame advance on **R** become **R** and **R + L3**.
 
-#### 2.12.4 Rebind commands
+#### 2.9.4 Rebind commands
 
 gz's **commands** menu, here **rebind commands**: each of sloperinaGZ's controls and the buttons it's bound to, under **menu**, **frame
 advance**, **link**, **scene**, **memfiles**, **watches and timer** and **debug**. The **scene** commands, **reload map** ([2.1.2](#212-scene-interaction)) and **end
-cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title screen** and **free camera on/off** ([2.11](#211-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
+cutscene** ([2.3](#23-scene)), the memfile commands and **debug**'s **return to title screen** ([2.8](#28-debug)) start out unbound. A bind is up to four buttons pressed in that order (**R**, then
 **right stick down**); letting go of one ends it, and pressing another button partway through cancels it. When one
 bind is part of another that's also held (**R + D-pad left** holds **D-pad left**), only the bigger one counts, so
 **R + A + D-pad right** resets jump height without also hiding the watches. **run again** takes its buttons in any
@@ -654,7 +719,7 @@ In the settings file each is `bind_<name>=<buttons>`, e.g. `bind_menu=R + rs-dow
 button names: `A B X Y L R ZL ZR L3 R3 plus minus d-up d-down d-left d-right ls-up ls-down ls-left ls-right rs-up
 rs-down rs-left rs-right SL SR`.
 
-#### 2.12.5 Remote control
+#### 2.9.5 Remote control
 
 **remote control** (off at first) lets a script or a tool on the PC use sloperinaGZ without the controller: it runs the
 lines of a text file as if each were pressed or chosen in the menu. Nothing happens while it's off.
@@ -672,6 +737,7 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | `set <menu path> = <value>` | Sets a checkbox (`on` / `off`), an option (a choice's text or number) or a number. |
 | `get <menu path>` | The item's value. |
 | `list [<menu path>]` | A menu's items: number, kind, name and value. Without a path, the top menu. |
+| `open [<menu path>]` | Opens the menu on the screen at that menu, or at that item of its menu with the cursor on it (without a path, the top menu): for a look at it, or a screenshot. |
 | `wait <frames>` | The next line runs that many frames later. |
 | `repeat <n>` ... `end` | Runs the lines between that many times (up to four inside one another): with `wait` and `input`, a sequence of any length. |
 | `pause` | Holds the game as frame advance does (frame advance needn't be on). |
@@ -681,7 +747,7 @@ order on the game's thread. What each line did is added to `sloperinaGZ/remote/o
 | `status` | The game's frame counter, the map, where Link is and which way he faces (`facing`, degrees), how he moves (`vy`, `hs`: his speed up and across), what he holds and has on ZR (`hand`, `zr`), whether ZL has a target (`lock`: 2 yes, 3 no), whether he's on the ground, his main and weapon action ids (`act`, `wpn`), whether the menu and the game's pause screen are open, whether the game is held, and the warp's state. `vy` and `hs` are the velocity as the game last set it, so they can keep a value while Link stands still (after a landing, for one). |
 | `trace <frames>` / `trace off` | A line for each of the next frames, without holding the script up: `<line> t y= vy= hs= x= z= hand= zr= paused= lock= ground= act= wpn=`. |
 | `actors [metres]` | The running actors within that distance of Link (6 unless said), nearest first, by the game's names. |
-| `spawn <actor> [metres]` | The game makes that actor that far in front of Link (2 m unless said), facing him, as **debug > actors > spawn actor by name or type** does; the line ends once it's running in the scene (`ok spawn <actor>: made after <n> frames`), or with `err` if the game refused it or it didn't appear within 600 frames. Only the names that menu offers, in any case (`Enemy_Wolfos`). |
+| `spawn <actor> [metres]` | The game makes that actor that far in front of Link (2 m unless said), facing him, as **debug > actors > quick spawn** does; the line ends once it's running in the scene (`ok spawn <actor>: made after <n> frames`), or with `err` if the game refused it or it didn't appear within 600 frames. Only the names the game has (those in quick spawn's **all** lists, and the animals), in any case (`Enemy_Wolfos`). |
 | `place <x> <y> <z> [facing]` | Puts Link on that spot of this map as **load position** does (wait some frames for it). With a facing (degrees, 0 = +z) he is turned to it; without, he faces as he did. |
 | `title` | Goes back to the game's title screen from whatever the game is doing (as **debug > return to title screen**), also with the game held (it's let go). `ok` once Link is gone and the game is at (or fading to) its title screen; `err` with the reason if it couldn't start (already at the title screen) or the game didn't leave play within a minute. Whatever isn't saved is lost, as with the pause screen's Return to Title. |
 | `echo <text>` | Puts the text in `out.txt` (a marker). |
@@ -701,7 +767,7 @@ with the game held leaves it held for the next one; `run`, or turning **remote c
 
 At most 65,535 bytes a script, and 64 of its lines a frame. Blank lines and lines that start with `#` are skipped.
 
-### 2.13 About
+### 2.10 About
 
 The name and version, the build date ("Build Date: ..."), and the website.
 
@@ -710,9 +776,9 @@ The name and version, the build date ("Build Date: ..."), and the website.
 | What | Where | Notes |
 |---|---|---|
 | Menu | Top left, under the D-pad icon | Always on top. |
-| Watches | The corner you choose, or anywhere | [2.8](#28-watches) |
+| Watches | The corner you choose, or anywhere | [2.6](#26-watches) |
 | Log | Bottom right | What you just did; stays a second, then fades. gz's grey text with a shadow. |
-| Input display | Bottom left, or the corner you choose, or anywhere, or attached above or below the watches | [2.12.1](#2121-input-display); in the bottom left, it moves above the watches if they're there too. |
+| Input display | Bottom left, or the corner you choose, or anywhere, or attached above or below the watches | [2.9.1](#291-input-display); in the bottom left, it moves above the watches if they're there too. |
 | Pause icon | Top left | Two bars: paused by frame advance. |
 | Air walls | Over the game | [2.3.1](#231-environment) |
 | Save slots | Over the game | [2.3.2](#232-save-position) |

@@ -70,6 +70,9 @@ static const gpu_colour_t line_colours[AW_NCOLORS] = {
   [AW_HOOK] = { 1.0f, 0.86f, 0.12f, 1 },          /* gold: the hookshot's hook out (hsstore.c) */
   [AW_HOOK_IDLE] = { 0.62f, 0.62f, 0.62f, 1 },    /* grey: a hook put away, where it was left */
   [AW_HOOK_AIM] = { 1.0f, 0.32f, 0.30f, 1 },      /* red: the shot's start and aimed spot */
+  [AW_PLACER] = { 1.0f, 0.94f, 0.10f, 1 },        /* yellow: where the actor placer will make it (placer.c) */
+  [AW_PLACER_AIR] = { 1.0f, 0.55f, 0.10f, 1 },    /* orange: ... with no ground under it */
+  [AW_PLACER_TARGET] = { 1.0f, 0.22f, 0.22f, 1 }, /* red: ... locked on to an actor (B kills it) */
 };
 
 /* budget: the quads the lines may take. Short of them, the glows go first, then the farthest lines. */

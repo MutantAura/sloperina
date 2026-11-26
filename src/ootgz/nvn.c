@@ -346,6 +346,10 @@ static bool slot_used[SLOTS];
 /* what each opaque buffer holds, so it's only redrawn when that changes */
 static uint32_t drawn_hash[GFX_PANELS][SLOTS];
 static int drawn_w[GFX_PANELS][SLOTS], drawn_h[GFX_PANELS][SLOTS];
+/* the control guide's fade (render thread): in over about a sixth of a second, out the same */
+#define GUIDE_FADE_STEP 0.1f
+static char guide_shown[GFX_HINT_LEN];
+static float guide_alpha;
 static bool drawn_native[GFX_PANELS][SLOTS]; /* drawn by nativeui.c (the game's type) */
 static unsigned frame_count;
 static uint64_t slot_waiting_since; /* sys_tick when a frame first found its slot still busy; 0: not waiting */
@@ -1379,6 +1383,9 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_HOOK] = { 1.0f, 0.85f, 0.10f, 1.0f },         /* gold: the hookshot's hook out (hsstore.c) */
   [AW_HOOK_IDLE] = { 0.60f, 0.60f, 0.60f, 1.0f },   /* grey: a hook put away, where it was left */
   [AW_HOOK_AIM] = { 1.0f, 0.30f, 0.30f, 1.0f },     /* red: the shot's start and aimed spot */
+  [AW_PLACER] = { 1.0f, 0.94f, 0.08f, 1.0f },       /* yellow: where the actor placer will make it (placer.c) */
+  [AW_PLACER_AIR] = { 1.0f, 0.55f, 0.08f, 1.0f },   /* orange: ... with no ground under it */
+  [AW_PLACER_TARGET] = { 1.0f, 0.20f, 0.20f, 1.0f }, /* red: ... locked on to an actor (B kills it) */
 };
 
 /* enemy health (enemyhp.c) */
@@ -1798,7 +1805,14 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   /* the enemies the next frame's depth copy looks at (none: it looks at none) */
   scenedepth_ask_bars(bars, gpu_state == GPU_READY && gfx_style == GFX_STYLE_GAME && !enemy_hp_xray ? n_bars : 0);
   int pause_icon = gfx_pause_icon;
-  if ((!screen && !n_dots && !n_hp && !n_lines && !n_bars && !pause_icon) || overlay_state == OV_FAILED)
+  /* the control guide (gfx_guide) fades in when it's wanted and out when it isn't, the last text kept meanwhile */
+  bool guide_wanted = screen && screen->guide[0];
+  if (guide_wanted)
+    memcpy(guide_shown, screen->guide, sizeof(guide_shown));
+  guide_alpha = guide_wanted ? (guide_alpha + GUIDE_FADE_STEP < 1 ? guide_alpha + GUIDE_FADE_STEP : 1)
+                             : (guide_alpha > GUIDE_FADE_STEP ? guide_alpha - GUIDE_FADE_STEP : 0);
+  if ((!screen && !n_dots && !n_hp && !n_lines && !n_bars && !pause_icon && guide_alpha <= 0) ||
+      overlay_state == OV_FAILED)
     return;
   if (index < 0 || index >= swapchain_texture_count) {
     static bool warned;
@@ -1998,6 +2012,10 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
     draw->scale = scale;
     n++;
   }
+  /* the control guide (gfx_guide) across the bottom centre, over the world and beside the panels */
+  if (gpu && guide_alpha > 0 &&
+      nativeui_guide(guide_shown, frame.area.w, frame.area.h, frame.margin, frame.scale, guide_alpha))
+    gpu_panels++;
   if (!n && !n_dots && !n_hp && !pause_icon && !gpu_panels)
     return;
   __asm__ volatile("dsb sy" ::: "memory"); /* pixels reach memory before the GPU copies them */

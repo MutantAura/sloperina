@@ -12,6 +12,9 @@
  *   hide_in_game_menus=0|1 (no watches, input display or log while the game's pause screen or map is open)
  *   hide_over_item_wheel=0|1 (the same while its item wheel is up)
  *   hide_world_over_item_wheel=0|1 (the world overlays fade out while the item wheel is up; on by default)
+ *   explorer_take_link=0|1 (explorer: going to a dungeon room takes Link into it, which wakes it; on by default)
+ *   watches_while_exploring=0|1, input_display_while_exploring=0|1 (kept on screen in the explorer, browsing actors,
+ *   placing and the free camera; off by default)
  *   save_backups=0|1 (copy the game's save folder to the SD card after every save, savebackup.h)
  *   save_backup_location=0|1 (the save's location after the date in their folder names)
  *   save_backup_kinds=0|1|2 (autosaves, hard saves, both)
@@ -39,6 +42,7 @@
 #include "warp.h"
 #include "watches.h"
 #include "levitate.h"
+#include "placer.h"
 #include "airwall.h"
 #include "savepos.h"
 #include "voidmap.h"
@@ -64,8 +68,9 @@
 #define SETTINGS_TEXT_MAX 4096 /* the settings file's size limit, both ways */
 #define LOG_CHUNK 8192         /* the most log text written at once */
 /* Raised when an update changes what an existing file should mean; settings_load updates older files:
- *   1: frame advance is off by default: off once in files from before (they all saved it on) */
-#define SETTINGS_VERSION 1
+ *   1: frame advance is off by default: off once in files from before (they all saved it on)
+ *   2: the free camera has a bind by default (R + rs-up): given it once in files from before that left it unbound */
+#define SETTINGS_VERSION 2
 
 /* the ranges a loaded value must be in to be used (otherwise the current setting stays) */
 #define WATCH_TYPE_MAX     15   /* a watch's display type; out of range: 0 */
@@ -140,6 +145,8 @@ typedef struct {
   int32_t hide_in_game_menus;
   int32_t hide_over_item_wheel;
   int32_t hide_world_over_item_wheel;
+  int32_t explorer_take_link;
+  int32_t tools_watches, tools_input;
   int32_t save_backups;
   int32_t save_backup_location;
   int32_t save_backup_kinds;
@@ -234,6 +241,9 @@ static snapshot_t take_snapshot(void)
   s.hide_in_game_menus = hide_in_game_menus;
   s.hide_over_item_wheel = hide_over_item_wheel;
   s.hide_world_over_item_wheel = hide_world_over_item_wheel;
+  s.explorer_take_link = placer_take_link;
+  s.tools_watches = tools_show_watches;
+  s.tools_input = tools_show_input;
   s.save_backups = save_backup_enabled;
   s.save_backup_location = save_backup_location;
   s.save_backup_kinds = save_backup_kinds;
@@ -314,6 +324,9 @@ static void apply_snapshot(const snapshot_t *s)
   hide_in_game_menus = s->hide_in_game_menus != 0;
   hide_over_item_wheel = s->hide_over_item_wheel != 0;
   hide_world_over_item_wheel = s->hide_world_over_item_wheel != 0;
+  placer_take_link = s->explorer_take_link != 0;
+  tools_show_watches = s->tools_watches != 0;
+  tools_show_input = s->tools_input != 0;
   save_backup_enabled = s->save_backups != 0;
   save_backup_location = s->save_backup_location != 0;
   if (s->save_backup_kinds >= SAVE_BACKUP_AUTO && s->save_backup_kinds <= SAVE_BACKUP_BOTH)
@@ -444,6 +457,9 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("hide_in_game_menus", hide_in_game_menus),
   INT_KEY("hide_over_item_wheel", hide_over_item_wheel),
   INT_KEY("hide_world_over_item_wheel", hide_world_over_item_wheel),
+  INT_KEY("explorer_take_link", explorer_take_link),
+  INT_KEY("watches_while_exploring", tools_watches),
+  INT_KEY("input_display_while_exploring", tools_input),
   INT_KEY("save_backups", save_backups),
   INT_KEY("save_backup_location", save_backup_location),
   INT_KEY("save_backup_kinds", save_backup_kinds),
@@ -622,6 +638,8 @@ void settings_load(void)
   bool updated = got && s.settings_version < SETTINGS_VERSION;
   if (got && s.settings_version < 1)
     s.frame_advance = 0;
+  if (got && s.settings_version < 2 && s.binds[CMD_FREECAM] == BIND_NONE)
+    s.binds[CMD_FREECAM] = bind_default(CMD_FREECAM);
   /* frame advance on R, from before the binds: its binds, R and R + L3 (saved in the new form below) */
   bool fa_on_r = !advance_bind_read && s.frame_advance_button == 1;
   if (fa_on_r) {
@@ -697,8 +715,11 @@ static void save_settings_file(const snapshot_t *s)
                   (int)s->voidmap_shift, (int)s->voidmap_xray, (int)s->voidmap_areas, (int)s->voidmap_bounds,
                   (int)s->input_attach, s->archive_folder, (int)s->system_keyboard);
   if (n < (int)sizeof(buf))
-    n += snprintf(buf + n, sizeof(buf) - n, "save_backup_hard_numbered=%d\nremote_control=%d\nhide_world_over_item_wheel=%d\n",
-                  (int)s->save_backup_numbered, (int)s->remote_control, (int)s->hide_world_over_item_wheel);
+    n += snprintf(buf + n, sizeof(buf) - n,
+                  "save_backup_hard_numbered=%d\nremote_control=%d\nhide_world_over_item_wheel=%d\nexplorer_take_link=%d\n"
+                  "watches_while_exploring=%d\ninput_display_while_exploring=%d\n",
+                  (int)s->save_backup_numbered, (int)s->remote_control, (int)s->hide_world_over_item_wheel,
+                  (int)s->explorer_take_link, (int)s->tools_watches, (int)s->tools_input);
   for (int c = 0; c < CMD_COUNT && n < (int)sizeof(buf); c++) {
     char name[48];
     bind_name(s->binds[c], name, sizeof(name));

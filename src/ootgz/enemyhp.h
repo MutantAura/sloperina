@@ -34,6 +34,8 @@ typedef struct {
   uint32_t state;
 } actor_near_t;
 int actors_near(float radius, actor_near_t *out, int max);
+/* the same round a point (distance: from it); game thread */
+int actors_near_point(const float point[3], float radius, actor_near_t *out, int max);
 /* actors.c: every actor in the actor manager, any state (not Link), in the manager's order, up to max (`more`: those
  * that didn't fit); distance 0 where Link's position isn't known; game thread */
 int actors_all(actor_near_t *out, int max, int *more);
@@ -64,6 +66,9 @@ typedef enum {
   KILL_UNKNOWN,        /* this game version's offsets aren't known */
 } actor_kill_t;
 actor_kill_t actor_kill(uintptr_t actor);
+/* actors.c: despawn it: the engine's delete request (as above), for an enemy, NPC, animal or thing whatever its death
+ * says: no death, drop or respawn flag. Never Link, scenery or the game's system actors. Game thread, outside any walk. */
+actor_kill_t actor_despawn(uintptr_t actor);
 
 /* actors.c: ask the game to make an actor by name at pos, turned yaw degrees about Y (FINDINGS 9.29): the actor
  * manager's create request, which loads its pack itself; it appears some frames later, or not (no handle is
@@ -83,7 +88,7 @@ void actor_spawn_cancel(uintptr_t *handle); /* gives the request up */
  * death, no drop). Never Link. False if it's gone or the request was refused. Game thread, outside any walk. */
 bool actor_remove(uintptr_t actor);
 
-/* actors.c: a horse made by actor_spawn as one's own (FINDINGS 9.33): registered as the owned horse (the one Epona's
+/* actors.c: a horse made by actor_spawn as one's own (FINDINGS 9.34): registered as the owned horse (the one Epona's
  * Song calls), and its rodeo bit cleared so it doesn't buck the rider off. actor_own_horse is false if this game
  * version's addresses aren't known or the game didn't take it; actor_calm_horse is true if the bit was set (the
  * horse's setup sets it again from its parameters, so call it for a while after the horse appears). */

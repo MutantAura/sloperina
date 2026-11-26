@@ -35,9 +35,9 @@ typedef enum {
   CMD_MEMFILE_NEXT, CMD_MEMFILE_PREV, /* select the next / previous slot, wrapping */
   /* watches and the timer */
   CMD_WATCHES, CMD_TIMER, CMD_RESET_TIMER, CMD_RESET_LAG, CMD_RESET_JS,
-  /* debug: unbound until given buttons */
+  /* debug: return to title unbound until given buttons */
   CMD_TITLE,       /* debug > return to title screen */
-  CMD_FREECAM,     /* debug > free camera, on / off */
+  CMD_FREECAM,     /* debug > free camera, on / off (R + rs-up) */
   CMD_COUNT
 } command_t;
 

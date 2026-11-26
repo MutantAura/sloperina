@@ -17,6 +17,8 @@ void age_reload_map(void); /* reload the map at the start point Link last arrive
  * camera), without altering the current age (memfile.c loads the snapshot's GameData). False if no start point
  * is known or the game refused the warp request immediately. */
 bool age_warp_to_silent(const char *name, const char *last_start, bool have_pos);
+/* whether map `name` has a version for `age` (X_Child <-> X_Adult; maps without an age in the name: both) */
+bool age_map_has_version(const char *name, int age);
 
 /* warps > override age: -1 = disabled (the map's own age rule), else AGE_CHILD / AGE_ADULT */
 int age_override(void);

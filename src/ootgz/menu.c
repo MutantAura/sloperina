@@ -738,10 +738,10 @@ static const char *current_hint(const menu_t *menu)
 }
 
 /* In a run of items (the items between two headings or other lines of text, at one indent), the labels
- * line up: each item starts as far in as the run's checkboxes and the game's pictures of items push the
- * labels after them, less what's before its own label. Not "return", nor rows laid out by their own text
- * (an icon first, gz's grid, no label). */
-#define BOX_CELLS 2     /* a checkbox: GFX_CHECK_* and GFX_WIDE_REST */
+ * line up round the game's pictures of items: each item starts as far in as the run's pictures push the labels
+ * after them, less its own. A checkbox doesn't push the others in (they'd look indented under nothing): its box
+ * starts where their labels do. Not "return", nor rows laid out by their own text (an icon first, gz's grid, no
+ * label). */
 #define PICTURE_CELLS 3 /* the game's picture of the item (two cells) and a space (item_line) */
 static bool lines_up(const menu_item_t *item)
 {
@@ -763,26 +763,23 @@ static bool picture_shown(const menu_item_t *item)
   return false;
 }
 
-static int label_lead(const menu_item_t *item)
-{
-  return (item->kind == MI_CHECK ? BOX_CELLS : 0) + (picture_shown(item) ? PICTURE_CELLS : 0);
-}
+static int picture_lead(const menu_item_t *item) { return picture_shown(item) ? PICTURE_CELLS : 0; }
 
 static int label_pad(const menu_t *menu, int index)
 {
   const menu_item_t *item = &menu->items[index];
   if (!lines_up(item))
     return 0;
-  int most = label_lead(item);
+  int most = picture_lead(item);
   for (int dir = -1; dir <= 1; dir += 2)
     for (int i = index + dir; i >= 0 && i < menu->n_items; i += dir) {
       const menu_item_t *other = &menu->items[i];
       if (other->kind == MI_TEXT || other->indent != item->indent)
         break;
-      if (lines_up(other) && label_lead(other) > most)
-        most = label_lead(other);
+      if (lines_up(other) && picture_lead(other) > most)
+        most = picture_lead(other);
     }
-  return most - label_lead(item);
+  return most - picture_lead(item);
 }
 
 /* the widest item line, from column 0 */
@@ -795,6 +792,9 @@ static int items_width(menu_t *menu)
     width = max_int(width, ITEM_COL + menu->items[i].indent * MENU_INDENT + label_pad(menu, i) + (int)strlen(line) +
                                item_reserve(&menu->items[i]));
   }
+  if (menu->inner_widest) /* a list inside: its longest line, scrolled in or not */
+    width = max_int(width, ITEM_COL + menu->inner_indent * MENU_INDENT +
+                               (int)strlen(menu->inner_widest));
   return width;
 }
 
@@ -1031,6 +1031,8 @@ void menu_draw(void)
    * its rows, the thumb then filling it */
   int scrolling = end - pinned;
   gfx_scroll(first_item_y + pinned, scrolling < visible ? scrolling : visible, scrolling, menu->scroll - pinned);
+  if (menu->inner_widest) /* the width it can need, on screen or not */
+    gfx_inner_widest(menu->inner_widest, menu->inner_indent);
   if (menu->inner_rows > 0) { /* the list inside: its bar over the part of its rows on screen */
     int from = -1, to = -1;
     for (int row = 0; row < pinned + visible; row++) {

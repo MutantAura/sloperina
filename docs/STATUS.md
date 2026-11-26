@@ -1,31 +1,10 @@
 # Status
 
-Where the work stands, for picking it up again. Last updated 26th November 2026: 0.0.13 built (not tagged or
-published).
+Where the work stands, for picking it up again. Last updated 26th November 2026, after the 0.0.13 release.
 
 ## Released
 
-**0.0.12** (tag `v0.0.12`, master `2ca5af4`). Since 0.0.11:
-
-- **debug > return to title screen** from anything: cutscenes and other events, game over, the pause screen and map
-  (it presses B for them), map loads (it waits; a warp armed for the next exit is cancelled), frame advance (it lets
-  the game go). FINDINGS 9.26.
-- **debug > actors**: browse current actors (folders by kind, a name filter), an actor's own menu (go to, spawn one
-  like it, kill), spawn actor by name or type. FINDINGS 9.27–9.29.
-- **debug > free camera**: the view only; the world isn't streamed round it. FINDINGS 9.30.
-- **scene > time of day** and a **time of day** watch (24h as a gossip stone tells it, 12h, seconds). FINDINGS 9.31.
-- Void out: the fence ground shading (#52), more void conditions and memfiles keeping the 8-unit ring (#53),
-  both by MutantAura.
-- World overlays freeze and fade over the game's pauses instead of flashing; **settings > menu settings > hide world
-  overlays over item wheel** (on at first). FINDINGS 9.32.
-- CONTRIBUTORS from GitHub's contributors list.
-
-The game patches are the same as 0.0.11's (patch v6).
-
-## On master, not released: 0.0.13
-
-VERSION is 0.0.13 and `release/sloperinaGZ-0.0.13.zip` is built from master, but there's no `v0.0.13` tag or GitHub
-release yet (tag, rebuild after `./docker-make clean` so the version string is plain, then publish). Since 0.0.12:
+**0.0.13** (tag `v0.0.13`, GitHub release with `sloperinaGZ-0.0.13.zip`). Since 0.0.12:
 
 - **debug > actors** reworked: **browse currently loaded actors** (the free camera over a beam: d-left/right from
   actor to actor, L/R the kind, A go to, Y kill or despawn; **look at** under it), **quick spawn** with a short list
@@ -45,6 +24,23 @@ release yet (tag, rebuild after `./docker-make clean` so the version string is p
   FINDINGS 9.35).
 - Remote control: `open <menu path>` (the menu on screen there), `get` reads a row's own text, `do` presses a list's
   arrow.
+
+**0.0.12** (tag `v0.0.12`, master `2ca5af4`). Since 0.0.11:
+
+- **debug > return to title screen** from anything: cutscenes and other events, game over, the pause screen and map
+  (it presses B for them), map loads (it waits; a warp armed for the next exit is cancelled), frame advance (it lets
+  the game go). FINDINGS 9.26.
+- **debug > actors**: browse current actors (folders by kind, a name filter), an actor's own menu (go to, spawn one
+  like it, kill), spawn actor by name or type. FINDINGS 9.27–9.29.
+- **debug > free camera**: the view only; the world isn't streamed round it. FINDINGS 9.30.
+- **scene > time of day** and a **time of day** watch (24h as a gossip stone tells it, 12h, seconds). FINDINGS 9.31.
+- Void out: the fence ground shading (#52), more void conditions and memfiles keeping the 8-unit ring (#53),
+  both by MutantAura.
+- World overlays freeze and fade over the game's pauses instead of flashing; **settings > menu settings > hide world
+  overlays over item wheel** (on at first). FINDINGS 9.32.
+- CONTRIBUTORS from GitHub's contributors list.
+
+The game patches are the same as 0.0.11's (patch v6).
 
 ## Open pull requests
 

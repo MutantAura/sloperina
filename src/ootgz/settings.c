@@ -46,6 +46,8 @@
 #include "airwall.h"
 #include "savepos.h"
 #include "voidmap.h"
+#include "guardview.h"
+#include "interactview.h"
 #include "hsstore.h"
 #include "flaglog.h"
 #include "remote.h"
@@ -155,6 +157,10 @@ typedef struct {
   int32_t flag_log_status;
   int32_t flag_log_story;
   int32_t hook_shown;
+  int32_t guard_vision;
+  int32_t guard_paths;
+  int32_t interact_ranges;
+  int32_t interact_parts; /* bits: interactview_parts */
   int32_t remote_control;
   uint32_t binds[CMD_COUNT]; /* binds.h */
   char archive_folder[SAVE_FOLDER_LEN]; /* where archive now puts them (savebackup.h) */
@@ -252,6 +258,12 @@ static snapshot_t take_snapshot(void)
   s.flag_log_status = flaglog_status_enabled;
   s.flag_log_story = flaglog_story_enabled;
   s.hook_shown = hsstore_shown;
+  s.guard_vision = guardview_shown;
+  s.guard_paths = guardview_paths;
+  s.interact_ranges = interactview_shown;
+  s.interact_parts = 0;
+  for (int part = 0; part < IV_PARTS; part++)
+    s.interact_parts |= interactview_parts[part] << part;
   return s;
 }
 
@@ -360,6 +372,11 @@ static void apply_snapshot(const snapshot_t *s)
   flaglog_status_enabled = s->flag_log_status != 0;
   flaglog_story_enabled = s->flag_log_story != 0;
   hsstore_shown = s->hook_shown != 0;
+  guardview_shown = s->guard_vision != 0;
+  guardview_paths = s->guard_paths != 0;
+  interactview_shown = s->interact_ranges != 0;
+  for (int part = 0; part < IV_PARTS; part++)
+    interactview_parts[part] = s->interact_parts >> part & 1;
 }
 
 /* --- reading the file ------------------------------------------------------------------------- */
@@ -468,6 +485,10 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("flag_log_player_status", flag_log_status),
   INT_KEY("flag_log_story", flag_log_story),
   INT_KEY("hookshot_hook_shown", hook_shown),
+  INT_KEY("guard_vision", guard_vision),
+  INT_KEY("guard_patrol_paths", guard_paths),
+  INT_KEY("interaction_ranges", interact_ranges),
+  INT_KEY("interaction_range_parts", interact_parts),
   INT_KEY("remote_control", remote_control),
 };
 #define N_INT_KEYS (sizeof(int_keys) / sizeof(*int_keys))

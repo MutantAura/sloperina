@@ -230,6 +230,23 @@ struct z64hd_build {
   uint32_t actor_handle_release;
   uint32_t owned_horse_mgr_get;
   uint32_t owned_horse_register;
+  /* security guards (FINDINGS 9.36), what the guards' AI nodes call: param(actor) -> its SecurityGuardParam or 0
+   * (looked up in its parameter table, any actor); alert_mode(param) -> the AlertMode object; in_dark(actor) and
+   * on_duty(actor) -> bool (QueryNpcSecurityGuardIsInDarkArea, ...IsSecurityMode); the custom line of sight's
+   * los_range / los_below / los_above / los_angle(actor, const bool *alert) -> float, Light, Dark or PlayerRidingHorse
+   * as it applies now; bone_find(model, const char *const *name) -> {u16 part, u16 bone} returned through x8 */
+  uint32_t guard_param;
+  uint32_t guard_alert_mode;
+  uint32_t guard_in_dark;
+  uint32_t guard_on_duty;
+  uint32_t guard_los_range;
+  uint32_t guard_los_below;
+  uint32_t guard_los_above;
+  uint32_t guard_los_angle;
+  uint32_t bone_find;
+  /* a swinging door's close check (FINDINGS 9.38): the vtable of its AINB node, SelectorDoorCanClose (calc at slot 39:
+   * main+0x5E58A0 / 1.0.0 main+0x593380); made while the door's event runs */
+  uint32_t door_close_node_vtable;
   struct z64hd_link_path link_paths[5];
 };
 

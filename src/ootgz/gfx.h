@@ -185,6 +185,9 @@ typedef struct {
 /* game thread: the menu (panel 0) */
 void gfx_begin(void);
 void gfx_text(int col, int row, gfx_style_t style, const char *s);
+/* a heading and x, y, z under it (two decimals), from row on at col, as the menus draw a heading and its lines;
+ * returns the row after them (gfx_begin ... gfx_end) */
+int gfx_position(int col, int row, const char *heading, const float pos[3]);
 void gfx_row(int row, int kind); /* what the row is (gfx_row_kind_t, | GFX_ROW_OPENS) */
 void gfx_row_value(int row, const char *shown, const char *widest); /* gfx_panel_t.value_shown, value_widest */
 void gfx_hint(const char *s);    /* the hint shown in the hint's rows, unwrapped */

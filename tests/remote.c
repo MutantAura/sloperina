@@ -198,6 +198,14 @@ static int speed = 1, rupees = 10, reloads, closes;
 static const char *const speeds[] = { "slow", "normal", "fast" };
 
 void menu_open(menu_t *root) { menu_current = root; }
+void menu_back(void) {}
+uintptr_t z64hd_main;
+int actors_named(const char *name, uintptr_t *out, int max) { return (void)name, (void)out, (void)max, 0; }
+int guardview_rails_of(uintptr_t actor) { return (void)actor, 0; }
+void interactview_door_watch(uintptr_t door) { (void)door; }
+void interactview_door_text(char *buf, int len) { snprintf(buf, len, "closed"); }
+int interactview_door_is_open(uintptr_t door) { return (void)door, -1; }
+float interactview_door_angle(uintptr_t door) { return (void)door, -1; }
 void menu_goto(menu_t *m) { menu_current = m; }
 
 void menu_close(void)

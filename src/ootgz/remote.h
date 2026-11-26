@@ -39,7 +39,11 @@
  *                              to the title; err if it can't now (paused, a cutscene, a map loading...). What
  *                              isn't saved is lost, as with the pause screen's Return to Title
  *   echo <text>                the text, into out.txt
- * A menu path is the names from the top menu down, "/" between them, any case ("cheats/infinite magic",
+ *   actor <name>               debugging: the addresses of the actors with that name
+ *   attention                  debugging: Link's attention object and its do-action slot's address (FINDINGS 9.37)
+ *   findref <hex>              debugging: where Link's components (two pointers deep) hold that value, or, for an
+ *                              actor's address, its components, attention sender or id (+0x18)
+ * A menu path is the names from the top menu down (or, starting "~/", from the menu on screen), "/" between them, any case ("cheats/infinite magic",
  * "scene/end cutscene"); "name#2" is the second item of that name, "@7" the menu's item number 7 (list shows
  * the numbers), for lines with no name.
  *

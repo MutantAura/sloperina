@@ -1,4 +1,4 @@
-/* Lank and Lunk, beta (FINDINGS 9.35): two game file patches (gamepatch.h). Each age's pack has a
+/* Lank and Lonk, beta (FINDINGS 9.35): two game file patches (gamepatch.h). Each age's pack has a
  * Component/AnimationParam whose AnimationResources name the age's animation sets; the patch gives the six sets both
  * ages have the other age's name (Child and Adult are the same length). The game reads the names when it makes Link
  * at that age, from the pack as read or as it kept it, so both are patched. The anchor is the first name of the
@@ -9,6 +9,7 @@
 
 #include <string.h>
 
+#include "age.h"
 #include "gamefile.h"
 #include "gamepatch.h"
 #include "gfx.h"
@@ -110,7 +111,7 @@ static gamepatch_t patches[2] = {
     .user = LANK_ADULT },
 };
 
-const char *const lank_mode_names[LANK_MODES] = { "off", "lank & lunk" };
+const char *const lank_mode_names[LANK_MODES] = { "off", "lank & lonk" };
 
 static int chosen, applied;
 
@@ -136,13 +137,23 @@ int lank_mode_applied(void)
   return applied;
 }
 
+/* the map reloaded at once (link > scene interaction > reload map), so Link is made again with the files as patched */
+static void reload_now(void)
+{
+  log_printf("lank / lonk: reloading the map");
+  age_reload_map();
+  menu_close(); /* so the reload can be watched */
+}
+
 void lank_apply(void)
 {
   if (!gamepatch_available())
     return;
   if (chosen == applied) {
-    gfx_notice(remake_pending() ? "already applied: reload the map (link > scene interaction > reload map)"
-                                : "already applied");
+    if (remake_pending())
+      reload_now(); /* applied, but not reloaded yet */
+    else
+      gfx_notice("already applied");
     return;
   }
   applied = chosen;
@@ -151,9 +162,11 @@ void lank_apply(void)
   gamepatch_set(&patches[1], swap);
   bool made = link_actor() != 0;
   remake_request(made); /* before a file is loaded, Link will be made with it anyway */
-  log_printf("lank / lunk: %s applied", lank_mode_names[applied]);
-  gfx_notice(made ? "applied: reload the map to see it (link > scene interaction > reload map)"
-                  : "applied: it shows when a file is loaded");
+  log_printf("lank / lonk: %s applied", lank_mode_names[applied]);
+  if (made)
+    reload_now();
+  else
+    gfx_notice("applied: it shows when a file is loaded");
 }
 
 /* --- the menu ------------------------------------------------------------------------------------ */
@@ -179,15 +192,13 @@ void lank_menu_add(menu_t *link_menu)
 {
   if (!gamepatch_available())
     return; /* the file hooks couldn't be put in */
-  menu_init(&m_lank, "lank / lunk mode (beta)", 6);
+  menu_init(&m_lank, "lank / lonk mode (beta)", 6);
   menu_item_t *mode = menu_add_option(&m_lank, "mode", LANK_MODES, lank_mode_names, get_mode, set_mode, 0);
   if (mode)
-    mode->hint = "lank & lunk: each age plays the other's animations (a tall child, a small adult)";
-  menu_item_t *apply = menu_add_action(&m_lank, "apply", act_apply, 0);
-  if (apply)
-    apply->hint = "beta, edits the game's files in memory; then reload the map (scene interaction > reload map)";
+    mode->hint = "lank & lonk: each age plays the other's animations (a tall child, a small adult)";
+  menu_add_action(&m_lank, "apply", act_apply, 0); /* reloads the map itself */
   menu_add_return(&m_lank);
   menu_add_text(&m_lank, text_blank, 0);
   menu_add_text(&m_lank, text_applied, 0);
-  menu_add_submenu(link_menu, "lank / lunk mode (beta)", &m_lank);
+  menu_add_submenu(link_menu, "lank / lonk mode (beta)", &m_lank);
 }

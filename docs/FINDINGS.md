@@ -2183,7 +2183,7 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   masked-signature matches through the callers, not run. Not tried: whether Epona's Song then calls her (the save
   had no song).
 
-### 9.35 Lank and Lunk, and changing the game's files at run time (beta; 1.1.1; checked in game, 24th November 2026)
+### 9.35 Lank and Lonk, and changing the game's files at run time (beta; 1.1.1; checked in game, 24th November 2026)
 - **What decides the proportions:** child and adult Link are two actors (`Player_Child`, `Player_Adult`), each with
   its own model and its own `Component/AnimationParam` in its pack (`content:/Pack/Actor/Player_Child.pack.zs`,
   `Player_Adult.pack.zs`). Its AnimationResources name the animation sets by ModelProjectName: the child's
@@ -2209,13 +2209,205 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   event to end (a warp asked for during it is refused). For any change that shows when Link is made.
 - **lank.c:** two patches whose fix swaps `Child` and `Adult` in the six shared names (the same length, so nothing
   moves), after checking the key and the age's list are there (the actor database also lists the names, without
-  the key), and the **link > lank / lunk mode (beta)** menu: a mode, applied, then a reload. Not kept in the
+  the key), and the **link > lank / lonk mode (beta)** menu: a mode, applied, then a reload. Not kept in the
   settings.
 - **Beyond these:** a new change to the game's files is a client of gamepatch.h (and remake.h when it's read as
   Link is made); the shared files only call the modules' init, frame and menu functions.
-- **Checked in game:** off at boot, then lank & lunk applied and the map reloaded: Lank; off and reloaded: the
-  normal child; lank & lunk with an age change: Lunk, also in a child map through warps > override age. No
+- **Checked in game:** off at boot, then lank & lonk applied and the map reloaded: Lank; off and reloaded: the
+  normal child; lank & lonk with an age change: Lonk, also in a child map through warps > override age. No
   restart in between. Not checked: 1.0.0, which has the same imports and files.
 - **What didn't work:** changing the names only in memory once (the pack may be read again), the
   `Model/%s.anim.bfres` formatter calls (they name cutscene and model files, not these sets) and the BYML
   string-field reader of the parameter files (`main+0x2B5C480`, never called for them).
+
+### 9.36 Security guards: how they see Link (both builds; 1.1.1 addresses, 1.0.0 in brackets; values checked in game 26th November 2026)
+- **Which actors:** the Gerudo fortress's (`Npc_Gerudo_GEN_SecurityGuard`, `Npc_Gerudo_FortressGuard`, its child) and
+  `Npc_Hylia_Soldier_SecurityGuard`. Each has a `SecurityGuardParam` (`GameParameter/SecurityGuardParam/…`) and the
+  `NpcSecurityGuard` AI. The getter `main+0x28F72D0` [0x28A4DA0] (actor) searches the actor's parameter table
+  `[[actor+0x270]+0xA8]` (count `+0x30`, sorted entries `+0x38`, each `{u32 hash, …, +8 holder}`, the parameter at
+  `holder+0x150`) for hash `0x6160B32A`, and **gives a shared default to any actor without one** (Kaepora and Navi
+  came back as guards until guardview.c searched the table itself).
+- **When a guard finds Link** (`_LocalModule_48bfd38fee41`, in its pack's AI): only while
+  `QueryNpcSecurityGuardIsSecurityMode` is true: `main+0x2BF660` [0x2AFC60] (actor), a blackboard bool (hash
+  `0xF2F955A4`). Then, if `AlertMode.UseCustomLOS` (the AINB's own blackboard names it):
+  `NpcSecurityGuard.action.CheckLineOfSight` (AI.Global pack) with IsAlert true, else with IsAlert false, sets
+  IsFoundPlayer; failing both, the close check below. Without UseCustomLOS (the castle soldiers): the engine's sight
+  (perception sense 1) or the close check. In security mode the node `OneshotCustomPerceptionParam` switches the
+  sight to the receiver's `CustomSightParam.SecurityGuard`: DiscoverAngle 90, DiscoverHorizontalRange 7.5,
+  vertical ±7.5 (both guards' `PerceptionReceiverParam`).
+- **CheckLineOfSight:** from the Head bone's world matrix (QueryModelGetBoneMatrix34f), the front
+  `SelfSpecifiedBoneFrontDir` (a column of the head's rotation by `CustomLOSBaseZ`; Skl_Root's +Z while an AS hold
+  event 102 sets IgnoreCustomLOSRotateTracking). `SelectorNpcSecurityGuardCheckCustomLOSDistance` (`main+0x2CF9D70`):
+  Link's distance across (XZ) from the head under `range × HorizontalDistMag` (1), and his height between the head's
+  + `R[1]·(below, dist, 0)` and `R[1]·(above, dist, 0)` (R the head's rotation: the band tilts with the head).
+  Then the angle between the front and Link's look-at point (`QueryAIScheduleGetVectorDegree180`, compared as abs)
+  under `QueryNpcSecurityGuardGetCustomLOSAngleInFront`; then three rays (to Link's position, look-at point and
+  between) must not all be blocked.
+- **The custom LOS's numbers**, `(actor, const bool *is_alert) -> float`: range `0x2CF9550` [0x2CA5790] (7.5 with no
+  param), below `0x2CF9760` [0x2CA59A0] (-2), above `0x2CF9960` [0x2CA5BA0] (2), angle `0x2CF9B60` [0x2CA5DA0] (90).
+  Each picks `CustomLOSAreaParam.PlayerRidingHorse` if the player is on a horse, else `Dark` if
+  `QueryNpcSecurityGuardIsInDarkArea` (`0x2CF8DD0` [0x2CA5010]: the actor's blackboard IsInLightArea /
+  IsInDarkArea), else `Light`, then its `Alert` or `Find` set. The Gerudo's file: Light find 14 m 45°, alert 24 m 45°,
+  ±3.9 m; Dark alert 14.5 m 50° ±3 m (find has no range: the default); horse 8 / 16 m 75°. Read in game for a
+  spawned `Npc_Gerudo_GEN_SecurityGuard` in Hyrule Field (daylight): 14 m 45°, 24 m 45°, -3.9..3.9, on both builds.
+- **Which head axis:** `CustomLOSBaseX` and `CustomLOSBaseY` are MurmurHash3 enum names: `"Z"` and `"X"`. In game the
+  head's +X column is up (its Y component 1.00) and its +Y column, flattened, matched the body's +Z (the actor's rows
+  at `+0x328`) and pointed at Link, for both guards. So the front is the head's +Y.
+- **The AlertMode object** (`main+0x28F73A0` [0x28A4E70] (param), inheriting from the parent param when unset): bools
+  packed before the set flags: `UseCustomLOS` value `+0xFD`, flag `+0x114`; CloseToPlayer object `+0x58` (flag
+  `+0xFF`) with ThresholdInDarkArea `+0x38`, InLightArea `+0x3C`, WhenPlayerRidingHorse `+0x40` (flags `+0x44..46`);
+  CustomLOSAreaParam `+0x60` (flag `+0x115`) with Dark `+0x38`, Light `+0x40`, Horse `+0x48`, each with Alert `+0x38`
+  and Find `+0x40` (HorizontalDistance `+0x3C`). Read in game: the Gerudo's `+0xFD` 1, the soldier's 0; both
+  CloseToPlayer light 3.0 (the struct default for the soldier).
+- **The close check** (`_LocalModule_6ee85ae20086`): any perceived enemy-affinity emitter within the CloseToPlayer
+  threshold (light, dark or horse), not in cover.
+- **The bone:** `main+0x1B3620` [0x7C6DA0] (model, `const char *const *name`) returns `{u16 part, u16 bone}` through
+  x8; the model is the model component's (`[[actor+0x270]+8]`) vtable slot `0xF8`; the bone's world matrix (3 rows
+  of 4) is `(**(parts[part]))->vtable[0x78/8](skeleton, out, bone)`, parts at `model+0x28`.
+- **The guard's state:** its BSA component `[[actor+0x270]+0x188]`, brain verb `u32 +0x28` (QueryBSAGetBrainVerb, calc
+  `main+0x29BB9E0` [0x2969540], same code). The BrainVerb enum's names are in main in order: 3 MoveTo, 5 Alerted,
+  8 Lookout, 19 Patrol, 51 SuspiciousIindividualDiscovered (sic: caught), 54 SuspiciousIindividualNotice, 59
+  VeryCloseNotice. Seen in the castle courtyard (26th November 2026): patrolling soldiers 19 and 8, the gate pair 3,
+  and the one that caught Link 51 as its "Who's there?!" played.
+- **The courtyard's child soldiers** (`Npc_Hylia_Soldier_021`, `023` to `027_Child`) have SecurityGuardParams of their own
+  with custom sight: 12 m / 50° find, 20 m alert (021 and 024: find band -3..-1 m, i.e. lower than the head), 023 10 m
+  / 15 m at 60°; the gate pair `Npc_Hylia_Soldier_010_Child` the standard sight. All were on duty.
+- **Patrol paths:** a map layout's `Rails` named `Guide` (tools/rails.py -> data/rails.json): points with Translate, a
+  Rotate (Y: the way the NPC faces there with IsAdjustPosAndDirToPoint) and WaitFrame / WaitASKeyName
+  (Act_LookAround, 180 frames, for the courtyard). NpcCommon_Patrol's `ActionSeq_RailMoveToDefault` walks one, back
+  and forth (IsOneWay false) or round a closed one. Which rail an actor walks is in the layout after all: the actor's
+  own `Rails` list (`{Dst: the rail's Hash, Name/Gyaml "Reference"}`, besides its `Links`), in the same map's Static
+  or Dynamic layout. 207 such links to Guide rails; 177 of the 182 rails have one: Gerudo guards, castle soldiers,
+  townspeople (Zelda's 11, Dampé's), dogs, cuccos, rolling rocks, moving floors and spikes, Poes. The actor's
+  layout Hash is the instance id the game keeps at `[[actor+0x3D8]+0x88]` (memfile.c; to be confirmed against a rail
+  owner with remote's `actor`). guardview.c draws a guard's nearby rails (within 4 m) as before, and any actor's own
+  rails by that id (data_rail_owners) when its **path** switch is on.
+- **What hides Link, drawn:** the module's ground cast (`main+0x5FF750`, layer 0x1A = 26) is the layer the
+  CheckLineOfSight rays test for blockers (LayerHitMask 26). guardview.c casts 25 rays across a guard's widest sight
+  from the head to Link's middle height over its feet (0.8 m), 75 a frame round the guards, and stops each sight there.
+  In the courtyard they stopped at the hedges, crates and shelves.
+- **Triangles:** gpuui draws a quad as a 4-vertex strip of the unit square (0,0), (1,0), (0,1), (1,1); drawing 3 of
+  them is the triangle corner, corner + u, corner + v (gpuui_triangle). A fan of parallelograms left streaks where
+  each overlapped the next.
+- **Not known:** whether the engine's sight takes DiscoverAngle either way of the front or as the whole cone (it's
+  stored as degrees and radians, `deg × π/180`, no halving): guardview.c draws the larger. Whether the Gerudo's alert
+  set catches Link at once or first has her look (IsFindPlayerImmediate is set for both guards). Guards spawned in
+  Hyrule Field are off duty there; the courtyard's were on duty.
+- **Found by:** the guards' packs (gamefiles.py), the AINB graphs (the `ainb` package), node names to their vtables
+  (getName at slot 19, the node's calc at 39) and the functions they call; 1.0.0's by masked signature, each unique.
+
+### 9.37 Where Link can talk to or act on an actor: attention clients (1.1.1 files; checked in game 26th November 2026)
+- **The files:** an actor's ActorParam names `Components.AttentionSenderRef`, an AttentionSenderParam whose
+  `ClientList` names attention clients (`Attention/ClientParam/*.game__attention__ClientParam`, in the actor's pack or
+  `Pack/ResidentCommon.pack.zs`; NpcStandard_Talk etc. there). `$parent` chains merge key by key.
+- **A client:** `ActionType` (what A does) and `AttentionType` (Action, or LockOn: only while Z-targeting), MurmurHash3
+  of names found by hashing main's strings: Talk 171795720, Check, Grab, Lift, Take, Ride, OpenDoor 4203576013,
+  OpenTreasureBox 3246976983, OpenShutter 3911446764, OpenChainLock 3248323484, OpenForEvent, BringAlong 1400088906,
+  Touch, PullOut, PutIn, UseBeansHole, GrabSword, DiggingHoleTour, BlueFishTarget, BlueFireTarget; Action 4120604650,
+  LockOn 3016662870. Its `CheckList` checks all have to pass; `CheckType` is the hash of the block's name after
+  "CheckType" (AreaFan, AreaCylinderFan, AreaSphere, AreaBox, Line, Terror, GameData, RideHorse, Screen...).
+- **AreaBox (the check: `main+0x2C565D0`, 1.1.1):** the actor's model box grown by `AttentionMin` on its negative
+  sides and `AttentionMax` on its positive ones, moved by `Offset`, all in the actor's axes (+X its matrix's column 0,
+  +Z its front). The model box is the actor's own, live: `actor+0x3B8` (min x y z) and `+0x3C4` (max), its whole
+  model's bounds (the same offsets in 1.0.0: the same instructions at `main+0x2C0296C`), unless `ForceEditModelArea`
+  gives `ModelMin / ModelMax`; one inside out falls back to those (0 by default). It isn't its physics shape: a
+  broad shopkeeper's is x -1.62..1.63, y 0..2.24, z -0.31..0.47 where his standing capsule is 0.8 m round. No size is
+  added. Once held, each side grows by its margin: `MarginMin / Max` with `ForceEditMargin`, else
+  `AutoMarginLockOn` (1.0) for a lock-on client and `AutoMarginDefault` (0.1) for the rest (the check object's `+8`
+  is 1 for the lock-on one; its margin vectors from `+0xB0`, 0x18 apart). The height band gets 1 or 1.5 m more for
+  some riders / Link states (`[x0+0x10]`, `[[actor+0x270]+0x160]+0x79`): not followed here.
+- **AreaFan** `AttentionFanRadius / Angle / Top / Bottom` plus `Margin*` (more once acquired) and `Model*` (unused unless
+  `ForceEditModeArea`); `IsAreaExpandFromPlayer`: the fan is Link's (the actor has to be in front of him). Most NPCs'
+  Talk: 2 m, 60°, 2 m over / 3 m under, 0.5 margin; their LockOn Talk: 3.5 m, 0.75 / 1.75. A sign (Obj_SignBoard):
+  Link's fan 1 m AND the sign's own fan 1 m, 180° (its front half), so the angle is the whole fan's.
+- **AreaFan (the check: `main+0x2C54430`):** reach = `AttentionFanRadius` + the model box's widest half (the
+  largest of its x and z bounds, either way; 0.01 m with none; 0 with the check's `+0x39` set, IsIgnoreClientSize)
+  + some per-state extra Link's components give (0 seen), + the margin once held, times a scale (1 for Link on
+  foot). Angle: `atan2` of the actor in the fan's frame against `AttentionFanAngle` × pi / 180, so the whole
+  angle either way; skipped while a lock-on holds with IsAngleCheckIgnoreWhileLockOn. Its margin as the box's
+  (`MarginFanRadius` with ForceEditMargin, else AutoMarginLockOn / Default).
+- **The survey:** 615 actors have clients with an action: Talk 688 clients, Check 211, OpenDoor 85, Lift 76, Grab 74,
+  OpenShutter 37, OpenTreasureBox 13 (tools/interactions.py -> data/interactions.json, several minutes over every pack).
+- **Measured in Gerudo's Fortress** (Npc_Gerudo_FortressGuard, Link placed facing her, the A prompt read off
+  screenshots): Talk came up at 2.32 and 2.38 m, not at 2.42 m (the file's 2.0); with ZL held, Talk came up at 3.0 m
+  (the LockOn client); walking backwards with ZL held it stayed at 3.72, 3.92, 4.10, 4.29 m and broke by 4.47 m (the
+  file's 3.5 + MarginFanRadius 0.5). Both are about 0.4 m past the file: her model box's widest half (read then as
+  her standing capsule's 0.4 m, which came out the same). So the reach is to her edge, the margin holds once taken
+  up, and a lock-on's angle isn't checked then
+  (IsAngleCheckIgnoreWhileLockOn). The remote `status` line's lock stayed 3 throughout: it isn't this lock.
+- **What A acts on now (found in game, 1.1.1):** Link's components `[link+0x270]` hold at `+0x578` an object whose
+  `+0x1A70` points to the do-action target's record: the actor at `+8` (again at `+0x98`, `+0x128`), set while the A
+  prompt shows and cleared when it goes. Its `+0x1A60` points to the client ZL would take for an action: a lock-on
+  client's record (vtable `main+0x4B29BC0`, the actor at `+8`, its checks at `+0x60` (count `+0x68`): for the
+  shopkeeper Screen, Swim, Fan, Box, Line, Terror, in the file's order), ZL held or not; with none it points back at
+  `+0x1A70` (3.4 m from a townsperson, facing him: `+0x1A60`; 2.4 m: `+0x1A70`). Found with remote's `findref`, comparing
+  prompt and no prompt. Not the sender's reservation (`[[actor+0x270]+0x160]+0xAC`, its reserver handle `+0xB8`,
+  SelectorAttentionSenderIsPlayerReservedDoAction `main+0x749340`): that's set when A is pressed. 1.0.0 not checked.
+- **The fan's angle is either way of Link's facing:** the prompt stayed up 54 deg off (AttentionFanAngle 60).
+- **Measured round Npc_Hylia_022_Shop_Child** (Treasure Chest Shop, facing world +X, his matrix's +X world -Z; Link
+  placed by the remote, `+0x1A60` read through the GDB stub, binary search along rays, each try from far away): ZL
+  took his lock-on Talk out to 4.48 m in front (box: 0.47 + AttentionMax 1 + Offset 3 = 4.47) and 1.61 m to his
+  +Z side (box: -1.62 - AttentionMin 0), straight edges both (the same at 2, 3 and 4 m out); the -Z side is a wall
+  at 1.6 m (box: 2.63). Once taken it held to 2.6 m on the +Z side, not 2.7 (1.62 + AutoMarginLockOn 1.0). His fan
+  (3.5 + 1.63) never limited it. The near side is his counter. The camera matters: with it turned to face Link
+  (the shopkeeper off screen) nothing was taken anywhere: the client's Screen check. Coming from inside, the margin
+  makes every edge look further out: measure from outside.
+- **Not checked:** spheres and cylinder fans (taken like fans: the model box's widest half added); the per-age
+  overrides (`CheckOverrideParam`: AttentionFanRadiusChild / Adult...); the runtime's copy of the clients (the
+  drawing goes by the files, by actor name, with the model box read live); a teleport's effect on held attention (placing Link at
+  2.8 m after taking it up at 1.8 m showed no prompt).
+
+### 9.38 When a swinging door closes behind Link (1.1.1; drawn in game, the market's shop doors, 26th November 2026)
+- The doors (Obj_Door_*, Obj_Kakariko_Door_*, ...: 39 actors, by AIInfo / event AI) run `AI/Door.root`,
+  `Event/FieldDoor.event.root` or `PrivateDoorForNpc_Single.root` (AI.Global pack), all three through
+  `_LocalModule_e4e2d47532fa`: `SelectorDoorCanClose` with `DoorRadius` 2.0 and `CloseWaitFrame` 135 (its props; the
+  same everywhere), fed the door's perceive list (sense 0: every emitter it perceives).
+- **The check** (`main+0x5E58A0`, the node's calc): for each perceived emitter, skip it if its distance squared (`+4`
+  of the perceive data) is over `DoorRadius` squared, or (with flags in `[emitter+0x1E2] & 0x3FFC`) by affiliation;
+  else, unless LogicOpen, the dot of (its position - the door's `+0x31C`) with the door's X axis (rotation column 0,
+  `+0x328 / +0x334 / +0x340`) must be below 0 for it to count. Anyone counting holds the door open; with nobody, it
+  counts `CloseWaitFrame` frames and closes.
+- **The countdown** is the node's own f32 at `node+0x20` (1.1.1 `main+0x5E5A14` on): while anyone counts (and on its
+  first run) it's set to CloseWaitFrame (read through the input pointer `node+0x30`), as is `+0x24`, with `+0x28` set
+  to -1 (`main+0x5E5F50`, 1.0.0 `main+0x593A34`: the same instructions); with nobody, while it's over 0 it's counted
+  down (`main+0x5ED3D0`), and at 0 the door closes (`main+0x5E5B38`). DoorRadius comes through `node+0x40`.
+- **Where the nodes are:** two per door. The door's own root AI (RestrictedDoor_Single_InOutSeparateCondition.root,
+  in the actor's pack) has the module (node 23, CloseWaitFrame 135, IsForceClose from QueryLogicGetBool
+  "ForceClose"), made the first time the door opens and kept (a unit of its AIComponent controller then: unit 6 of
+  11 for Obj_Door_ShopTreasureBox); it runs when the door was opened for an NPC. When Link opens it, his walk-through
+  event (FieldDoor.event) runs its own, made for the event; nothing of the door's leads to it. So both are found by
+  class: vtable `main+0x4AFBCC8` (1.1.1; 1.0.0 `main+0x4A96CF8`, calc `main+0x593380`), the calc at slot 39 (28 of
+  the first 48 slots shared with the other AINB node classes); `[node+8]` its unit, the unit's `+8` its controller,
+  whose `+0x1F0` is the door. interactview.c searches the heap for them, 6 MiB a frame, while a door is watched; seen
+  to find the door's own in game.
+- **What opens it** (the root's module `_LocalModule_49dbd032a361`, DoActionType 4): SelectorAttentionSenderIsPlayer
+  ReservedDoAction (`main+0x749340`) on the door's attention sender `[[door+0x270]+0x160]`: reserved when its `+0xAC`
+  is 1 and its `+0xB0` is `0x9AB0000` + the action (OpenDoor 4); the reserver through the handle at `+0xB8`
+  ({`+8` the actor-table entry (`[entry+0x40]` the actor, its generation at `+0x48`), `+0x10` the generation}).
+  PlayerReserved (the reserver has a player component, `[[actor+0x270]+0x358]`) opens it with Link's event;
+  NonPlayerReserved opens it unless a logic bool says no; NotReserved runs the close check. The door's own entry is
+  among its fields (`door+0x1B0` for Obj_Door_ShopTreasureBox), so **open door** reserves the sender with the door
+  itself for 20 frames, then puts it back (not yet seen in game).
+- **Whether it's open:** the door's AI sets the actor blackboard bool `IsOpenDoor` as it starts opening (OpenStart) and
+  clears it as it starts shutting (CloseStart). The actor blackboard is `[[actor+0x270]+0]+0x10`: bool names (C
+  strings) at `+0x190`, count `+0x188`; values a byte each at `+0x1A0` (count `+0x198`); flags `+0x1E0`, change counts
+  `+0x1F0` (ExecuteBlackboardSetBool `main+0x7AC2E0`, vtable `main+0x4982148`: type 1 resolves the name there once and
+  keeps the byte's address at `node+0x30`). Obj_Door_ShopTreasureBox has two: IsOpenDoor, IsOpenToInside. Read 1
+  with the door open (remote `peek`), but it stays 1 after a door Link went through has shut: his event shuts it, and
+  the door's own AI (whose close module would clear it) never ran (its count's node still all 0). So **door open**
+  reads the pose instead: the door model's one bone, Root, which Obj_Base_Door_A's Door_Push_* / Door_Close_* swing.
+- **Where they sit:** a unit's node list (`unit+0x28/+0x30`) leaves out its modules' nodes, but they're made just after
+  their unit: the shop door's two SelectorDoorCanClose nodes (two per close module) at its unit + 0xAE0 / + 0xD00, in
+  both its own controller (unit 6) and its event's (`[[comps+0x88]+0x50]`, unit 2). So the door's controllers' units
+  are each followed by 0x4000 bytes looked through for the class: all four found at once, no heap search needed.
+- **Link's event's close node:** under the event performer's controller (`[[comps+0x88]+0x50]`, +0x1F0 the door, 11
+  units / 179 nodes at the event's start), its close module made partway through the event; the heap search (6 MiB a
+  frame) was too slow to catch it, so the door's controllers' nodes are looked through every 6 frames instead.
+- **Shutting at once:** the calc reads DoorRadius through `node+0x40`; pointing that at a 0 means nobody counts as
+  near, and a count of 0 shuts it. Seen in game (26th November 2026): with all 4 of the shop door's nodes known it
+  shut from 86-100 deg each time; with only the door's own (idle) node known it didn't. So the shut now looks through
+  the door's controllers at once and every frame while it lasts, and keeps every node's count at 0 with nobody near
+  until the door's pose reads shut (under 1 deg) or 90 frames pass.
+- So: a half disc of 2 m on the door's -X side (where it swings to), drawn as **door close** (interactview.c). Not
+  checked in game: walking out of it and timing the close.
+

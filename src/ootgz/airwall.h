@@ -18,8 +18,11 @@ extern bool airwalls_xray;  /* also where Link is in front of them (else hidden 
 /* slots, ocarina and load: savepos.c's; void: voidmap.c's */
 enum { AW_BLOCKS, AW_INSIDE, AW_OTHER, AW_PUSHES, AW_SLOT_A, AW_SLOT_B, AW_LOAD, AW_OCARINA, AW_OCARINA_LOAD,
        AW_VOID_GROUND, AW_VOID_DEADLY, AW_VOID_RING, AW_VOID_SHIFT_OK, AW_VOID_SHIFT_FAIL, AW_VOID_AREA,
-       AW_VOID_BOUNDS, AW_HOOK, AW_HOOK_IDLE, AW_HOOK_AIM, AW_PLACER, AW_PLACER_AIR, AW_PLACER_TARGET, AW_NCOLORS };
-/* hooks: hsstore.c's; placer: placer.c's */
+       AW_VOID_BOUNDS, AW_HOOK, AW_HOOK_IDLE, AW_HOOK_AIM, AW_PLACER, AW_PLACER_AIR, AW_PLACER_TARGET, AW_GUARD_SEARCH,
+       AW_GUARD_ALERTED, AW_GUARD_CAUGHT, AW_GUARD_OFF, AW_GUARD_SEARCH_FAR, AW_GUARD_ALERTED_FAR, AW_GUARD_CAUGHT_FAR,
+       AW_GUARD_OFF_FAR, AW_GUARD_PATH, AW_TALK, AW_TALK_IN, AW_TALK_LOCK, AW_ACT, AW_ACT_IN, AW_ACT_LOCK,
+       AW_DOOR, AW_DOOR_IN, AW_NCOLORS };
+/* hooks: hsstore.c's; placer: placer.c's; guard: guardview.c's; talk / act: interactview.c's */
 typedef struct { uint16_t x0, y0, x1, y1; uint8_t color; } aw_dot_t;
 
 /* the same outlines as lines, for the GPU (the game's style): ends 0..1 across the visible picture, the
@@ -28,8 +31,9 @@ typedef struct { uint16_t x0, y0, x1, y1; uint8_t color; } aw_dot_t;
 /* scene: the scenery hides it too, wherever it's nearer (the void lines; the walls' only hide behind Link) */
 typedef struct { float x0, y0, x1, y1, near, d0, d1; uint8_t color; bool scene; } aw_line_t;
 
-/* a see-through face in the world, for the GPU: the parallelogram corner, corner + u, corner + v, corner + u + v */
-typedef struct { float corner[3], u[3], v[3]; uint8_t color; bool scene; } aw_face_t;
+/* a see-through face in the world, for the GPU: the parallelogram corner, corner + u, corner + v, corner + u + v; or
+ * with triangle only the triangle corner, corner + u, corner + v */
+typedef struct { float corner[3], u[3], v[3]; uint8_t color; bool scene, triangle; } aw_face_t;
 
 /* game thread, once per frame: lines for the GPU, or (gpu false) rectangles */
 void airwall_frame(bool gpu);

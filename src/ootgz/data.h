@@ -91,4 +91,36 @@ typedef struct { const char *label; uint8_t kind; float pos[3]; } place_t;
 extern const place_t     data_places[];
 extern const airmap_t    data_placemaps[];   extern const int data_n_placemaps;
 
+/* the paths NPCs walk (rails.json, tools/rails.py): a map's Guide rails, each a run of points with the way an NPC
+ * faces there (yaw, radians about Y: 0 faces +z) and the frames it waits there; closed: the last joins the first */
+typedef struct { float t[3], yaw, wait; } railpoint_t;
+typedef struct { uint16_t first, n; uint8_t closed; } rail_t;
+typedef struct { const char *map; uint16_t first, n; } railmap_t;
+extern const railpoint_t data_rail_points[];
+extern const rail_t      data_rails[];
+extern const railmap_t   data_railmaps[];    extern const int data_n_railmaps;
+/* who walks a rail: an actor linked to it in the layout, by its instance id (the layout's Hash; the game keeps it at
+ * [[actor+0x3D8]+0x88]) and the rail's index in data_rails; sorted by instance */
+typedef struct { uint64_t instance; uint16_t rail; } railowner_t;
+extern const railowner_t data_rail_owners[]; extern const int data_n_rail_owners;
+
+/* where Link can talk to or act on an actor (interactions.json, tools/interactions.py): its attention clients, each an
+ * action (what A does: "Talk", "Check", "OpenDoor"...), whether it counts only while Z-targeting, and areas that must
+ * all hold. An area: shape 0 a fan (radius, angle (degrees either way of the front), top / bottom: how far the actor
+ * may be over / under Link), 1 a cylinder fan, 2 a sphere (radius), 3 a box (lo..hi, in the actor's own axes); margin:
+ * how much further the reach holds once it has Link's attention (where a target breaks walking away); from_link: the
+ * fan is in front of Link (the actor has to be in it), else in front of the actor; sized: the actor's own model box
+ * (read in game) counts too: a box's lo / hi are added to it, a fan's radius gets its widest half. Sorted by name. */
+typedef struct {
+  uint8_t shape, from_link, sized;
+  float radius, margin, angle, top, bottom, lo[3], hi[3];
+} interact_area_t;
+typedef struct { const char *action; uint8_t lock_on; uint16_t first_area; uint8_t n_areas; } interact_client_t;
+/* door_radius: a swinging door, held open while anything is that near on its -X side; it closes door_wait frames
+ * after (0: not one) */
+typedef struct { const char *actor; uint16_t first; uint8_t n; float door_radius; uint16_t door_wait; } interact_actor_t;
+extern const interact_area_t   data_interact_areas[];
+extern const interact_client_t data_interact_clients[];
+extern const interact_actor_t  data_interact_actors[]; extern const int data_n_interact_actors;
+
 #endif

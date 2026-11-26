@@ -7,6 +7,7 @@
 #include "gfx.h"
 #include "binds.h"
 #include "input.h"
+#include "interactview.h"
 #include "lang.h"
 #include "link.h"
 #include "safety.h"
@@ -23,7 +24,7 @@ float hypotf(float x, float y);
 const char *const watch_labels[W_COUNT] = {
   "x", "y", "z", "facing", "move angle", "speed", "y speed", "camera angle", "camera pitch",
   "camera dist", "input", "stick", "lag", "timer", "frame", "map", "air wall", "jump height",
-  "safety", "safety flags", "time of day",
+  "safety", "safety flags", "time of day", "door close timer",
 };
 const char *const watches_corner_names[GFX_NPLACES] = { "top-left", "top-right", "bottom-left", "bottom-right",
                                                        "top-centre", "bottom-centre", "custom" };
@@ -478,6 +479,7 @@ static const dkind_t kind_of[W_COUNT] = {
   [W_CAMERA_DIST] = DK_FLOAT, [W_INPUT] = DK_TEXT, [W_STICK] = DK_STICK, [W_LAG] = DK_COUNT,
   [W_TIMER] = DK_TIMER, [W_FRAME] = DK_COUNT, [W_MAP] = DK_TEXT, [W_AIRWALL] = DK_TEXT,
   [W_JS_HEIGHT] = DK_F32, [W_SAFETY] = DK_TEXT, [W_SAFETY_FLAGS] = DK_FLAGS, [W_TIME_OF_DAY] = DK_CLOCK,
+  [W_DOOR_CLOSE] = DK_TEXT,
 };
 
 /* Each kind's types, in the order of its names below. A float: decimal (f32), whole number (s32) or the
@@ -681,6 +683,9 @@ void watch_text(watch_t watch, char *buf, int len)
     }
     case W_AIRWALL:
       airwall_link_text(buf, len);
+      break;
+    case W_DOOR_CLOSE:
+      interactview_door_text(buf, len);
       break;
     case W_JS_HEIGHT: {
       float height;

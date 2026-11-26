@@ -517,7 +517,7 @@ static void add_wall_f(float x0, float z0, float x1, float z1, int y0, int y1, u
     return;
   walls[n_walls++] = (aw_face_t){
     { (float)box_min[0] + x0, (float)(box_min[1] + y0) + LIFT, (float)box_min[2] + z0 },
-    { x1 - x0, 0, z1 - z0 }, { 0, (float)(y1 - y0), 0 }, colour, true };
+    { x1 - x0, 0, z1 - z0 }, { 0, (float)(y1 - y0), 0 }, colour, true, false };
 }
 
 /* an upright, once: two sides of a column meet in one (quantized to 0.1 cell so +/-0.6 corners dedupe) */
@@ -1094,7 +1094,7 @@ static void build_shift_quads(void)
               { (float)(shift_ox + dx), y, wz0 },
               { (float)len, 0.0f, 0.0f },
               { 0.0f, 0.0f, 1.0f },
-              col, true
+              col, true, false
             };
           }
           gx = run_end;
@@ -1113,7 +1113,7 @@ static void build_shift_quads(void)
               { (float)(shift_ox + dx), base_y, wz0 },
               { 1.0f, sx, 0.0f },
               { 0.0f, sz, 1.0f },
-              col, true
+              col, true, false
             };
           }
           gx++;
@@ -1317,7 +1317,7 @@ static void add_bounds_quad(const float c[3], const float u[3], const float v[3]
   line(mv0, mv1, col);
   if (n_bounds_faces < 5)
     bounds_faces[n_bounds_faces++] = (aw_face_t){
-      { c[0], c[1], c[2] }, { u[0], u[1], u[2] }, { v[0], v[1], v[2] }, col, !voidmap_xray };
+      { c[0], c[1], c[2] }, { u[0], u[1], u[2] }, { v[0], v[1], v[2] }, col, !voidmap_xray, false };
 }
 
 /* Nearby planes of the map's VolumeStats outer AABB: leaving X/Z by > 5m or dropping > 5m below minY voids
@@ -1406,7 +1406,7 @@ static int fence_faces(aw_face_t faces[], int max)
     fence_corner(j, &x0, &z0);
     fence_corner(j + 1, &x1, &z1);
     faces[n++] = (aw_face_t){ { x0, fence.y - RING_REACH, z0 }, { x1 - x0, 0, z1 - z0 }, { 0, 2 * RING_REACH, 0 },
-                              fence.colour, !voidmap_xray };
+                              fence.colour, !voidmap_xray, false };
   }
   return n;
 }

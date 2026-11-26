@@ -64,6 +64,8 @@ void gpuui_line_scene(float x0, float y0, float d0, float x1, float y1, float d1
 struct view_cam;
 void gpuui_world(const struct view_cam *cam);
 void gpuui_face(const float corner[3], const float u[3], const float v[3], gpu_colour_t colour, bool scene);
+/* the same for the triangle a, b, c */
+void gpuui_triangle(const float a[3], const float b[3], const float c[3], gpu_colour_t colour, bool scene);
 /* a glyph with its pen at x and baseline at y; returns its advance in pixels (0 if it has none) */
 float gpuui_glyph(gf_face_t face, int em, uint32_t codepoint, float x, float baseline, gpu_colour_t colour);
 /* the same with its shadow under it, in one quad: the glyph again in black at GPUUI_SHADOW_ALPHA, right and

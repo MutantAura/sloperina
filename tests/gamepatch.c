@@ -1,4 +1,4 @@
-/* Host tests for game file patches (gamepatch.c) and Lank / Lunk's name swap (lank.c): the swap on made-up string
+/* Host tests for game file patches (gamepatch.c) and Lank / Lonk's name swap (lank.c): the swap on made-up string
  * tables, and the frame of stored blocks decoded by the module's own zstd decoder. */
 #include <assert.h>
 #include <stdarg.h>
@@ -45,6 +45,8 @@ uint8_t *gamefile_read_zs(const char *path, size_t *size_out) { return (void)pat
 void remake_request(bool on) { (void)on; }
 bool remake_pending(void) { return false; }
 void gfx_notice(const char *s) { (void)s; }
+void age_reload_map(void) {}
+void menu_close(void) {}
 uintptr_t link_actor(void) { return 0; }
 const char *T(const char *s) { return s; }
 const char *TF(const char *s) { return s; }

@@ -358,6 +358,16 @@ void freecam_frame(bool menu_open)
                 "Y follow Link: %s  L3 control Link  R3 hide controls  B done"), /* L3: what it does next */
              follow ? T("on") : T("off"));
     gfx_guide(bar);
+    /* where the camera is, in a small panel */
+    float where[3] = { (float)eye[0], (float)eye[1], (float)eye[2] };
+    gfx_begin();
+    gfx_text(0, 0, GFX_TITLE, T("free camera"));
+    gfx_row(0, GFX_ROW_TITLE);
+    gfx_row(1, GFX_ROW_GAP);
+    gfx_position(2, 2, T("camera"), where);
+    gfx_end();
+  } else {
+    gfx_clear();
   }
   if (pressed & BTN_B) {
     held_before = ~0u;

@@ -17,6 +17,8 @@
 #include "position.h"
 #include "sdfs.h"
 #include "settings.h"
+#include "guardview.h"
+#include "interactview.h"
 #include "sys.h"
 #include "title.h"
 #include "warp.h"
@@ -309,8 +311,8 @@ static menu_item_t *match_item(menu_t *menu, const char *rest, size_t *used)
   return 0;
 }
 
-/* Follow a path from the top menu. Gives the menu the last part is in and its item (0 for the empty path: the
- * top menu itself); returns what's wrong, or 0. */
+/* Follow a path from the top menu (or, starting "~", from the menu on screen). Gives the menu the last part is in and
+ * its item (0 for the empty path: the top menu itself); returns what's wrong, or 0. */
 static const char *resolve(const char *path, menu_t **menu_out, menu_item_t **item_out)
 {
   static char problem[200];
@@ -319,6 +321,15 @@ static const char *resolve(const char *path, menu_t **menu_out, menu_item_t **it
   const char *rest = plain;
   menu_t *menu = &menu_root;
   menu_item_t *item = 0;
+  if (*rest == '~') { /* the menu on screen: one opened from elsewhere (a guard's, from the actor browser) */
+    if (!menu_current) {
+      snprintf(problem, sizeof(problem), "no menu on screen for ~");
+      return problem;
+    }
+    menu = menu_current;
+    for (rest++; *rest == '/'; rest++)
+      ;
+  }
   while (*rest) {
     if (item) { /* the part before this one has to be a menu */
       if (item->kind != MI_SUBMENU || !item->submenu) {
@@ -416,6 +427,11 @@ static const char *choose(menu_item_t *item)
     }
     case MI_SUBMENU:
       return "a menu: list it, or name an item in it";
+    case MI_BACK: /* return: up a level in the menu on screen (closing it from a menu with none over it) */
+      if (!menu_current)
+        return "no menu on screen to go back in";
+      menu_back();
+      return 0;
     default:
       return "not something to choose";
   }
@@ -774,6 +790,159 @@ static bool spawn_waiting(void)
   return true;
 }
 
+/* "findref <hex>": where Link's components hold that value (an actor's address, say): each component [[link+0x270]+k]
+ * read 0x1000 bytes deep, and one more pointer down; for finding what the game keeps about Link's targets */
+static uint64_t parse_hex(const char *s)
+{
+  uint64_t v = 0;
+  if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+    s += 2;
+  for (; *s; s++) {
+    int d = *s >= '0' && *s <= '9' ? *s - '0' : *s >= 'a' && *s <= 'f' ? *s - 'a' + 10 : *s >= 'A' && *s <= 'F' ? *s - 'A' + 10 : -1;
+    if (d < 0)
+      break;
+    v = v * 16 + (uint64_t)d;
+  }
+  return v;
+}
+
+static void run_findref(char *args)
+{
+  uint64_t value = parse_hex(take_word(&args));
+  uintptr_t link = link_actor();
+  if (!value || !link || !sys_mapped(link + 0x270, 8, SYS_PERM_R)) {
+    result(false, "findref: a hex value, with Link there");
+    return;
+  }
+  uintptr_t components = *(uintptr_t *)(link + 0x270);
+  int found = 0;
+  /* an actor's address: also its components, its attention sender, and its id (+0x18, u32) */
+  uint64_t values[4] = { value, 0, 0, 0 };
+  const char *what[4] = { "actor", "components", "sender", "id" };
+  if (sys_mapped(value + 0x270, 8, SYS_PERM_R) && !(value & 7)) {
+    values[1] = *(uint64_t *)(value + 0x270);
+    if (values[1] && sys_mapped(values[1] + 0x160, 8, SYS_PERM_R))
+      values[2] = *(uint64_t *)(values[1] + 0x160);
+    values[3] = *(uint32_t *)(value + 0x18);
+  }
+  for (int k = 0; k < 0x800 && found < 24; k += 8) {
+    if (!sys_mapped(components + k, 8, SYS_PERM_R))
+      break;
+    uintptr_t c = *(uintptr_t *)(components + k);
+    if (!c || (c & 7) || !sys_mapped(c, 0x2000, SYS_PERM_R))
+      continue;
+    for (int o = 0; o < 0x2000 && found < 24; o += 4) {
+      for (int w = 0; w < 4; w++) {
+        if (!values[w])
+          continue;
+        bool hit = w == 3 ? *(uint32_t *)(c + o) == (uint32_t)values[w] : !(o & 7) && *(uint64_t *)(c + o) == values[w];
+        if (hit) {
+          result(true, "findref: %s at [comp+%#x]+%#x", what[w], k, o);
+          found++;
+        }
+      }
+      uint64_t v = (o & 7) ? 0 : *(uint64_t *)(c + o);
+      if (v && !(v & 7) && sys_mapped(v, 0x200, SYS_PERM_R))
+        for (int p = 0; p < 0x200 && found < 24; p += 8)
+          for (int w = 0; w < 3; w++)
+            if (values[w] && *(uint64_t *)(v + p) == values[w]) {
+              result(true, "findref: %s at [[comp+%#x]+%#x]+%#x", what[w], k, o, p);
+              found++;
+            }
+    }
+  }
+  result(true, "findref: %d found", found);
+}
+
+/* "attention": Link, his attention object ([[link+0x270]+0x578]) and what its do-action slot (+0x1A70) holds, for a
+ * debugger's watchpoint */
+static void run_attention(void)
+{
+  uintptr_t link = link_actor(), comps = 0, attention = 0, record = 0, target = 0;
+  if (link && sys_mapped(link + 0x270, 8, SYS_PERM_R))
+    comps = *(uintptr_t *)(link + 0x270);
+  if (comps && sys_mapped(comps + 0x578, 8, SYS_PERM_R))
+    attention = *(uintptr_t *)(comps + 0x578);
+  if (attention && sys_mapped(attention + 0x1A70, 8, SYS_PERM_R))
+    record = *(uintptr_t *)(attention + 0x1A70);
+  if (record && sys_mapped(record + 8, 8, SYS_PERM_R))
+    target = *(uintptr_t *)(record + 8);
+  result(true, "attention: link %#lx components %#lx attention %#lx slot %#lx record %#lx target %#lx main %#lx",
+         (unsigned long)link, (unsigned long)comps, (unsigned long)attention, (unsigned long)(attention + 0x1A70),
+         (unsigned long)record, (unsigned long)target, (unsigned long)z64hd_main);
+}
+
+/* "actor <name>": the addresses of the actors with that name (any state), for findref and a debugger */
+static void run_actor(char *args)
+{
+  char *name = take_word(&args);
+  uintptr_t found[8];
+  int n = *name ? actors_named(name, found, 8) : 0;
+  for (int i = 0; i < n; i++) { /* its instance id ([[actor+0x3D8]+0x88]) and the rails it walks (guardview.c) */
+    uintptr_t pre = sys_ptr(found[i] + 0x3D8);
+    uint64_t instance = pre && !(pre & 7) && sys_mapped(pre + 0x88, 8, SYS_PERM_R) ? *(uint64_t *)(pre + 0x88) : 0;
+    result(true, "actor: %s %#lx instance %llu rails %d", name, (unsigned long)found[i], (unsigned long long)instance,
+           guardview_rails_of(found[i]));
+  }
+  result(n > 0, "actor: %d named %s", n, name);
+}
+
+/* "peek <hex address> [bytes]": memory, as 8-byte words (up to 256 bytes), for finding where the game keeps things */
+static void run_peek(char *args)
+{
+  char *word = take_word(&args);
+  uint64_t addr = 0;
+  int32_t size = 64;
+  for (const char *c = word[0] == '0' && (word[1] == 'x' || word[1] == 'X') ? word + 2 : word; *c; c++) {
+    int d = *c >= '0' && *c <= '9' ? *c - '0' : *c >= 'a' && *c <= 'f' ? *c - 'a' + 10
+          : *c >= 'A' && *c <= 'F' ? *c - 'A' + 10 : -1;
+    if (d < 0) {
+      result(false, "peek: a hex address, then how many bytes (up to 256)");
+      return;
+    }
+    addr = addr * 16 + (uint64_t)d;
+  }
+  char *count = take_word(&args);
+  if (*count && (!parse_int(count, &size) || size < 8 || size > 256)) {
+    result(false, "peek: a hex address, then how many bytes (up to 256)");
+    return;
+  }
+  addr &= ~(uint64_t)7;
+  if (!addr || !sys_mapped((uintptr_t)addr, (size_t)size, SYS_PERM_R)) {
+    result(false, "peek: %#llx isn't readable", (unsigned long long)addr);
+    return;
+  }
+  char text[160];
+  for (int32_t o = 0; o < size; o += 16) {
+    const uint64_t *q = (const uint64_t *)(uintptr_t)(addr + (uint64_t)o);
+    if (o + 8 < size)
+      snprintf(text, sizeof(text), "%d | +%#05x %016llx %016llx", line_no, (int)o, (unsigned long long)q[0],
+               (unsigned long long)q[1]);
+    else
+      snprintf(text, sizeof(text), "%d | +%#05x %016llx", line_no, (int)o, (unsigned long long)q[0]);
+    out_line(text);
+  }
+  result(true, "peek %#llx %d", (unsigned long long)addr, (int)size);
+}
+
+/* "doortimer <name>": the door close watch put on the first door of that name (as its actor option does, without
+ * adding the watch), and what it reads now: run it again while the door is open to see the search find its node */
+static void run_door_timer(char *args)
+{
+  char *name = take_word(&args);
+  uintptr_t found[8];
+  int n = *name ? actors_named(name, found, 8) : 0;
+  if (!n) {
+    result(false, "doortimer: none named %s", name);
+    return;
+  }
+  interactview_door_watch(found[0]);
+  char text[32];
+  interactview_door_text(text, sizeof(text));
+  result(true, "doortimer: %s %#lx: %s, open %d (turned %.1f deg)", name, (unsigned long)found[0], text,
+         interactview_door_is_open(found[0]), (double)interactview_door_angle(found[0]));
+}
+
 static void run_actors(const char *args)
 {
   int32_t radius = 6;
@@ -848,6 +1017,16 @@ static void run_line(char *line, bool held)
     run_status(held);
   } else if (same(verb, "place")) {
     run_place(args);
+  } else if (same(verb, "actor")) {
+    run_actor(args);
+  } else if (same(verb, "peek")) {
+    run_peek(args);
+  } else if (same(verb, "doortimer")) {
+    run_door_timer(args);
+  } else if (same(verb, "attention")) {
+    run_attention();
+  } else if (same(verb, "findref")) {
+    run_findref(args);
   } else if (same(verb, "actors")) {
     run_actors(args);
   } else if (same(verb, "spawn")) {

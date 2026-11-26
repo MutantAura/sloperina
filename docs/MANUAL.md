@@ -248,7 +248,7 @@ camera looks down on a yellow beam, as **debug > actors > browse currently loade
   off, only the camera goes, Link stays where he is (or goes back there, if he was in a room), and a room shows its
   walls but not its enemies.
 - the **left stick**, **d-up** / **d-down** (height), **L3** (back to Link), the **right stick**, **ZL** / **ZR** (zoom) and **X**
-  move the beam and the camera as when looking at actors; **B** finishes and gives the camera back.
+  move the beam and the camera as when browsing actors; **B** finishes and gives the camera back.
 
 The places come from the game's map layouts (`tools/places.py`). Far from Link the world isn't loaded, so the
 beam may stand in the air (orange) until Link goes there. Some grottos have no landing point of their own, and

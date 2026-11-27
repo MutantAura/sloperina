@@ -256,7 +256,7 @@ static void watch_new(uintptr_t body, const vec3f_t *link_pos)
              points, (double)r, name && sys_mapped(name, 8, SYS_PERM_R) ? (const char *)name : "(no actor)",
              (double)pos[0], (double)pos[1], (double)pos[2]);
 }
-#define WATCH_MAX 16
+#define WATCH_MAX 48
 static struct { uintptr_t body; uint32_t state; } watched[WATCH_MAX];
 static void watch_link_attacks(uintptr_t body, const vec3f_t *link_pos)
 {
@@ -267,7 +267,7 @@ static void watch_link_attacks(uintptr_t body, const vec3f_t *link_pos)
     return;
   const volatile float *pos = (const volatile float *)(body + BODY_POS);
   float dx = pos[0] - link_pos->x, dy = pos[1] - link_pos->y, dz = pos[2] - link_pos->z;
-  if (!(dx * dx + dy * dy + dz * dz < 9))
+  if (!(dx * dx + dy * dy + dz * dz < 625))
     return;
   uintptr_t request = rd(owner, OWNER_REQUEST);
   uint64_t flags = request && sys_mapped(request + REQUEST_FLAGS, 8, SYS_PERM_R) ? *(const volatile uint64_t *)(request + REQUEST_FLAGS) : 0;
@@ -287,9 +287,10 @@ static void watch_link_attacks(uintptr_t body, const vec3f_t *link_pos)
   if (slot < 0 || watched[slot].state == state)
     return;
   watched[slot].state = state;
-  log_printf("hitboxes: frame %u sword body %#lx: in world %d, on %d, request flags %#x asks %u, mask %d", frame_no,
-             (unsigned long)body, in_world, (int)(state >> 1 & 1), (unsigned)(flags & 0xFFFF), (unsigned)asked,
-             (int)(state >> 24 & 1));
+  uintptr_t al = rd(owner, OWNER_ACTOR), ac = al ? rd(al, 8) : 0, nm = ac ? rd(ac, 0x20) : 0;
+  log_printf("hitboxes: frame %u attack body %#lx %s: in world %d, on %d, request flags %#x asks %u, mask %d", frame_no,
+             (unsigned long)body, nm && sys_mapped(nm, 8, SYS_PERM_R) ? (const char *)nm : "-", in_world,
+             (int)(state >> 1 & 1), (unsigned)(flags & 0xFFFF), (unsigned)asked, (int)(state >> 24 & 1));
 }
 
 /* The actors whose chemistry has an explosion (an ExplodeBlast element, ElementType 3011306755: Item_Bomb's
@@ -358,13 +359,14 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
     return -1;
   /* a sensor nothing is collected for (no contact collection: the wagon horse's AttackAll, one of Link's) can't hit
    * or be hit: as gz draws only what the game's collision check has this frame */
-  if (world == 1 && !rd(owner, OWNER_CONTACTS))
+  /* (not Link's own: a Deku Nut's flash and Din's Fire have none and do hit) */
+  if (world == 1 && !rd(owner, OWNER_CONTACTS) && layer != SENSOR_PLAYER_ATTACK)
     return -1;
   if (world == 1) {
     /* Link's own (his sword, a thrown nut...: PlayerAttack, put in the world or switched on only while it's out), as
      * gz's AT list has them */
-    if (layer == SENSOR_PLAYER_ATTACK || (links && layer == SENSOR_ATTACK_ALL)) {
-      if (hitview_style[HV_ATTACK] == HV_OFF || !mask)
+    if (layer == SENSOR_PLAYER_ATTACK) { /* (his AttackAll ones aren't: a caught boomerang's stays on in his hand) */
+      if (hitview_style[HV_ATTACK] == HV_OFF || !mask || !running(actor)) /* a spent nut, a caught boomerang: put away */
         return -1;
       link_attacks++;
       return K_ATTACK;
@@ -377,7 +379,8 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
     }
     /* anyone else's, while it can hurt Link */
     if (layer == SENSOR_ENEMY_ATTACK || layer == SENSOR_NPC_ATTACK || layer == SENSOR_ATTACK_ALL)
-      return hitview_style[HV_ATTACK] != HV_OFF && (mask & (1ull << SENSOR_PLAYER)) && !links ? K_ATTACK : -1;
+      return hitview_style[HV_ATTACK] != HV_OFF && (mask & (1ull << SENSOR_PLAYER)) && !links && running(actor) ? K_ATTACK
+                                                                                                               : -1;
     if (layer < SENSOR_PLAYER || layer > SENSOR_TGT_HIT_ALL || (!actor && !links) || !running(actor))
       return -1;
     if (hitview_style[HV_INVINCIBLE] == HV_OFF && hitview_style[HV_HURT] == HV_OFF)

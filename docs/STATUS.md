@@ -95,6 +95,8 @@ The game patches are the same as 0.0.11's (patch v6).
   inner side.
 - **Bump boxes and hurtboxes** only for actors that are out (state 4 or 5): a bombchu's stayed after it went off
   (the user saw it); checked gone. Hidden enemies (a Wolfos in the ground) lose theirs too.
+- **Link's items** drawn while they can hit: Deku Nuts, Din's Fire, the boomerang, slingshot seeds (seen); arrows not
+  tried (adult only). Spent ones (put away, state 6) left out.
 - **Bomb blasts** drawn as attacks (FINDINGS 9.39): seen with a bomb going off in Link's hands. Not seen: a thrown
   one from outside, bombchus, Dodongos, bomb flowers.
 - Remote: `physdump` (raw capture of the Havok bodies for working out layouts offline).

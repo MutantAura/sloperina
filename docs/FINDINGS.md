@@ -2462,6 +2462,13 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   enemy that hasn't appeared yet) and its character controller stays in the world, switched on, where it fell (seen
   27th November 2026, 400 frames on). So bump boxes and hurtboxes count only for actors in state 4 or 5; attacks
   aren't held to it (a blast's last frame; switched off ones aren't drawn anyway).
+- **Link's items** (27th November 2026, used from ZR): each a PlayerAttack sensor that the game switches on while it
+  can hit: a Deku Nut's 4 m flash (from the frame it bursts), Din's Fire (ExpandFireField, its own sensor, and a fire
+  element), the boomerang for its flight (switched off when caught), a slingshot seed in flight (a 5 to 10 cm
+  capsule). The nut's and Din's Fire's have no contact collection, so Link's own aren't held to it. Spent ones are
+  put away (state 6: nuts, Din's Fire, the boomerang's) with the sensor still on, so attacks too count only for
+  running actors (not a bomb's blast). The boomerang's AttackAll sensor stays on in Link's hand: only PlayerAttack
+  counts for his things. Arrows (Arrow_Atk_0, PlayerAttack) not tried (adult).
 - **What's an attack, a bump:** the files' sensors (tools: every RigidBodySensorParam) put an enemy's attack on
   EnemyAttack (226 of them with no EnableLayerHitMask), NPCAttack (moving spikes) or AttackAll (cuccos, Epona,
   falling rocks, crazy floor tiles); its mask has Player (bit 2) while it can hit Link. A character controller's

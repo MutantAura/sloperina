@@ -580,6 +580,26 @@ bool actor_read(uintptr_t actor, actor_read_t *out)
   return true;
 }
 
+/* --- its pack's name ------------------------------------------------------------------------------------- */
+
+#define ACTOR_PACK_NAME 0x260 /* the pack it was made from (the layout's Gyaml): Obj_TBox_A_01 for TBox_Field_Iron */
+
+const char *actor_pack_name(uintptr_t actor)
+{
+  uintptr_t name = actor ? sys_ptr(actor + ACTOR_PACK_NAME) : 0;
+  if (!name || !sys_mapped(name, 64, SYS_PERM_R))
+    return 0;
+  const char *s = (const char *)name;
+  for (int i = 0; i < 64; i++) { /* a name: letters, digits and _, ended */
+    char c = s[i];
+    if (!c)
+      return i ? s : 0;
+    if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+      return 0;
+  }
+  return 0;
+}
+
 /* --- its layout entry (FINDINGS 9.46) -------------------------------------------------------------- */
 
 /* A placed actor's PreActor [actor+0x3D8] keeps where its entry is in the map's layout file, which stays loaded (the

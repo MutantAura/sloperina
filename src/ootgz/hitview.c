@@ -1211,9 +1211,18 @@ int hitview_list_all(const char *name, char *out, int len)
         if (!heap_ptr(owner))
           continue;
         uintptr_t al = rd(owner, OWNER_ACTOR), ac = al ? rd(al, 8) : 0, nm = ac ? rd(ac, 0x20) : 0;
-        if (!nm || !sys_mapped(nm, 8, SYS_PERM_R) || !has_text((const char *)nm, name))
-          continue;
         uintptr_t lo = rd(owner, OWNER_LAYER), shape = *(const volatile uintptr_t *)(body + BODY_SHAPE);
+        if (name[0] == '#') { /* #<hex>: by the number in its layer object (an actor's bodies all have it) */
+          uint32_t want = 0, n = 0;
+          for (const char *c = name + 1; *c; c++)
+            want = want * 16 + (uint32_t)(*c <= '9' ? *c - '0' : (*c | 0x20) - 'a' + 10);
+          if (!lo || !sys_read32(lo + LAYER_NUMBER, &n) || n != want)
+            continue;
+        } else if (!nm || !sys_mapped(nm, 8, SYS_PERM_R) || !has_text((const char *)nm, name)) {
+          continue;
+        }
+        if (!nm || !sys_mapped(nm, 8, SYS_PERM_R))
+          nm = (uintptr_t)"(no actor)";
         uint32_t pts = 0;
         if (heap_ptr(shape))
           sys_read32(shape + SHAPE_POINTS + 4, &pts);

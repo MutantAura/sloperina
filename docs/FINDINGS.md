@@ -2652,3 +2652,13 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   it (u32) and its type (u32, 0xC1), and at `+0xC0` its Phive the same. Read so, Hyrule Field's chests gave what the
   Static and Dynamic layout files say (`Item_ScrubBusinessSeed` on the castle wall, `TBox_Rupee_Red` twice).
   actors.c's `actor_layout_string` reads a string from it; the actor browser shows it.
+- An actor keeps its pack's name at `actor+0x260` (`Obj_TBox_A_01`, `Obj_TBox_A_01_NoBake`) beside its ActorName at
+  `+0x20` (`TBox_Field_Iron` for both: the pack's `ActorNameRef`). The two are the same for most actors; they differ
+  for chests, a chest's rupee (`Obj_Rupee_Red` from pack `TBox_Rupee_Red`) and a second Ingo
+  (`Npc_Hylia_Ingo_003_Adult`). Data keyed by pack (interactions.json) is looked up by `+0x260`: a field chest's
+  OpenTreasureBox range (a 0.5 m fan round its model box, all the way round, and Link's 2 m fan) then draws, its
+  A prompt showing at the disc's edge. Its only client isn't a lock-on one: a chest can't be Z-targeted.
+- **What stops Link at a chest** isn't settled. Its bodies (spawned `Obj_TBox_A_01` on flat ground): `Body` (Object,
+  8-point box, hit mask none), `CloseBody` (GroundObject, 16 points, mask with Player, bit 6 set yet solid), the
+  lid's (Object, a compound) and `AirWall` (GroundObject, hits SmallObject only). Link dropped on it stands 0.65 m
+  up; with CloseBody's ForceNoHit on, 0.57 m; with all four on, still 0.57 m. Something else holds him there.

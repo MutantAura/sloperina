@@ -709,7 +709,7 @@ static void panel(void)
     }
     if (interactview_has(at)) /* talk radius, z-target talk, target break line; a door's door close */
       for (int part = 0; part < IV_PARTS; part++)
-        if (part != IV_DOOR || interactview_is_door(at))
+        if (interactview_has_part(at, part) || interactview_own(at, part))
           labels[n_checks] = interactview_part_label(at, part), on[n_checks++] = interactview_own(at, part);
     if (interactview_is_door(at)) {
       labels[n_checks] = T("close timer watch"), on[n_checks++] = door_watched(at);
@@ -894,7 +894,7 @@ static void open_guard_menu(uintptr_t actor)
                                                  "dashed: where each breaks as link walks away",
                                                  "where it's held open: leave it and it closes 135 frames later" };
     for (int part = 0; part < IV_PARTS; part++) {
-      if (part == IV_DOOR && !interactview_is_door(actor))
+      if (!interactview_has_part(actor, part) && !interactview_own(actor, part))
         continue;
       snprintf(menu_actions[part], sizeof(menu_actions[part]), "%s", interactview_part_label(actor, part));
       item = menu_add_check(&m_guard, menu_actions[part], get_interact, set_interact, part);

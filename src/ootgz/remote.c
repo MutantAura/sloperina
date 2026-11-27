@@ -1088,6 +1088,16 @@ static void run_line(char *line, bool held)
       line = end + 1;
     }
     result(true, "hitlist: %d", n);
+  } else if (same(verb, "nohit")) { /* nohit <owner hex> <0|1>: debugging, a body's ForceNoHit (cct.c's switch) */
+    char *word = take_word(&args);
+    uint64_t owner = parse_hex(word);
+    if (!owner || !sys_mapped((uintptr_t)owner + 0x70, 8, SYS_PERM_R) || !z64hd_game->cct_force_no_hit ||
+        !parse_int(args, &number) || number < 0 || number > 1) {
+      result(false, "nohit: a body owner (hex), then 0 or 1");
+    } else {
+      MAIN_FN(void (*)(uintptr_t, bool), z64hd_game->cct_force_no_hit)((uintptr_t)owner, number != 0);
+      result(true, "nohit %#llx %d", (unsigned long long)owner, (int)number);
+    }
   } else if (same(verb, "hitparts")) { /* hitparts <actor name>: debugging, the hitbox kinds the browser lists */
     uintptr_t found[8];
     int n = actors_named(args, found, 8);

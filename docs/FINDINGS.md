@@ -2619,3 +2619,16 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   `Animal_Kokiri_Insect`, `Animal_Fish`, `Animal_Butterfly`, `Insect_` (any of their sensors on the Object,
   SmallObject or target layers). Bugs and fish weren't near to check.
 - Spawned drops in Hyrule Field sometimes fell through the ground (a heart and a magic jar ended 13 to 17 m below).
+
+### 9.45 Bodies taken out of the world (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- After a save loads, a set of Link's bodies stays where he was placed: an entity capsule (0.35 m), a hurt capsule
+  (0.4 m), attack sensors and more, the Player actor's, switched on (`[owner+0x70]` bit 6 clear), contacts set, and
+  never moved again. hknp keeps them in its body arrays; the hit view drew the hurt capsule as a blue box at the
+  spawn point. A Gossip Stone's spare bodies, one of Ingo's, one of Navi's and one of the Deku Shield's are the same.
+- What they share is `[owner+0x70]` bits 25 and 41. Phive's removal (`main+0x4D8F80`) clears bits 15 and 10 and sets
+  25 and 41; its add (`main+0x4DAB20`) sets 10, 32 and 25, and 15 unless switched off; the world's step (functions
+  round `main+0x281D0`) clears 25 and 41 once it has dealt with the change. Bit 15 is only awake: Link's live
+  hurtbox loses it standing still.
+- The contact pass (`main+0x354EC0`, at `+0x354FA4`) drops a pair where either owner (`+0x110`, `+0x118` of the
+  pair) has bit 41, through `main+0x3503F0`. So bit 41 is out of the world, whatever bit 6 says; the hit view treats
+  it as switched off. Of 636 bodies in Hyrule Field, the 19 with bit 41 were all such spares.

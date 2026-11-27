@@ -1069,7 +1069,7 @@ static void run_line(char *line, bool held)
       line = end + 1;
     }
   } else if (same(verb, "hitlist")) {
-    static char text[6144];
+    static char text[24576];
     char *name = take_word(&args);
     if (*name)
       hitview_list_all(name, text, sizeof(text));

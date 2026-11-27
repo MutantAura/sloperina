@@ -115,6 +115,7 @@ static void forget_gone(void)
 #define OWNER_LAYER 0x150 /* [+0x150]+8, low five bits */
 #define OWNER_STATE 0x70  /* bit 6 set: switched off */
 #define STATE_OFF 0x40
+#define STATE_REMOVED (1ull << 41) /* taken out of the world (main+0x4D8F80 sets it, with bit 25 for a change pending) */
 #define OWNER_REQUEST 0x60 /* a change queued for the physics' next step: */
 #define REQUEST_ON 0x84    /*   the state asked for (1 on) */
 #define REQUEST_FLAGS 0x100
@@ -218,6 +219,10 @@ static int link_attacks, link_attacks_before; /* PlayerAttack shapes this frame 
 static bool switched_on(uintptr_t owner)
 {
   if (!sys_mapped(owner + OWNER_STATE, 8, SYS_PERM_R))
+    return false;
+  /* taken out of the world: its body can stay in hknp's arrays where it last was (Link's spare set at the spot he was
+   * loaded in, a Gossip Stone's), but the game's contact pass (main+0x354FA4) drops any pair with one of these */
+  if (*(const volatile uint64_t *)(owner + OWNER_STATE) & STATE_REMOVED)
     return false;
   uintptr_t request = rd(owner, OWNER_REQUEST);
   if (request && sys_mapped(request + REQUEST_FLAGS, 8, SYS_PERM_R) &&
@@ -1103,8 +1108,9 @@ int hitview_list_all(const char *name, char *out, int len)
                   *(const volatile float *)(shape + SHAPE_RADIUS) : -1;
         const volatile float *p = (const volatile float *)(body + BODY_POS);
         at += snprintf(out + at, (size_t)(len - at),
-                       "w%d %s layer %#llx mask %#llx contacts %d on %d world %d, %u points r %.2f at %.2f %.2f %.2f\n", w,
-                       (const char *)nm, (unsigned long long)(lo ? rd(lo, 8) : 0),
+                       "w%d %s owner %#lx state %#llx layer %#llx mask %#llx contacts %d on %d world %d, %u points r %.2f "
+                       "at %.2f %.2f %.2f\n", w, (const char *)nm, (unsigned long)owner,
+                       (unsigned long long)rd(owner, OWNER_STATE), (unsigned long long)(lo ? rd(lo, 8) : 0),
                        (unsigned long long)rd(owner, OWNER_HIT_MASK), rd(owner, OWNER_CONTACTS) != 0,
                        switched_on(owner), sane(((const volatile float *)(body + BODY_AABB_MAX))[0]), (unsigned)pts,
                        (double)r, (double)p[0], (double)p[1], (double)p[2]);

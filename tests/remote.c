@@ -207,6 +207,30 @@ void interactview_door_text(char *buf, int len) { snprintf(buf, len, "closed"); 
 int interactview_door_is_open(uintptr_t door) { return (void)door, -1; }
 float interactview_door_angle(uintptr_t door) { return (void)door, -1; }
 void menu_goto(menu_t *m) { menu_current = m; }
+/* debugging commands' (hitlist, hitparts, pausetype, equip, frametrace, physdump, texdump, hudtest): not run here */
+void frametrace_arm(void) {}
+int frametrace_targets(uintptr_t *tex, uint32_t *sets, int max) { return (void)tex, (void)sets, (void)max, 0; }
+void frametrace_write(void) {}
+int hitview_list(char *out, int len) { return (void)len, out[0] = 0, 0; }
+int hitview_list_all(const char *name, char *out, int len) { return (void)name, (void)len, out[0] = 0, 0; }
+uint8_t hitview_parts_of(uintptr_t actor) { return (void)actor, 0; }
+int nvn_hud_bind_log(char *lines, int len) { return (void)len, lines[0] = 0, 0; }
+int nvn_hud_binds(uintptr_t *cmds, int *binds, int max) { return (void)cmds, (void)binds, (void)max, 0; }
+volatile bool nvn_hud_test;
+volatile uintptr_t nvn_hud_test_target;
+volatile int nvn_hud_test_bind;
+volatile uintptr_t nvn_hud_test_cmd;
+void nvn_texdump(uintptr_t texture, int bytes_per_pixel) { (void)texture, (void)bytes_per_pixel; }
+void nvn_texdump_write(void) {}
+void nvn_texture_info(uintptr_t texture, int *w, int *h, int *format) { (void)texture, *w = *h = *format = 0; }
+bool pausemgr_add(uint32_t id, int delta) { return (void)id, (void)delta, false; }
+int pausemgr_count(uint32_t id) { return (void)id, -1; }
+uint32_t pausemgr_id(const char *name_or_hex) { return (void)name_or_hex, 0; }
+int pausemgr_list(char *out, int len) { return (void)len, out[0] = 0, 0; }
+bool pausemgr_set_masks(uint32_t id, const uint32_t masks[3], uint32_t was[3]) { return (void)id, (void)masks, (void)was, false; }
+bool physdump_write(const char *name, int *records, int64_t *bytes) { return (void)name, (void)records, (void)bytes, false; }
+bool pouch_button(int slot, const char *choice, uint32_t *was) { return (void)slot, (void)choice, (void)was, false; }
+bool pouch_equip_shield_now(const char *item) { return (void)item, false; }
 
 void menu_close(void)
 {

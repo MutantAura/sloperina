@@ -28,6 +28,7 @@
 #include "voidmap.h"
 #include "guardview.h"
 #include "interactview.h"
+#include "hitview.h"
 
 _Static_assert(sizeof(uintptr_t) == 8 && sizeof(float) == 4, "requires a 64-bit host with f32");
 _Static_assert(W_X == 0 && W_AIRWALL == 16 && W_JS_HEIGHT == 17, "keep saved watch IDs stable");
@@ -139,6 +140,8 @@ void airwall_link_text(char *buf, int len) { snprintf(buf, len, "outside"); }
 void interactview_door_text(char *buf, int len) { snprintf(buf, len, "closed"); }
 bool guardview_shown, guardview_paths; /* settings.c saves scene > environment's guards and actors options */
 bool interactview_shown, interactview_parts[IV_PARTS];
+bool hitview_shown, hitview_link_only, hitview_xray, hitview_guard; /* and its hitboxes options */
+int hitview_style[HV_PARTS];
 const char *T(const char *s) { return s; }
 const char *TF(const char *s) { return s; }
 void lang_init(void) {}

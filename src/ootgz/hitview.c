@@ -570,6 +570,108 @@ static void walk(const vec3f_t *link_pos, uintptr_t link)
   }
 }
 
+/* --- which parts an actor has (the actor browser's switches) ---------------------------------------------- */
+
+/* what a body of the actor's would be drawn as, were it on: as classify, but whether it's switched on (or in the
+ * world, or the actor running) left aside, so an enemy's attack counts between swings; bodies taken out of the world
+ * for good don't count (STATE_REMOVED: spare sets) */
+static uint8_t part_of_body(int world, uintptr_t owner, uintptr_t actor, bool links, uintptr_t shape)
+{
+  uintptr_t layer_obj = rd(owner, OWNER_LAYER);
+  if (!layer_obj || !sys_mapped(layer_obj + 8, 8, SYS_PERM_R) || !sys_mapped(owner + OWNER_STATE, 8, SYS_PERM_R) ||
+      (*(const volatile uint64_t *)(owner + OWNER_STATE) & STATE_REMOVED))
+    return 0;
+  int layer = *(const volatile uint8_t *)(layer_obj + 8) & LAYER_MASK;
+  uint64_t mask = rd(owner, OWNER_HIT_MASK);
+  if (world == 1) {
+    if (layer != SENSOR_PLAYER_ATTACK && !rd(owner, OWNER_CONTACTS)) /* can't hit or be hit */
+      return 0;
+    bool target = layer >= SENSOR_PLAYER && layer <= SENSOR_TGT_HIT_ALL;
+    if (!links && (layer <= SENSOR_SMALL_OBJECT || target) && is_pickup(actor))
+      return 1u << HV_PICKUP;
+    if (layer == SENSOR_PLAYER_ATTACK)
+      return links ? 1u << HV_ATTACK : 0;
+    if (layer == SENSOR_CHEMICAL_ELEMENT) {
+      float r = heap_ptr(shape) && sys_mapped(shape + SHAPE_RADIUS, 4, SYS_PERM_R) ?
+                *(const volatile float *)(shape + SHAPE_RADIUS) : 0;
+      return r >= BLAST_MIN_RADIUS && is_explosive(actor) ? 1u << HV_ATTACK : 0;
+    }
+    if (layer == SENSOR_ENEMY_ATTACK || layer == SENSOR_NPC_ATTACK || layer == SENSOR_ATTACK_ALL)
+      return !links && (mask & (1ull << SENSOR_PLAYER)) ? 1u << HV_ATTACK : 0;
+    return target ? 1u << HV_HURT : 0;
+  }
+  bool controller = Z64HD_VT_CCT_BODY && sys_ptr(owner) == MAIN(Z64HD_VT_CCT_BODY);
+  if (links)
+    return controller && layer == ENTITY_PLAYER ? 1u << HV_BUMP : 0;
+  if ((layer == ENTITY_CHARACTER || layer == ENTITY_OBJECT || layer == ENTITY_SMALL_OBJECT) &&
+      (mask & (1ull << ENTITY_PLAYER)))
+    return 1u << HV_BUMP;
+  return 0;
+}
+
+#define PARTS_EVERY 30 /* frames between scans of the one actor */
+
+uint8_t hitview_parts_of(uintptr_t actor)
+{
+  static uintptr_t last;
+  static uint8_t parts;
+  static uint32_t scanned;
+  if (!actor || !z64hd_game || !z64hd_game->phive_mgr_ptr)
+    return 0;
+  if (actor != last)
+    last = actor, parts = 0, scanned = frame_no - PARTS_EVERY; /* another: from nothing, at once */
+  if (frame_no - scanned < PARTS_EVERY)
+    return parts;
+  scanned = frame_no;
+  uintptr_t link = link_actor();
+  bool is_link = actor == link;
+  /* its bodies: those that lead to it, and those with its number (its weapon's, as Link's sword is his) */
+  uint32_t number = is_link ? link_number : 0;
+  for (int pass = 0; pass < 2; pass++) {
+    for (int w = 0; w < 2; w++) {
+      uintptr_t world = world_of(w);
+      uint32_t capacity = 0;
+      if (!world || !sys_read32(world + WORLD_BODY_CAPACITY, &capacity) || capacity > MAX_BODIES)
+        continue;
+      uintptr_t blocks = rd(world, WORLD_BODY_BLOCKS);
+      unsigned n_blocks = (capacity + BODIES_PER_BLOCK - 1) / BODIES_PER_BLOCK;
+      if (!blocks || !sys_mapped(blocks, n_blocks * 8, SYS_PERM_R))
+        continue;
+      for (unsigned b = 0; b < n_blocks; b++) {
+        uintptr_t block = *(const volatile uintptr_t *)(blocks + b * 8);
+        if (!heap_ptr(block) || !sys_mapped(block, BODIES_PER_BLOCK * BODY_SIZE, SYS_PERM_R))
+          continue;
+        for (unsigned i = 0; i < BODIES_PER_BLOCK && b * BODIES_PER_BLOCK + i < capacity; i++) {
+          uintptr_t body = block + i * BODY_SIZE, owner = *(const volatile uintptr_t *)(body + BODY_OWNER);
+          if (!heap_ptr(owner))
+            continue;
+          uintptr_t al = rd(owner, OWNER_ACTOR), lo = rd(owner, OWNER_LAYER);
+          uintptr_t whose = al ? rd(al, 8) : 0;
+          uint32_t n = lo && sys_mapped(lo + LAYER_NUMBER, 4, SYS_PERM_R) ? *(const volatile uint32_t *)(lo + LAYER_NUMBER) : 0;
+          if (pass == 0) { /* its number, from a body that leads to it */
+            if (whose == actor && n && !number)
+              number = n;
+            continue;
+          }
+          bool sword = is_link && w == 1 && lo && sys_mapped(lo + 8, 1, SYS_PERM_R) &&
+                       (*(const volatile uint8_t *)(lo + 8) & LAYER_MASK) == SENSOR_PLAYER_ATTACK; /* his own actor */
+          if (whose != actor && !(number && n == number) && !sword)
+            continue;
+          parts |= part_of_body(w, owner, actor, is_link, *(const volatile uintptr_t *)(body + BODY_SHAPE));
+        }
+      }
+    }
+  }
+  /* invincibility: where it's hit while invincible, so only for one with hurtboxes that can be fought (Link too) */
+  if (parts & (1u << HV_HURT)) {
+    bool invincible = false, killable = false;
+    actor_combat(actor, &invincible, &killable);
+    if (is_link || killable)
+      parts |= 1u << HV_INVINCIBLE;
+  }
+  return parts;
+}
+
 /* --- drawing ---------------------------------------------------------------------------------- */
 
 static bool outline = true; /* the shape being drawn: outlined (else filled, no lines) */

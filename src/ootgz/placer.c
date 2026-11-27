@@ -569,9 +569,23 @@ static bool door_watched(uintptr_t actor)
   return actor && interactview_door_watched() == actor && watch_has(W_DOOR_CLOSE);
 }
 /* an actor's hitbox switches (hitview.h's parts, in order), as scene > environment > hitboxes names them */
-static const char *const hitbox_labels[HV_PARTS] = { "attacks", "bump boxes", "invincibility", "hurtboxes",
+static const char *const hitbox_labels[HV_PARTS] = { "attack hitboxes", "bump boxes", "invincibility", "hurtboxes",
                                                      "collectables" };
 
+
+/* it has options (minus): a guard's or a walker's path, an interaction's ranges, a door's, or hitboxes of some kind */
+static bool has_options(uintptr_t actor)
+{
+  if (!actor)
+    return false;
+  if (guardview_is_guard(actor) || guardview_has_path(actor) || interactview_has(actor) || interactview_is_door(actor) ||
+      hitview_parts_of(actor))
+    return true;
+  for (int part = 0; part < HV_PARTS; part++)
+    if (hitview_own(actor, part))
+      return true;
+  return false;
+}
 
 static void panel(void)
 {
@@ -663,7 +677,7 @@ static void panel(void)
   static const char *const guard_hints[3] = { "LS move  d-up/down height  L3 back to Link  R3 hide controls",
                                               "RS camera  ZL/ZR zoom  X faster  d-left/right next",
                                               "L/R kind  A go to  Y kill  minus actor options  B done" };
-  bool on_guard = mode == MODE_LOOK && at; /* it has options (every actor: its hitboxes) */
+  bool on_guard = mode == MODE_LOOK && has_options(at); /* minus: its options */
   if (on_guard)
     h = guard_hints;
   const char *take = placer_take_link ? T("on") : T("off"); /* exploring: Y take Link, as it is now */
@@ -700,8 +714,10 @@ static void panel(void)
     if (interactview_is_door(at)) {
       labels[n_checks] = T("close timer watch"), on[n_checks++] = door_watched(at);
     }
+    uint8_t has = hitview_parts_of(at); /* only the kinds it has (and one still ticked, to untick it) */
     for (int part = 0; part < HV_PARTS; part++) /* its hitboxes, each kind on its own */
-      labels[n_checks] = T(hitbox_labels[part]), on[n_checks++] = hitview_own(at, part);
+      if ((has >> part & 1) || hitview_own(at, part))
+        labels[n_checks] = T(hitbox_labels[part]), on[n_checks++] = hitview_own(at, part);
   }
   int row = 3;
   if (stats[0] || (!n_checks && !holds[0])) { /* its stats (an empty line kept for one with none: no jumping) */
@@ -907,7 +923,10 @@ static void open_guard_menu(uintptr_t actor)
     "where it can be hit (blue)",
     "where link picks it up or catches it (gold)",
   };
+  uint8_t has = hitview_parts_of(actor); /* only the kinds it has (and one still ticked, to untick it) */
   for (int part = 0; part < HV_PARTS; part++) {
+    if (!(has >> part & 1) && !hitview_own(actor, part))
+      continue;
     item = menu_add_check(&m_guard, hitbox_labels[part], get_hitboxes, set_hitboxes, part);
     if (item) {
       item->hint = hitbox_hints[part];
@@ -991,7 +1010,7 @@ void placer_frame(bool menu_open)
   }
   if (mode == MODE_LOOK && pressed & BTN_MINUS) { /* its options (a guard's vision and path, its interaction range) */
     uintptr_t actor = target ? target : hover;
-    if (actor) /* every actor has one: its hitboxes */
+    if (has_options(actor))
       open_guard_menu(actor);
   }
   if (mode != MODE_EXPLORE && pressed & BTN_Y) { /* the actor locked on to, or under the beam */

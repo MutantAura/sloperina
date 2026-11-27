@@ -25,6 +25,10 @@ extern bool hitview_guard;     /* show: where Link's raised shield blocks from, 
  * whatever the menu's show says, in the menu's style for it (filled where that's off); forgotten when it goes */
 bool hitview_own(uintptr_t actor, int part);
 void hitview_toggle(uintptr_t actor, int part);
+/* the parts an actor has (1 << HV_ATTACK...): its bodies, and its weapons' (its number), whether on now or not;
+ * invincibility for one with hurtboxes that can be fought. Kept while asked about the same actor (rescanned every
+ * half second, adding what turns up); game thread */
+uint8_t hitview_parts_of(uintptr_t actor);
 
 /* game thread, once a frame, before airwall_frame */
 void hitview_frame(void);

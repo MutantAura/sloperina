@@ -1088,6 +1088,19 @@ static void run_line(char *line, bool held)
       line = end + 1;
     }
     result(true, "hitlist: %d", n);
+  } else if (same(verb, "hitparts")) { /* hitparts <actor name>: debugging, the hitbox kinds the browser lists */
+    uintptr_t found[8];
+    int n = actors_named(args, found, 8);
+    static const char *const part_names[HV_PARTS] = { "attack", "bump", "invincible", "hurt", "pickup" };
+    for (int i = 0; i < n; i++) {
+      uint8_t parts = hitview_parts_of(found[i]);
+      char text[96] = "";
+      for (int part = 0; part < HV_PARTS; part++)
+        if (parts >> part & 1)
+          snprintf(text + strlen(text), sizeof(text) - strlen(text), " %s", part_names[part]);
+      result(true, "hitparts: %s %#lx:%s", args, (unsigned long)found[i], parts ? text : " none");
+    }
+    result(n > 0, "hitparts: %d named %s", n, args);
   } else if (same(verb, "guardbits")) { /* guardbits <actor name>: debugging, an actor's BSA flags (FINDINGS 9.43) */
     uintptr_t found[8];
     int n = actors_named(take_word(&args), found, 8);

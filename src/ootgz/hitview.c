@@ -119,7 +119,7 @@ static void forget_gone(void)
 #define SHAPE_MIN_SIZE 0x80
 #define SHAPE_MAX_SIZE 0x2000
 #define MAX_POINTS 64
-#define MAX_FACES 40
+#define MAX_FACES 255 /* a shape with more is drawn as its box (the boomerang's attack has 32 points) */
 
 /* PhiveConfig's layers */
 enum { SENSOR_PLAYER = 2, SENSOR_ENEMY = 3, SENSOR_NPC = 4, SENSOR_ANIMAL = 5, SENSOR_TGT_HIT_ALL = 6,
@@ -750,6 +750,15 @@ static void polytope(uintptr_t body, uintptr_t shape, uint32_t size, const float
       for (int bit = 1; bit < 8; bit <<= 1)
         if (!(i & bit))
           line(c[i], c[i | bit], colour);
+    if (fill) /* filled, its six sides (lines aren't drawn then) */
+      for (int axis = 1; axis < 8; axis <<= 1) {
+        int u = axis == 1 ? 2 : 1, v = axis == 4 ? 2 : 4;
+        for (int side = 0; side < 2; side++) {
+          int o = side ? axis : 0;
+          face_out(c[o], c[o | u], c[o | u | v], middle, colour);
+          face_out(c[o], c[o | u | v], c[o | v], middle, colour);
+        }
+      }
     return;
   }
   for (uint32_t f = 0; f < n_faces_here; f++) {

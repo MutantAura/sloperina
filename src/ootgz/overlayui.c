@@ -128,7 +128,9 @@ static bool draw_lines(float w, float h, float px, int budget)
            : guard ? GUARD_FACE_ALPHA
            : (ci == AW_VOID_SHIFT_OK || ci == AW_VOID_SHIFT_FAIL) ? GROUND_FACE_ALPHA
                                                                  : FACE_ALPHA) *
-          fade;
+          fade * (hit ? airwall_hit_fade : 1);
+    if (c.a <= 0)
+      continue;
     if (faces[i].triangle) {
       const float *a = faces[i].corner;
       float b[3] = { a[0] + faces[i].u[0], a[1] + faces[i].u[1], a[2] + faces[i].u[2] };
@@ -153,10 +155,13 @@ static bool draw_lines(float w, float h, float px, int budget)
       float far = (l->near - FADE_FROM) / FADE_OVER;
       far = far < 0 ? 0 : far > 1 ? 1 : far;
       float a = 1 - (1 - FADE_TO) * far;
-      c.a = (pass ? a : a * GLOW_ALPHA) * fade;
+      bool hit = l->color >= AW_HIT_ATTACK && l->color <= AW_HIT_HURT;
+      c.a = (pass ? a : a * GLOW_ALPHA) * fade * (hit ? airwall_hit_fade : 1);
+      if (c.a <= 0)
+        continue;
       if (l->scene) /* hidden where anything of the scene is nearer */
         gpuui_line_scene(l->x0 * w, l->y0 * h, l->d0, l->x1 * w, l->y1 * h, l->d1, (pass ? LINE_W : GLOW_W) * px, c);
-      else if (airwalls_xray || (l->color >= AW_HIT_ATTACK && l->color <= AW_HIT_HURT)) /* hitboxes: over all */
+      else if (airwalls_xray && !hit) /* the air walls' "through Link" (which empties Link's depth for all) */
         gpuui_line(l->x0 * w, l->y0 * h, l->x1 * w, l->y1 * h, (pass ? LINE_W : GLOW_W) * px, c);
       else /* hidden where Link is nearer (with nvn.c's depth for the frame) */
         gpuui_line_depth(l->x0 * w, l->y0 * h, l->d0, l->x1 * w, l->y1 * h, l->d1, (pass ? LINE_W : GLOW_W) * px, c);

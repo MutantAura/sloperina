@@ -251,13 +251,16 @@ on; under it, each kind has a switch, **off**, **outline** or **fill**:
 
 **only link's**: **show** draws Link's own alone (his body, his hurtboxes, his sword). **through walls** (off at
 first): also where walls, scenery or the actors themselves are in front (otherwise hidden by whatever is nearer, as
-gz's are). An actor's own hitboxes can be turned on from the actor browser (**debug > actors > browse currently
+gz's are). Either way Link hides what's behind him, as he does the air walls: of his own shapes, only their near
+sides show over him. An actor's own hitboxes can be turned on from the actor browser (**debug > actors > browse currently
 loaded actors**, **minus**, **hitboxes**): drawn whatever **show** says, in the styles chosen here.
 
 Spheres are drawn as their outline and a ring round their middle, capsules as their two end rings, sides and
 rounded ends, boxes and other shapes edge by edge; filled, as solid shapes at about 30% opacity (each surface once,
-as gz's), so what's inside shows. Like the air walls and the other world overlays, they're drawn over the game's HUD. Under the list: how
-many of each there are near.
+as gz's), so what's inside shows. Like the air walls and the other world overlays, they're drawn over the game's HUD
+(drawing them under it flashed). They fade out whenever the game pauses, the item wheel included (whatever **hide
+world overlays over item wheel** says): what they show stops with the game, and the wheel turns the game's camera.
+Under the list: how many of each there are near.
 
 #### 2.3.2 Save position
 

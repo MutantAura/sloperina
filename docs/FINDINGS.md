@@ -2491,6 +2491,11 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   697 actors with a Life component, 425 have InitInvincibilityType `0x1A1CFA7E` (all NPCs, Deku Scrubs, Bongo Bongo's
   hands, signs, switches, trees); those are the "100/100" ones. Enemy health and the actor browser leave out an actor
   with no Death component, or whose start-up invincibility is still there.
+- **The boomerang's sensors:** while Link holds it, only a TgtHitAll hurtbox (layer 6, his number). Thrown
+  (a tap of ZR), it leaves his hand about 10 frames later and its PlayerAttack sensor (layer 7) comes on 2 frames
+  after that: a 32-point convex shape, radius 0.05, more than 40 faces. 13 frames later an AttackAll sensor (layer 10)
+  joins it, and all three change from Link's number (`0x1E`) to the boomerang's own. Caught, the PlayerAttack one goes
+  off; the AttackAll one stays on in his hand (so Link's AttackAll sensors are left out).
 - **A Lichii hang** (twice today, once on 25th November): about 2 s after an enemy was spawned (a Wolfos, then a Deku
   Baba), Lichii's GPU thread stopped ("Waited N s for the GPU thread to submit tick ..."), right after it logged
   "ASTC GPU decodes" and built a pipeline on the GPU thread; the module's game thread ran on until it stalled behind

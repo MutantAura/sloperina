@@ -95,6 +95,14 @@ The game patches are the same as 0.0.11's (patch v6).
   inner side.
 - **Bump boxes and hurtboxes** only for actors that are out (state 4 or 5): a bombchu's stayed after it went off
   (the user saw it); checked gone. Hidden enemies (a Wolfos in the ground) lose theirs too.
+- **Drawn as the air walls are** (asked for 27th November: "not collide with the HUD, Link, prompts and overlays
+  when you open the quick equip wheel"): Link hides what's behind him (the lines' depth margin is the walls' 3 cm,
+  not the ground lines' 30 cm; through walls, Link's depth alone, not over everything), and they fade out whenever the
+  game pauses (the wheel too, whatever the setting). Seen: the wheel (gone), Link and the horse (their far sides
+  hidden). Still over the HUD and the action prompt: under the HUD is FINDINGS 9.40's (turned off).
+- **The boomerang's attack** didn't show until a second, bigger sensor came on 13 frames into the flight: its first
+  (PlayerAttack, on 2 frames after it leaves his hand) is a 32-point shape with more faces than the 40 allowed, and
+  the box drawn instead was lines only, which fill leaves out. Now up to 255 faces, and the box is filled. Seen.
 - **Link's items** drawn while they can hit: Deku Nuts, Din's Fire, the boomerang, slingshot seeds (seen); arrows not
   tried (adult only). Spent ones (put away, state 6) left out.
 - **Bomb blasts** drawn as attacks (FINDINGS 9.39): seen with a bomb going off in Link's hands. Not seen: a thrown

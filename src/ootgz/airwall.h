@@ -42,6 +42,9 @@ void airwall_frame(bool gpu);
 void airwall_take(void);
 /* the opacity the render thread draws the lines and faces at: 0 to 1, fading as the game pauses and unpauses */
 extern volatile float airwall_fade;
+/* the hitboxes' (hitview.c) on top of it: they fade out whenever the game pauses (the item wheel too, whatever
+ * hide world overlays over item wheel says), as what they show stops with the game and the wheel turns its camera */
+extern volatile float airwall_hit_fade;
 const aw_dot_t *airwall_published(int *n);
 const aw_line_t *airwall_lines(int *n);
 void airwall_release(void);

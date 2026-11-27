@@ -50,6 +50,7 @@
  *   hitlist                    debugging: the hitboxes drawn last frame: kind, actor, its state, layer, where
  *   pausetype [<name> <+n|-n>] debugging: the game's pause types and their counts, or add to one (FINDINGS 9.1);
  *                              pausetype <name> masks <hex> <hex> <hex>: what it stops, set (FINDINGS 9.41)
+ *   equip shield <actor>       debugging: Link's shield (Weapon_Shield_Deku, _Hylian, _Mirror) worn, at once
  *   button <0..3> [<item>]     debugging: an item button's choice (murmur3), or put an item on it (2 is ZR)
  *   rtlist                     debugging: the colour targets the game bound in its last frame, and how often
  *   rtbinds                    debugging: the HUD's picture and how often the world's overlays went under the HUD
@@ -81,5 +82,8 @@ void remote_frame(bool held);
 bool remote_take_pause(void);
 bool remote_take_step(void);
 bool remote_take_run(void);
+
+/* Link's main action id (his action table's main slot, as status gives it), or -1 */
+int remote_link_action(void);
 
 #endif

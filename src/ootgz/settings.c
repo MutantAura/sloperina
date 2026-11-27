@@ -166,6 +166,7 @@ typedef struct {
   int32_t hitbox_styles; /* two bits a part: hitview_style */
   int32_t hitboxes_link_only;
   int32_t hitboxes_xray;
+  int32_t hitboxes_guard;
   int32_t remote_control;
   uint32_t binds[CMD_COUNT]; /* binds.h */
   char archive_folder[SAVE_FOLDER_LEN]; /* where archive now puts them (savebackup.h) */
@@ -275,6 +276,7 @@ static snapshot_t take_snapshot(void)
     s.hitbox_styles |= (hitview_style[part] & 3) << (2 * part);
   s.hitboxes_link_only = hitview_link_only;
   s.hitboxes_xray = hitview_xray;
+  s.hitboxes_guard = hitview_guard;
   return s;
 }
 
@@ -395,6 +397,7 @@ static void apply_snapshot(const snapshot_t *s)
   }
   hitview_link_only = s->hitboxes_link_only != 0;
   hitview_xray = s->hitboxes_xray != 0;
+  hitview_guard = s->hitboxes_guard != 0;
 }
 
 /* --- reading the file ------------------------------------------------------------------------- */
@@ -511,6 +514,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("hitbox_styles", hitbox_styles),
   INT_KEY("hitboxes_link_only", hitboxes_link_only),
   INT_KEY("hitboxes_through_walls", hitboxes_xray),
+  INT_KEY("hitboxes_shield_guard", hitboxes_guard),
   INT_KEY("remote_control", remote_control),
 };
 #define N_INT_KEYS (sizeof(int_keys) / sizeof(*int_keys))

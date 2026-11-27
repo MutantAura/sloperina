@@ -633,6 +633,13 @@ static void link_state(link_state_t *s)
   s->weapon = read_s32(read_ptr(actions, OFFSET(action_weapon_slot)), OFFSET(action_id));
 }
 
+int remote_link_action(void)
+{
+  link_state_t s;
+  link_state(&s);
+  return s.action;
+}
+
 /* "vy=6.125 hs=5.000", or "vy=- hs=-" where Link's velocity isn't known */
 static void motion_text(const link_state_t *s, char *buf, size_t cap)
 {
@@ -1088,6 +1095,14 @@ static void run_line(char *line, bool held)
       line = end + 1;
     }
     result(true, "hitlist: %d", n);
+  } else if (same(verb, "equip")) { /* equip shield <actor>: debugging */
+    char *what = take_word(&args), *item = take_word(&args);
+    static char kept[64];
+    snprintf(kept, sizeof(kept), "%s", item);
+    if (!same(what, "shield") || !*item || !pouch_equip_shield_now(kept))
+      result(false, "equip: shield <actor name> (Weapon_Shield_Deku, _Hylian, _Mirror), Link's gear found");
+    else
+      result(true, "equip shield %s", kept);
   } else if (same(verb, "pausetype")) { /* pausetype [<name or hex id> <+n or -n>]: the game's pause types */
     char *name = take_word(&args), *by = take_word(&args);
     int32_t delta = 0;

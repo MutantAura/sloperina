@@ -2412,6 +2412,8 @@ static bool get_hitbox_link_only(menu_item_t *it) { return hitview_link_only; }
 static void set_hitbox_link_only(menu_item_t *it, bool on) { hitview_link_only = on; }
 static bool get_hitbox_xray(menu_item_t *it) { return hitview_xray; }
 static void set_hitbox_xray(menu_item_t *it, bool on) { hitview_xray = on; }
+static bool get_hitbox_guard(menu_item_t *it) { return hitview_guard; }
+static void set_hitbox_guard(menu_item_t *it, bool on) { hitview_guard = on; }
 
 static void text_hitboxes(menu_item_t *it, char *buf, int len)
 {
@@ -3193,7 +3195,7 @@ static void build_scene(void)
   menu_add_text(&m_actor_ranges, text_interact_ranges, 0);
   m_actor_ranges.footer = 1;
 
-  menu_init(&m_hitboxes, "hitboxes", 5 + HV_PARTS);
+  menu_init(&m_hitboxes, "hitboxes", 6 + HV_PARTS);
   menu_item_t *hits = menu_add_check(&m_hitboxes, "show", get_hitboxes, set_hitboxes, 0);
   if (hits) {
     hits->hint = "the kinds under it, near link and the camera (an actor's own: debug > actors, its options)";
@@ -3217,6 +3219,12 @@ static void build_scene(void)
       it->log_label = hit_labels[part];
       it->indent = 2;
     }
+  }
+  menu_item_t *guard = menu_add_check(&m_hitboxes, "shield guard angle", get_hitbox_guard, set_hitbox_guard, 0);
+  if (guard) {
+    guard->hint = "green, while link guards: where his shield blocks attacks from (110 degrees each way)";
+    guard->log_label = "hitboxes, shield guard angle:";
+    guard->indent = 2;
   }
   menu_item_t *link_only = menu_add_check(&m_hitboxes, "only link's", get_hitbox_link_only, set_hitbox_link_only, 0);
   if (link_only) {

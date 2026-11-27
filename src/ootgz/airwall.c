@@ -668,7 +668,7 @@ static void add_edge_dots(aw_dot_t *out, int *n, aw_line_t *line_out, int *n_lin
   if (line_out) {
     /* the depth is linear along the line on the picture (as 1 / distance is): the cut ends' from the ends' */
     /* (a hitbox's lines don't lie on the ground's cells: the walls' margin, so Link hides what's behind him) */
-    bool loose = scene && !(color >= AW_HIT_ATTACK && color <= AW_HIT_HURT);
+    bool loose = scene && !(color >= AW_HIT_ATTACK && color <= AW_HIT_GUARD);
     float da = line_depth(cam, va[2], loose), db = line_depth(cam, vb[2], loose);
     if (*n_line < MAX_LINES)
       line_out[(*n_line)++] = (aw_line_t){ x0 / REF_WIDTH, y0 / REF_HEIGHT, x1 / REF_WIDTH, y1 / REF_HEIGHT,

@@ -311,6 +311,12 @@ static bool job_unequip(job_t *job)
   return true;
 }
 
+/* debugging (remote "equip shield <actor>"): Link's shield set and his gear applied again, at once */
+bool pouch_equip_shield_now(const char *item)
+{
+  return gd_set_str(GD_STR_SHIELD, item) && gear_reapply_now(); /* (as a memfile load does) */
+}
+
 void pouch_unequip(uint32_t str_slot, const char *item)
 {
   job_submit(JOB_KEY(JOB_UNEQUIP, murmur3(item)), job_unequip, str_slot, (intptr_t)item, 0, 0);

@@ -26,6 +26,7 @@ extern const char *const ocarina_names[3];
 int  pouch_ocarina(void);     /* the choice shown: pending one while queued, else what Link holds */
 void pouch_set_ocarina(int choice);
 void pouch_unequip(uint32_t str_slot, const char *item); /* take worn gear off Link */
+bool pouch_equip_shield_now(const char *item);           /* debugging: wear that shield (remote equip) */
 /* debugging (remote button): an item button's choice (murmur3), and with choice put that item on it */
 bool pouch_button(int slot, const char *choice, uint32_t *was);
 void pouch_refresh_screen(uintptr_t vtable_off);

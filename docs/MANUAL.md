@@ -248,6 +248,11 @@ on; under it, each kind has a switch, **off**, **outline** or **fill**:
 - **invincibility** (fill at first): **purple**: where Link, or an enemy that can be fought, is hit, while it's
   invincible: Link for about half a second after he's hurt, an enemy while it can't be hurt. (In gz these vanish.)
 - **hurtboxes** (fill at first): **blue** (gz's AC): where Link and the actors can be hit now.
+- **shield guard angle** (on at first): **green**, while Link guards with his shield (and as it takes a blocked
+  hit): a flat fan round him at the shield's height, 110° each way from his front: an attack from within it is
+  blocked, one from further round gets through. The same for the Deku, Hylian and Mirror shields (it's Link's,
+  not the shield's; which attacks each shield can block at all, the Deku Shield's fire, isn't drawn). The fan's
+  size is only for seeing it: the game checks the angle, not a distance.
 
 **only link's**: **show** draws Link's own alone (his body, his hurtboxes, his sword). **through walls** (off at
 first): also where walls, scenery or the actors themselves are in front (otherwise hidden by whatever is nearer, as

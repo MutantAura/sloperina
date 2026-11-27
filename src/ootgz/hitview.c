@@ -26,14 +26,16 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "age.h"
 #include "enemyhp.h"
 #include "lang.h"
 #include "link.h"
+#include "remote.h"
 #include "sys.h"
 #include "view.h"
 #include "z64hd.h"
 
-float sinf(float x), cosf(float x); /* from sdk */
+float sinf(float x), cosf(float x), atan2f(float y, float x); /* from sdk */
 
 static float root(float x) /* the sdk exports no sqrtf: the CPU's own instruction */
 {
@@ -45,6 +47,7 @@ static float root(float x) /* the sdk exports no sqrtf: the CPU's own instructio
 bool hitview_shown;
 int hitview_style[HV_PARTS] = { HV_FILL, HV_FILL, HV_FILL, HV_FILL };
 bool hitview_link_only;
+bool hitview_guard = true;
 bool hitview_xray;
 
 /* actors whose hitboxes are shown whatever the menu says (the actor browser's options), each part on its own (a
@@ -873,6 +876,43 @@ static int by_kind_then_distance(const found_t *a, const found_t *b)
   return a->distance < b->distance ? -1 : a->distance > b->distance;
 }
 
+/* Where Link's raised shield blocks from (FINDINGS 9.42): while he guards (his guard action, or its reaction to a
+ * blocked hit), a flat fan round his front at the shield's height, GUARD_HALF_DEG each way. The game's check is
+ * DamageParameters' GuardableAngleMaxDeg 120 (60 each way, round the shield, which turns up to 50 towards the
+ * attacker: MoveShieldLimitAngle); measured, a Deku Baba's bites were blocked up to 110 from his front and got
+ * through from 115, with the Deku and Hylian shields alike. The fan's radius is only for seeing it: the check has
+ * none. */
+#define GUARD_HALF_DEG 110.0f
+#define GUARD_RADIUS 1.5f
+#define GUARD_HEIGHT_ADULT 0.95f
+#define GUARD_HEIGHT_CHILD 0.6f
+#define GUARD_SEGMENTS 22
+#define ACTION_GUARD 65         /* Link's main actions (status act=): guarding */
+#define ACTION_GUARD_REACTION 142 /* ...and a hit blocked */
+
+static void guard_fan(const vec3f_t *link_pos)
+{
+  int action = remote_link_action();
+  double fx, fz;
+  if ((action != ACTION_GUARD && action != ACTION_GUARD_REACTION) || !link_facing(&fx, &fz))
+    return;
+  float yaw = atan2f((float)fx, (float)fz), half = GUARD_HALF_DEG * PI / 180.0f;
+  float c[3] = { link_pos->x, link_pos->y + (age_current() == 0 ? GUARD_HEIGHT_CHILD : GUARD_HEIGHT_ADULT), link_pos->z };
+  float prev[3];
+  for (int i = 0; i <= GUARD_SEGMENTS; i++) {
+    float a = yaw - half + 2 * half * (float)i / GUARD_SEGMENTS;
+    float p[3] = { c[0] + GUARD_RADIUS * sinf(a), c[1], c[2] + GUARD_RADIUS * cosf(a) };
+    outline = true;
+    if (i == 0 || i == GUARD_SEGMENTS)
+      line(c, p, AW_HIT_GUARD); /* its two edges */
+    if (i > 0) {
+      line(prev, p, AW_HIT_GUARD); /* the arc */
+      triangle(c, prev, p, AW_HIT_GUARD);
+    }
+    memcpy(prev, p, sizeof(prev));
+  }
+}
+
 void hitview_frame(void)
 {
   n_lines = n_faces = n_found = n_seen = 0;
@@ -899,6 +939,8 @@ void hitview_frame(void)
   }
   for (int i = 0; i < n_found && n_lines < HITVIEW_MAX_LINES; i++)
     draw(&found[i]);
+  if (hitview_shown && hitview_guard)
+    guard_fan(&link_pos);
   if (WATCH_SWORD && link_attacks && !link_attacks_before)
     log_printf("hitboxes: Link's attack out (%d shapes)", link_attacks);
   report();

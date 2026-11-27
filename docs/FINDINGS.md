@@ -2562,3 +2562,23 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - **The game's camera** doesn't run while stopped, so its view isn't built again when the free camera goes off:
   freecam.c keeps the game's eye, look-at and up (as its camera last set them) and puts them back and builds the view
   itself.
+
+### 9.42 Guarding with a shield (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- **No shape decides it.** Each shield has a target box (`Tgt`, 0.8 × 0.8 × 0.2 m, on the sensor Object layer, its
+  hit mask CustomReceiver alone) and a ChemicalObject sphere (0.3 m), both on whether Link guards or not; neither can
+  touch an enemy's attack. What decides it is Link's `Life/DamageParameters/Player`: `GuardableAngleMaxDeg` 120
+  (also `...ForToggle`), `BackwardAttackAngleMinDeg` 150, `IsUseGuardableAngleForToggle` false,
+  `BackwardAtkAngleMinDegForToggle` 90; `SensorHitParam` `GuardBasePosZOffset` 0; `PlayerGameParam`
+  `MoveShieldLimitAngleLeft/Right/Up/Down` 50 (the shield turns towards the attacker that far).
+- **Measured** with a Deku Baba (Kakariko, adult, ZL held: guarding without a target is Link's main action 65,
+  a blocked hit 142, a hit taken 134 with 16 frames of invincibility), Link placed 1.5 m from it at a bearing, the
+  angle taken from his facing on the frame before the reaction: blocked at 1–83° and at −110°, −76°; hit at +115°,
+  +131°, +136°, +139°. So about 110° each way from his front: 60° round the shield (120 in all) with the shield
+  turned up to 50°, as the parameters read. Deku and Hylian alike (the Mirror Shield wasn't tried: Lichii hung
+  twice after the Baba was spawned, FINDINGS' known spawn hang). Guarding turns Link to the camera's direction
+  within ten frames, and often towards the Baba, so most placements ended with it in front.
+- **Shields differ** only in `ShieldParam.BadConditionAttackGuard` (attack conditions they can block: the Deku
+  Shield has two false that the Hylian and Mirror have true, likely fire) and the Mirror Shield's light reflection
+  (`LightReflect` chemical element, `MirrorShieldParam` beam absorbing) and Link's `ReflectShield` body (a 0.3 m
+  capsule on his shield hand, entity layer Player, sub-layer mask HitOnlyBeam: beams only).
+- Drawn by hitview.c (**shield guard angle**): a 110° fan each way while Link's action is 65 or 142.

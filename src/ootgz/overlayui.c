@@ -98,6 +98,7 @@ static const gpu_colour_t line_colours[AW_NCOLORS] = {
   [AW_HIT_LINK] = { 0.96f, 0.96f, 0.96f, 1 },         /* white: Link's own body (gz's OC) */
   [AW_HIT_BUMP] = { 0.96f, 0.96f, 0.96f, 1 },         /* white: a body that bumps into Link (gz's OC) */
   [AW_HIT_HURT] = { 0.25f, 0.45f, 1.0f, 1 },          /* blue: where Link or an actor can be hit (gz's AC) */
+  [AW_HIT_GUARD] = { 0.30f, 0.95f, 0.45f, 1 },        /* green: where Link's raised shield blocks from (hitview.c) */
 };
 
 /* budget: the quads the lines may take. Short of them, the glows go first, then the farthest lines. */
@@ -122,7 +123,7 @@ static bool draw_lines(float w, float h, float px, int budget)
     gpu_colour_t c = line_colours[ci];
     bool guard = (ci >= AW_GUARD_SEARCH && ci <= AW_GUARD_OFF) || (ci >= AW_TALK && ci <= AW_DOOR_IN),
          far = ci >= AW_GUARD_SEARCH_FAR && ci <= AW_GUARD_OFF_FAR;
-    bool hit = ci >= AW_HIT_ATTACK && ci <= AW_HIT_HURT;
+    bool hit = ci >= AW_HIT_ATTACK && ci <= AW_HIT_GUARD;
     c.a = (far     ? GUARD_FAR_ALPHA
            : hit   ? HIT_FACE_ALPHA
            : guard ? GUARD_FACE_ALPHA
@@ -155,7 +156,7 @@ static bool draw_lines(float w, float h, float px, int budget)
       float far = (l->near - FADE_FROM) / FADE_OVER;
       far = far < 0 ? 0 : far > 1 ? 1 : far;
       float a = 1 - (1 - FADE_TO) * far;
-      bool hit = l->color >= AW_HIT_ATTACK && l->color <= AW_HIT_HURT;
+      bool hit = l->color >= AW_HIT_ATTACK && l->color <= AW_HIT_GUARD;
       c.a = (pass ? a : a * GLOW_ALPHA) * fade * (hit ? airwall_hit_fade : 1);
       if (c.a <= 0)
         continue;

@@ -43,7 +43,7 @@ static float root(float x) /* the sdk exports no sqrtf: the CPU's own instructio
 }
 
 bool hitview_shown;
-int hitview_style[HV_PARTS] = { HV_FILL, HV_OUTLINE, HV_FILL, HV_OUTLINE };
+int hitview_style[HV_PARTS] = { HV_FILL, HV_FILL, HV_FILL, HV_FILL };
 bool hitview_link_only;
 bool hitview_xray;
 

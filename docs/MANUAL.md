@@ -243,11 +243,11 @@ on; under it, each kind has a switch, **off**, **outline** or **fill**:
   slingshot seed or an arrow in flight. The game has a sword swing's live for only a few frames
   (4 in normal play); under frame advance fewer (1 seen), as the game applies the change that switches it off while
   frame advance holds it.
-- **bump boxes** (outline at first): **white** (gz's OC): the bodies Link bumps into and pushes against (each
+- **bump boxes** (fill at first): **white** (gz's OC): the bodies Link bumps into and pushes against (each
   character's standing shape, and such as a Wolfos's head), and his own.
 - **invincibility** (fill at first): **purple**: where Link, or an enemy that can be fought, is hit, while it's
   invincible: Link for about half a second after he's hurt, an enemy while it can't be hurt. (In gz these vanish.)
-- **hurtboxes** (outline at first): **blue** (gz's AC): where Link and the actors can be hit now.
+- **hurtboxes** (fill at first): **blue** (gz's AC): where Link and the actors can be hit now.
 
 **only link's**: **show** draws Link's own alone (his body, his hurtboxes, his sword). **through walls** (off at
 first): also where walls, scenery or the actors themselves are in front (otherwise hidden by whatever is nearer, as

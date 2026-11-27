@@ -391,7 +391,7 @@ static void apply_snapshot(const snapshot_t *s)
   hitview_shown = s->hitboxes != 0;
   for (int part = 0; part < HV_PARTS; part++) {
     int style = s->hitbox_styles >> (2 * part) & 3;
-    hitview_style[part] = style < HV_STYLES ? style : HV_OUTLINE;
+    hitview_style[part] = style < HV_STYLES ? style : HV_FILL;
   }
   hitview_link_only = s->hitboxes_link_only != 0;
   hitview_xray = s->hitboxes_xray != 0;

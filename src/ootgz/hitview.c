@@ -115,6 +115,9 @@ static void forget_gone(void)
 #define OWNER_LAYER 0x150 /* [+0x150]+8, low five bits */
 #define OWNER_STATE 0x70  /* bit 6 set: switched off */
 #define STATE_OFF 0x40
+#define STATE_NO_HIT 0x800 /* ForceNoHit's collision switch (main+0x158D40, FINDINGS: OneshotChangeForceNoHitMode) */
+#define REQUEST_NO_HIT 0xF8         /*   ... overridden by this one's bit 0 */
+#define REQUEST_NO_HIT_PENDING (1u << 19) /*   while the request's flags have this */
 #define STATE_REMOVED (1ull << 41) /* taken out of the world (main+0x4D8F80 sets it, with bit 25 for a change pending) */
 #define OWNER_REQUEST 0x60 /* a change queued for the physics' next step: */
 #define REQUEST_ON 0x84    /*   the state asked for (1 on) */
@@ -225,6 +228,14 @@ static bool switched_on(uintptr_t owner)
   if (*(const volatile uint64_t *)(owner + OWNER_STATE) & STATE_REMOVED)
     return false;
   uintptr_t request = rd(owner, OWNER_REQUEST);
+  /* collisions off (ForceNoHit): left where it was and touching nothing (one of a Stalfos's capsules, left where it
+   * last was while the Stalfos moves on) */
+  uint64_t request_flags = request && sys_mapped(request + REQUEST_FLAGS, 8, SYS_PERM_R) ?
+                           *(const volatile uint64_t *)(request + REQUEST_FLAGS) : 0;
+  bool no_hit = request_flags & REQUEST_NO_HIT_PENDING ? *(const volatile uint8_t *)(request + REQUEST_NO_HIT) & 1
+                : (*(const volatile uint64_t *)(owner + OWNER_STATE) & STATE_NO_HIT) != 0;
+  if (no_hit)
+    return false;
   if (request && sys_mapped(request + REQUEST_FLAGS, 8, SYS_PERM_R) &&
       (*(const volatile uint64_t *)(request + REQUEST_FLAGS) & REQUEST_PENDING))
     return *(const volatile uint32_t *)(request + REQUEST_ON) != 0;

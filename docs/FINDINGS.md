@@ -2632,3 +2632,8 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - The contact pass (`main+0x354EC0`, at `+0x354FA4`) drops a pair where either owner (`+0x110`, `+0x118` of the
   pair) has bit 41, through `main+0x3503F0`. So bit 41 is out of the world, whatever bit 6 says; the hit view treats
   it as switched off. Of 636 bodies in Hyrule Field, the 19 with bit 41 were all such spares.
+- Collisions switched off the other way, ForceNoHit (`[owner+0x70]` bit 11, or `[[owner+0x60]+0xF8]` bit 0 while
+  that request's `+0x100` bit 19 is set; see the levitation notes), leave a body in place too: a spawned Stalfos
+  kept a 0.3 m Character capsule (state `0x300100001c80`, bit 6 clear) where it had been while it walked on, drawn
+  white. Of the switched-on bodies in Hyrule Field only the camera's PerceptionEmitter and a removed spare of
+  Ingo's had bit 11; the hit view leaves these out as well.

@@ -32,7 +32,12 @@
 #include "gpuui.h"
 #include "overlayui.h"
 #include "nativeui.h"
+#include "frametrace.h"
+#ifndef FRAMETRACE_HOOKS
+#define FRAMETRACE_HOOKS 0 /* debugging only: wraps the game's draw calls (see frametrace.c) */
+#endif
 #include "scenedepth.h"
+#include "sdfs.h"
 #include "uishader.h"
 #include "got.h"
 #include "sys.h"
@@ -169,6 +174,7 @@ static void unlock_present(void) { __atomic_store_n(&present_lock, 0, __ATOMIC_R
 static nvn_queue_t *present_queue;
 static nvn_window_t *present_window;
 
+static void texdump_present(nvn_queue_t *queue);
 static void hook_present(nvn_queue_t *queue, nvn_window_t *window, int index)
 {
   lock_present();
@@ -176,7 +182,10 @@ static void hook_present(nvn_queue_t *queue, nvn_window_t *window, int index)
   present_queue = queue;
   present_window = window;
   scenedepth_present(real_getproc, device, queue);
+  frametrace_present(real_getproc, device,
+                     index >= 0 && index < swapchain_texture_count ? swapchain_textures[index] : 0);
   keep_clean_copy(queue, index); /* the game's picture before ours goes on it */
+  texdump_present(queue);
   draw_overlay(queue, window, index);
   gfx_release();
   airwall_release();
@@ -223,6 +232,8 @@ static void *wrap_proc(const char *name, void *proc)
     return proc;
   void *ours = scenedepth_wrap(name, proc);
   if (ours)
+    return ours;
+  if (FRAMETRACE_HOOKS && (ours = frametrace_wrap(name, proc)))
     return ours;
   if (names_equal(name, "nvnDeviceGetProcAddress")) {
     real_getproc = (getproc_t)proc;
@@ -2212,6 +2223,78 @@ static void keep_clean_copy(nvn_queue_t *queue, int index)
     return;
   clean_copy(queue, tex, true);
   clean_valid = true;
+}
+
+/* Remote "texdump <hex texture> [bytes per pixel]" (debugging): that texture's rows, as many as the frame advance
+ * buffer holds, copied at the next present and written raw to sloperinaGZ/dump/texture.bin (a 16-byte header: width,
+ * height, format, rows). For finding the game's HUD layer. */
+static volatile uintptr_t texdump_want;
+static volatile int texdump_bpp = 8;
+static volatile int texdump_ready;
+static int32_t texdump_head[4];
+void nvn_texdump(uintptr_t texture, int bpp)
+{
+  texdump_bpp = bpp > 0 && bpp <= 16 ? bpp : 8;
+  texdump_want = texture;
+}
+
+static void texdump_present(nvn_queue_t *queue)
+{
+  uintptr_t want = texdump_want;
+  if (!want)
+    return;
+  texdump_want = 0;
+  if (!sys_mapped(want, 0x100, SYS_PERM_R) || !clean_ready() || !clean_idle(100000000ull)) {
+    log_printf("texdump: %#lx: not now", (unsigned long)want);
+    return;
+  }
+  const nvn_texture_t *tex = (const nvn_texture_t *)want;
+  int w = fn.tex_width(tex), h = fn.tex_height(tex), format = fn.tex_format(tex);
+  if (w <= 0 || h <= 0 || w > 8192 || h > 8192) {
+    log_printf("texdump: %#lx: %dx%d isn't a texture's size", (unsigned long)want, w, h);
+    return;
+  }
+  int rows = (int)(CLEAN_MAX_BYTES / ((size_t)w * (size_t)texdump_bpp));
+  rows = rows < h ? rows : h;
+  nvn_addr_t addr = fn.pool_address(&clean_pool);
+  nvn_region_t part = { 0, 0, 0, w, rows, 1 };
+  fn.cmd_add_command(&clean_cmd, &clean_pool, (ptrdiff_t)CLEAN_MAX_BYTES, PAGE_SIZE);
+  fn.cmd_add_control(&clean_cmd, clean_control, sizeof(clean_control));
+  fn.cmd_begin(&clean_cmd);
+  fn.cmd_copy_to_buffer(&clean_cmd, tex, 0, &part, addr, 0);
+  nvn_handle_t handle = fn.cmd_end(&clean_cmd);
+  fn.queue_submit(queue, 1, &handle);
+  fn.queue_fence(queue, &clean_sync, SYNC_ALL_GPU_COMMANDS_COMPLETE, 0);
+  clean_sync_used = true;
+  if (!clean_idle(1000000000ull)) {
+    log_printf("texdump: the copy didn't finish");
+    return;
+  }
+  fn.pool_invalidate(&clean_pool, 0, (size_t)w * rows * texdump_bpp);
+  texdump_head[0] = w, texdump_head[1] = h, texdump_head[2] = format, texdump_head[3] = rows;
+  __atomic_store_n(&texdump_ready, 1, __ATOMIC_RELEASE); /* written on the game's thread (nvn_texdump_write) */
+}
+
+void nvn_texdump_write(void)
+{
+  if (!__atomic_load_n(&texdump_ready, __ATOMIC_ACQUIRE))
+    return;
+  int w = texdump_head[0], h = texdump_head[1], format = texdump_head[2], rows = texdump_head[3];
+  static const char path[] = SD_DIR "/dump/texture.bin";
+  fs_file_t f;
+  fs_create_dir(SD_DIR "/dump");
+  fs_delete_file(path);
+  if (fs_create_file(path, 0) != 0 || fs_open(&f, path, FS_WRITE | FS_ALLOW_APPEND) != 0) {
+    texdump_ready = 0;
+    return;
+  }
+  int32_t head[4] = { w, h, format, rows };
+  fs_write_option_t opt = { FS_WRITE_FLUSH };
+  fs_write(f, 0, head, sizeof(head), &opt);
+  fs_write(f, sizeof(head), clean_mem, (size_t)w * rows * texdump_bpp, &opt);
+  fs_close(f);
+  texdump_ready = 0;
+  log_printf("texdump: %dx%d format %#x, %d rows of %d bytes a pixel", w, h, format, rows, texdump_bpp);
 }
 
 bool nvn_present_held(void)

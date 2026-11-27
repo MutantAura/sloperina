@@ -14,6 +14,9 @@ const char *nvn_hook_game(uintptr_t main_base);
  * as before). */
 void nvn_freeze(bool paused);
 bool nvn_present_held(void);
+/* remote texdump (debugging): copy that texture at the next present to sloperinaGZ/dump/texture.bin */
+void nvn_texdump(uintptr_t texture, int bytes_per_pixel);
+void nvn_texdump_write(void); /* game thread: writes what the render thread copied */
 extern volatile uint32_t nvn_held_presents; /* frames presented while held */
 
 #endif

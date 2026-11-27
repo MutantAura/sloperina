@@ -14,6 +14,8 @@
 #include "menu.h"
 #include "levitate.h"
 #include "menus.h"
+#include "frametrace.h"
+#include "nvn.h"
 #include "physdump.h"
 #include "position.h"
 #include "sdfs.h"
@@ -1020,6 +1022,17 @@ static void run_line(char *line, bool held)
     run_place(args);
   } else if (same(verb, "actor")) {
     run_actor(args);
+  } else if (same(verb, "texdump")) {
+    uint64_t texture = parse_hex(take_word(&args));
+    int32_t bpp = 8;
+    char *b = take_word(&args);
+    if (*b)
+      parse_int(b, &bpp);
+    nvn_texdump((uintptr_t)texture, (int)bpp);
+    result(texture != 0, "texdump %#llx", (unsigned long long)texture);
+  } else if (same(verb, "frametrace")) {
+    frametrace_arm();
+    result(true, "frametrace: the next frame goes to the log");
   } else if (same(verb, "physdump")) {
     char *name = take_word(&args);
     int records = 0;
@@ -1281,6 +1294,8 @@ static bool waiting(bool held)
 
 void remote_frame(bool held)
 {
+  frametrace_write(); /* the debugging captures the render thread made: written here, on the game's thread */
+  nvn_texdump_write();
   if (!remote_enabled || !settings_sd()) {
     /* remote control off: what a script holds or has queued goes (its input would otherwise stay on the
      * controller, "for 0" for good, as nothing here counts it down) */

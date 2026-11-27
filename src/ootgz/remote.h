@@ -43,6 +43,9 @@
  *   attention                  debugging: Link's attention object and its do-action slot's address (FINDINGS 9.37)
  *   findref <hex>              debugging: where Link's components (two pointers deep) hold that value, or, for an
  *                              actor's address, its components, attention sender or id (+0x18)
+ *   frametrace                 debugging: the game's next frame of NVN commands (render targets, draws, submits) to
+ *                              sloperinaGZ/dump/frametrace.txt; only in a build with FRAMETRACE_HOOKS (nvn.c)
+ *   texdump <hex texture> [bpp] debugging: that texture's rows at the next present to sloperinaGZ/dump/texture.bin
  *   physdump [name]            debugging: the Havok worlds' bodies, their shapes and what they point to, and the
  *                              actors' heads and components, raw, to sd:/sloperinaGZ/dump/<name>.phd (FINDINGS 9.39;
  *                              records: u64 address, u32 size, u32 tag, the bytes)

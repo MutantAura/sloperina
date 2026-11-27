@@ -81,7 +81,7 @@ bool hitview_parts[HV_PARTS] = { true, true, true, true };
 
 /* PhiveConfig's layers */
 enum { SENSOR_PLAYER = 2, SENSOR_ENEMY = 3, SENSOR_NPC = 4, SENSOR_ANIMAL = 5, SENSOR_TGT_HIT_ALL = 6,
-       SENSOR_ENEMY_ATTACK = 8, SENSOR_NPC_ATTACK = 9, SENSOR_ATTACK_ALL = 10 };
+       SENSOR_PLAYER_ATTACK = 7, SENSOR_ENEMY_ATTACK = 8, SENSOR_NPC_ATTACK = 9, SENSOR_ATTACK_ALL = 10 };
 enum { ENTITY_PLAYER = 3, ENTITY_CHARACTER = 4 };
 
 enum { K_ATTACK, K_INVINCIBLE, K_BUMP_LINK, K_BUMP, K_HURT, N_KINDS }; /* drawing order */
@@ -154,6 +154,7 @@ static void combat_of(uintptr_t actor, uintptr_t link, bool *invincible, bool *f
 /* Link's own number in the layer objects ([[owner+0x150]+0xC]), learnt from his bodies that lead to him: some of his
  * sensors (an AttackAll one 1 m round him) don't */
 static uint32_t link_number;
+static int link_attacks, link_attacks_before; /* PlayerAttack shapes this frame and last: logged as they appear */
 
 static int classify(int world, uintptr_t owner, uintptr_t link)
 {
@@ -177,6 +178,15 @@ static int classify(int world, uintptr_t owner, uintptr_t link)
   if (world == 1 && !rd(owner, OWNER_CONTACTS))
     return -1;
   if (world == 1) {
+    /* Link's own (his sword, a thrown nut...: PlayerAttack, put in the world or switched on only while it's out), as
+     * gz's AT list has them */
+    if (layer == SENSOR_PLAYER_ATTACK || (links && layer == SENSOR_ATTACK_ALL)) {
+      if (!hitview_parts[HV_ATTACK] || !mask)
+        return -1;
+      link_attacks++;
+      return K_ATTACK;
+    }
+    /* anyone else's, while it can hurt Link */
     if (layer == SENSOR_ENEMY_ATTACK || layer == SENSOR_NPC_ATTACK || layer == SENSOR_ATTACK_ALL)
       return hitview_parts[HV_ATTACK] && (mask & (1ull << SENSOR_PLAYER)) && !links ? K_ATTACK : -1;
     if (layer < SENSOR_PLAYER || layer > SENSOR_TGT_HIT_ALL || (!actor && !links))
@@ -549,6 +559,8 @@ static int by_kind_then_distance(const found_t *a, const found_t *b)
 void hitview_frame(void)
 {
   n_lines = n_faces = n_found = n_seen = 0;
+  link_attacks_before = link_attacks;
+  link_attacks = 0;
   memset(counts, 0, sizeof(counts));
   vec3f_t link_pos;
   if (!hitview_active() || !z64hd_game || !z64hd_game->phive_mgr_ptr || !link_drawn_pos(&link_pos) ||
@@ -564,6 +576,8 @@ void hitview_frame(void)
   }
   for (int i = 0; i < n_found && n_lines < HITVIEW_MAX_LINES; i++)
     draw(&found[i]);
+  if (link_attacks && !link_attacks_before)
+    log_printf("hitboxes: Link's attack out (%d shapes)", link_attacks);
   report();
 }
 

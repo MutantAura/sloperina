@@ -78,6 +78,17 @@ The game patches are the same as 0.0.11's (patch v6).
 - **Enemy health / actor browser:** no bar and no life line for actors that can't be killed (no Death component, or
   still invincible from the start: NPCs, Deku Scrubs, Bongo Bongo's hands, signs, whose life is the game's default
   100). The browser's life line says **invincible** while it is.
+- **Link's own attacks** (PlayerAttack sensors, his sword) drawn red while they're out, as gz's AT list has them:
+  built, not yet seen in game (a remote B press doesn't swing; the user to swing).
+- **Under the HUD (asked for, not done):** everything the module draws goes on at present time, over the game's HUD.
+  The game's last command buffer of a frame (its own queue) calls 9 recorded blocks, then sets a 1920x1080 target
+  with no depth (NVN format 0x3F) twice and then the presented 2560x1440 one, with no draw calls of its own seen:
+  the HUD is likely drawn inside those blocks. Next: read that 1920x1080 target back (remote `texdump`) to see if
+  it's the HUD on its own (then the hitboxes can be masked by its alpha), else splice our drawing in before the
+  HUD's block. `frametrace` (remote) records a frame's render targets, draws, command buffer ends and submits to
+  dump/frametrace.txt, but its hooks (FRAMETRACE_HOOKS, off) crashed the game about a minute in, three times (an
+  abort in nn::fs::CloseFile from its "movie" module); without them it ran on. Its writes, and texdump's, are now
+  done on the game's thread.
 - Remote: `physdump` (raw capture of the Havok bodies for working out layouts offline).
 - **Not checked:** 1.0.0 (the body, owner and shape offsets are assumed the same; `vt_cct_body` is known there);
   boss attacks, Wolfos / Stalfos swings (a Wolfos spawn hung Lichii, below), NPCAttack (moving spikes), fire; enemy

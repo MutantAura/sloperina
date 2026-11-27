@@ -124,7 +124,7 @@ static void forget_gone(void)
 /* PhiveConfig's layers */
 enum { SENSOR_PLAYER = 2, SENSOR_ENEMY = 3, SENSOR_NPC = 4, SENSOR_ANIMAL = 5, SENSOR_TGT_HIT_ALL = 6,
        SENSOR_PLAYER_ATTACK = 7, SENSOR_ENEMY_ATTACK = 8, SENSOR_CHEMICAL_ELEMENT = 12, SENSOR_NPC_ATTACK = 9, SENSOR_ATTACK_ALL = 10 };
-enum { ENTITY_PLAYER = 3, ENTITY_CHARACTER = 4 };
+enum { ENTITY_OBJECT = 0, ENTITY_SMALL_OBJECT = 1, ENTITY_PLAYER = 3, ENTITY_CHARACTER = 4 };
 
 enum { K_ATTACK, K_INVINCIBLE, K_BUMP_LINK, K_BUMP, K_HURT, N_KINDS }; /* drawing order */
 static const uint8_t kind_colour[N_KINDS] = { AW_HIT_ATTACK, AW_HIT_INVINCIBLE, AW_HIT_LINK, AW_HIT_BUMP, AW_HIT_HURT };
@@ -398,6 +398,9 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
   if (links)
     return controller && layer == ENTITY_PLAYER ? K_BUMP_LINK : -1;
   if (layer == ENTITY_CHARACTER && (mask & (1ull << ENTITY_PLAYER)))
+    return K_BUMP;
+  /* a thing Link runs into and pushes (a bomb, a pot, a crate): an actor's object body that collides with him */
+  if ((layer == ENTITY_OBJECT || layer == ENTITY_SMALL_OBJECT) && actor && (mask & (1ull << ENTITY_PLAYER)))
     return K_BUMP;
   return -1;
 }

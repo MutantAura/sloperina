@@ -37,6 +37,31 @@ float sqrtf(float x), sinf(float x), cosf(float x); /* from sdk */
 #define LIFE_CURRENT 0x1C10
 #define LIFE_MAX 0x1C18
 #define PARAM_VALUE 0x8
+/* the Life component's invincibility (FINDINGS 9.39): two queues of reasons (u32 name hashes), each a ring: its
+ * array at +0, capacity +8, first +0xC, count +0x10. Either queue not empty is invincible (QueryIsInvincibleAny,
+ * 1.1.1 main+0x2A32460, reads the two counts). The first is the LifeParam InitInvincibilityType's "Invincible"
+ * (1), the second its other kind (2, with no damage reaction, QueryLifeIsInvincibleNoDamageReaction). */
+#define LIFE_INVINCIBLE_RINGS 2
+static const uint32_t life_ring[LIFE_INVINCIBLE_RINGS] = { 0x1C28, 0x1C60 };
+#define RING_DATA 0x0
+#define RING_CAPACITY 0x8
+#define RING_FIRST 0xC
+#define RING_COUNT 0x10
+#define RING_LOOK_MAX 16
+/* the reason an actor's LifeParam InitInvincibilityType gives from the start (the Life component's setup, 1.1.1
+ * main+0x8D9310, 1.0.0 the same constant at main+0x50E214): NPCs, Deku Scrubs, Bongo Bongo's hands, signs... */
+#define INVINCIBLE_FROM_START 0xE89F6A7Cu
+/* timed invincibility (Link's after a hit: 30 when hit, counting down to 0 in about half a second; Farore's Wind's,
+ * a revival fairy's): [life+0x230], four slots of 16 bytes from +0x50, the first float of each the time left (the
+ * second is last frame's, and keeps its last value once the first is down to 0); set through main+0x2F7E270 (1.1.1), found by watching Link bitten by a Deku Baba. Only
+ * read where the object is the same class as Link's. */
+#define LIFE_TIMERS 0x230
+#define TIMER_SLOTS 0x50
+#define TIMER_SLOT_SIZE 0x10
+#define TIMER_LEFT 0x0
+#define N_TIMER_SLOTS 4
+#define COMPONENTS_DEATH 0x1C0
+#define DEATH_ACTOR 0x18 /* the Death component's actor */
 
 /* states: below 2 not started (the game's walks skip them), 3 being set up, 4 and 5 running, 6 not yet
  * appeared (a Wolfos still in the ground, Stalfos before they drop, Poes before they show), 7..11 dying
@@ -100,6 +125,80 @@ static int actor_life(uintptr_t actor, int32_t *life, int32_t *max)
   return LIFE_OK;
 }
 
+/* Whether its Life component holds any invincibility now, and whether the one it was made with (an actor that
+ * can't be fought: NPCs, Deku Scrubs, signs) is still there. */
+static uintptr_t life_of(uintptr_t actor)
+{
+  uintptr_t components = readable(actor + ACTOR_COMPONENTS, 8) ? *(uintptr_t *)(actor + ACTOR_COMPONENTS) : 0;
+  uintptr_t life = readable(components + COMPONENTS_LIFE, 8) ? *(uintptr_t *)(components + COMPONENTS_LIFE) : 0;
+  return life && readable(life, 0x1C78) ? life : 0;
+}
+
+/* the timed invincibility object of the actor's Life component, if it's the class Link's is */
+static uintptr_t timers_of(uintptr_t life)
+{
+  uintptr_t timers = *(uintptr_t *)(life + LIFE_TIMERS);
+  if (!readable(timers, TIMER_SLOTS + N_TIMER_SLOTS * TIMER_SLOT_SIZE) || !in_main(*(uintptr_t *)timers))
+    return 0;
+  uintptr_t link = link_actor(), link_life = link ? life_of(link) : 0;
+  uintptr_t link_timers = link_life ? *(uintptr_t *)(link_life + LIFE_TIMERS) : 0;
+  if (!readable(link_timers, 8) || *(uintptr_t *)link_timers != *(uintptr_t *)timers)
+    return 0;
+  return timers;
+}
+
+static void actor_invincibility(uintptr_t actor, bool *invincible, bool *from_start)
+{
+  *invincible = *from_start = false;
+  uintptr_t life = life_of(actor);
+  if (!life)
+    return;
+  uintptr_t timers = timers_of(life);
+  for (int k = 0; timers && k < N_TIMER_SLOTS; k++) {
+    float left = *(const volatile float *)(timers + TIMER_SLOTS + k * TIMER_SLOT_SIZE + TIMER_LEFT);
+    if (left > 0 && left < 100000)
+      *invincible = true;
+  }
+  for (int r = 0; r < LIFE_INVINCIBLE_RINGS; r++) {
+    uintptr_t ring = life + life_ring[r];
+    int32_t count = *(int32_t *)(ring + RING_COUNT), capacity = *(int32_t *)(ring + RING_CAPACITY);
+    int32_t first = *(int32_t *)(ring + RING_FIRST);
+    if (count <= 0)
+      continue;
+    *invincible = true;
+    uintptr_t data = *(uintptr_t *)(ring + RING_DATA);
+    if (capacity <= 0 || count > capacity || first < 0 || first >= capacity || !data || (data & 3) ||
+        !sys_mapped(data, (size_t)capacity * 4, SYS_PERM_R))
+      continue;
+    for (int32_t i = 0; i < count && i < RING_LOOK_MAX; i++)
+      if (((const uint32_t *)data)[(first + i) % capacity] == INVINCIBLE_FROM_START)
+        *from_start = true;
+  }
+}
+
+/* Whether it has a Death component (it can die at all) */
+static bool has_death(uintptr_t actor)
+{
+  uintptr_t components = readable(actor + ACTOR_COMPONENTS, 8) ? *(uintptr_t *)(actor + ACTOR_COMPONENTS) : 0;
+  uintptr_t death = readable(components + COMPONENTS_DEATH, 8) ? *(uintptr_t *)(components + COMPONENTS_DEATH) : 0;
+  return death && readable(death, DEATH_ACTOR + 8) && *(uintptr_t *)(death + DEATH_ACTOR) == actor;
+}
+
+void actor_combat(uintptr_t actor, bool *invincible, bool *killable)
+{
+  bool from_start;
+  int32_t life, max;
+  actor_invincibility(actor, invincible, &from_start);
+  *killable = !from_start && has_death(actor) && actor_life(actor, &life, &max) == LIFE_OK && max > 0;
+}
+
+bool actor_invincible(uintptr_t actor)
+{
+  bool invincible, from_start;
+  actor_invincibility(actor, &invincible, &from_start);
+  return invincible;
+}
+
 /* --- the walk ------------------------------------------------------------------------------------ */
 
 static struct {
@@ -122,8 +221,9 @@ static struct {
 } walk;
 
 /* why an enemy got no bar */
-enum { SKIP_LIFE, SKIP_STATE, SKIP_MAX, SKIP_FAR, N_SKIPS };
-static const char *const skip_names[N_SKIPS] = { "no life", "not running", "no max life", "too far" };
+enum { SKIP_LIFE, SKIP_STATE, SKIP_MAX, SKIP_FAR, SKIP_UNFIGHTABLE, N_SKIPS };
+static const char *const skip_names[N_SKIPS] = { "no life", "not running", "no max life", "too far",
+                                                 "can't be killed" };
 static const char *const life_names[N_LIFE_RESULTS] = { "ok", "no components", "no life component",
                                                         "life unreadable", "no life values" };
 
@@ -177,6 +277,12 @@ static void use_actor(uintptr_t actor)
     note_skipped(actor, SKIP_FAR, result, life, max, sqrtf(distance_sq));
     return;
   }
+  bool invincible, from_start;
+  actor_invincibility(actor, &invincible, &from_start);
+  if (from_start || !has_death(actor)) { /* its life is the default 100 and means nothing */
+    note_skipped(actor, SKIP_UNFIGHTABLE, result, life, max, sqrtf(distance_sq));
+    return;
+  }
   walk.enemies++;
   int slot = walk.n;
   if (walk.n < walk.max) {
@@ -198,6 +304,7 @@ static void use_actor(uintptr_t actor)
   e->height = BAR_HEIGHT;
   e->life = life;
   e->max_life = max;
+  e->invincible = invincible;
 }
 
 /* in order, as the game does; iterative, with a stack of right children still to visit */
@@ -461,6 +568,11 @@ bool actor_read(uintptr_t actor, actor_read_t *out)
   out->pos[0] = pos[0], out->pos[1] = pos[1], out->pos[2] = pos[2];
   out->running = out->state >= STATE_RUNNING && out->state <= STATE_RUNNING_LAST;
   out->has_life = actor_life(actor, &out->life, &out->max_life) == LIFE_OK;
+  if (out->has_life) {
+    bool from_start;
+    actor_invincibility(actor, &out->invincible, &from_start);
+    out->killable = !from_start && has_death(actor) && out->max_life > 0;
+  }
   if (link_drawn_pos(&walk.link_pos)) {
     out->distance = distance_to_link(actor);
     out->distance_known = true;
@@ -468,10 +580,96 @@ bool actor_read(uintptr_t actor, actor_read_t *out)
   return true;
 }
 
+/* --- its pack's name ------------------------------------------------------------------------------------- */
+
+#define ACTOR_PACK_NAME 0x260 /* the pack it was made from (the layout's Gyaml): Obj_TBox_A_01 for TBox_Field_Iron */
+
+const char *actor_pack_name(uintptr_t actor)
+{
+  uintptr_t name = actor ? sys_ptr(actor + ACTOR_PACK_NAME) : 0;
+  if (!name || !sys_mapped(name, 64, SYS_PERM_R))
+    return 0;
+  const char *s = (const char *)name;
+  for (int i = 0; i < 64; i++) { /* a name: letters, digits and _, ended */
+    char c = s[i];
+    if (!c)
+      return i ? s : 0;
+    if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+      return 0;
+  }
+  return 0;
+}
+
+/* --- its layout entry (FINDINGS 9.46) -------------------------------------------------------------- */
+
+/* A placed actor's PreActor [actor+0x3D8] keeps where its entry is in the map's layout file, which stays loaded (the
+ * BYML of romfs/Banc/<map>/<layout>_{Static,Dynamic}.bcett.byml): +0xB0 its Dynamic dictionary, as the file's start
+ * (u64) then the node's offset in it (u32) and its type (u32, 0xC1 a dictionary); +0xC0 its Phive the same. */
+#define ACTOR_PREACTOR 0x3D8
+#define PRE_DYNAMIC 0xB0
+#define BYML_MAGIC 0x4259 /* "YB": little-endian */
+#define BYML_DICT 0xC1
+#define BYML_STRINGS 0xC2
+#define BYML_STRING 0xA0
+#define BYML_MAX_ENTRIES 256
+
+static bool byml_u32(uintptr_t at, uint32_t *v)
+{
+  return !(at & 3) && sys_read32(at, v);
+}
+
+/* a string table's string i, copied (false: out of range or unreadable) */
+static bool byml_string(uintptr_t table, uint32_t i, char *out, int len)
+{
+  uint32_t head, off;
+  if (!byml_u32(table, &head) || (head & 0xFF) != BYML_STRINGS || i >= head >> 8 || !byml_u32(table + 4 + 4 * i, &off))
+    return false;
+  uintptr_t s = table + off;
+  for (int n = 0; n < len; n++) {
+    if (!sys_mapped(s + n, 1, SYS_PERM_R))
+      return false;
+    out[n] = *(const volatile char *)(s + n);
+    if (!out[n])
+      return true;
+  }
+  out[len - 1] = 0;
+  return true;
+}
+
+bool actor_layout_string(uintptr_t actor, const char *key, char *out, int len)
+{
+  out[0] = 0;
+  uintptr_t pre = sys_ptr(actor + ACTOR_PREACTOR);
+  if (!pre || (pre & 7) || !sys_mapped(pre + PRE_DYNAMIC, 16, SYS_PERM_R))
+    return false;
+  uintptr_t file = *(const volatile uintptr_t *)(pre + PRE_DYNAMIC);
+  uint32_t node_off = *(const volatile uint32_t *)(pre + PRE_DYNAMIC + 8);
+  uint32_t node_type = *(const volatile uint32_t *)(pre + PRE_DYNAMIC + 12);
+  uint32_t magic, keys_off, strings_off, head;
+  if (!file || (file & 3) || node_type != BYML_DICT || !byml_u32(file, &magic) || (magic & 0xFFFF) != BYML_MAGIC ||
+      !byml_u32(file + 4, &keys_off) || !byml_u32(file + 8, &strings_off) || !byml_u32(file + node_off, &head) ||
+      (head & 0xFF) != BYML_DICT || head >> 8 > BYML_MAX_ENTRIES)
+    return false;
+  char name[64];
+  for (uint32_t i = 0; i < head >> 8; i++) {
+    uint32_t entry, value;
+    uintptr_t e = file + node_off + 4 + 8 * i;
+    if (!byml_u32(e, &entry) || !byml_u32(e + 4, &value))
+      return false;
+    if (!byml_string(file + keys_off, entry & 0xFFFFFF, name, sizeof(name)))
+      continue;
+    int k = 0;
+    while (name[k] && name[k] == key[k])
+      k++;
+    if (name[k] != key[k])
+      continue;
+    return entry >> 24 == BYML_STRING && byml_string(file + strings_off, value, out, len);
+  }
+  return false;
+}
+
 /* --- killing one (debug > actors > kill, FINDINGS 9.27) ------------------------------------------ */
 
-#define COMPONENTS_DEATH 0x1C0
-#define DEATH_ACTOR 0x18           /* the Death component's actor */
 #define DEATH_FALL_INTO_ABYSS 8u   /* game__death DeathReason: what the void areas send */
 #define DELETE_AS_AI 0u            /* the delete reason OneShotGenericDeleteThisActor gives */
 

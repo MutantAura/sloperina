@@ -161,7 +161,7 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 | *save and load* | |
 | **save position** | See [2.3.2](#232-save-position). |
 | *enemies* | |
-| **display enemy health** | A bar with **life/max** over each living enemy within 30 m of Link (red under a quarter); it goes when the enemy reaches 0. Enemies that haven't appeared yet (Wolfos still in the ground, Stalfos before they drop) have none, and none are drawn while the game is paused. In the game's style a bar fades out while its enemy is hidden behind walls or other scenery. |
+| **display enemy health** | A bar with **life/max** over each living enemy within 30 m of Link (red under a quarter); it goes when the enemy reaches 0. Enemies that can't be killed (Deku Scrubs, Bongo Bongo's hands: the game makes them invincible from the start, and gives them its default life of 100) have none. Enemies that haven't appeared yet (Wolfos still in the ground, Stalfos before they drop) have none, and none are drawn while the game is paused. In the game's style a bar fades out while its enemy is hidden behind walls or other scenery. |
 | **display through walls** | Also show the bars of enemies hidden behind the scenery (the game's style). Indented under **display enemy health**. |
 | **reload map** | Reloads the current map (at the age set in **link**). Last, above **return**. |
 
@@ -230,6 +230,51 @@ treat them as a guide. **The game's own answer**: a pale diamond on a stem over 
 now, read from Link's attention (not worked out), and its name on the menu's line (**A: ...**); its areas are drawn
 bright while it is. Without one, a darker diamond over what **ZL** would take for an action (a shopkeeper you have to
 Z-target to talk to), whether ZL is held or not, and **ZL: ...** on the line.
+
+**hitboxes**: the game's own physics shapes round Link and whatever is near him or the camera (within 25 m), read
+from the game every frame, in gz's hit view colours. As in gz, only what can touch something now is drawn: a shape
+the game has switched off (an enemy's bite between bites, Link's sword between swings) isn't, and nor is one the game
+collects no hits for (the castle grounds' wagon horse has one round it that never hurts Link). **show** turns them
+on; under it, each kind has a switch, **off**, **outline** or **fill**:
+- **attack hitboxes** (fill at first): **red** (gz's AT): an attack while it can hit: an enemy's bite or swing, a projectile
+  (a Deku Scrub's nut), a bomb's or bombchu's blast (or a Dodongo's, a bomb flower's...: its 4.3 m sphere, for the
+  one frame the game has it; seen from inside, the view goes red), and Link's own attacks while they can hit: his
+  sword mid-swing, a Deku Nut's flash, Din's Fire, the boomerang in flight (not once it's back in his hand), a
+  slingshot seed or an arrow in flight. The game has a sword swing's live for only a few frames
+  (4 in normal play); under frame advance fewer (1 seen), as the game applies the change that switches it off while
+  frame advance holds it.
+- **bump boxes** (fill at first): **white** (gz's OC): the bodies Link bumps into and pushes against (each
+  character's standing shape, and such as a Wolfos's head), and his own.
+- **invincibility** (fill at first): **purple**: where Link, or an enemy that can be fought, is hit, while it's
+  invincible: Link for about half a second after he's hurt, an enemy while it can't be hurt. (In gz these vanish.)
+- **hurtboxes** (fill at first): **blue** (gz's AC): where Link and the actors can be hit now.
+- **collectables** (fill at first): **gold**: where Link takes a drop by touching it (rupees and tokens, hearts,
+  heart pieces and containers, magic jars, arrow bundles, Deku Nuts, Seeds and Sticks, bomb and bombchu drops,
+  scrub seeds, fairies) and the bugs, fish and butterflies he can catch.
+- **shield guard angle** (on at first): **green**, while Link guards with his shield (and as it takes a blocked
+  hit): a bubble round him at the shield's height, with a cone cut out at his back, its edge ringed: an attack from
+  any direction within 110° of his front (to the sides, above or below) is blocked, one from the cone behind him
+  gets through. Straight above and below him are covered. Enemies get one too while their shield is up (a Stalfos,
+  Dark Link, anything that guards): narrower, 50° each way from their front, as they turn their whole body to
+  face what they block. The same for the Deku, Hylian and Mirror shields (it's Link's,
+  not the shield's; which attacks each shield can block at all, the Deku Shield's fire, isn't drawn). The fan's
+  size is only for seeing it: the game checks the angle, not a distance.
+
+**only link's**: **show** draws Link's own alone (his body, his hurtboxes, his sword). **through walls** (off at
+first): also where walls, scenery or the actors themselves are in front (otherwise hidden by whatever is nearer, as
+gz's are). Either way Link hides what's behind him, as he does the air walls: of his own shapes, only their near
+sides show over him. An actor's own hitboxes can be turned on from the actor browser (**debug > actors > browse currently
+loaded actors**, **minus**), each kind on its own: **attack hitboxes**, **bump boxes**, **invincibility**, **hurtboxes** and
+**collectables**
+(the browser's panel shows which are ticked). A kind ticked there is drawn for that actor whatever **show** says, in
+the style chosen here for it (filled if that's **off**).
+
+Spheres are drawn as their outline and a ring round their middle, capsules as their two end rings, sides and
+rounded ends, boxes and other shapes edge by edge; filled, as solid shapes at about 30% opacity (each surface once,
+as gz's), so what's inside shows. Like the air walls and the other world overlays, they're drawn over the game's HUD
+(drawing them under it flashed). They fade out whenever the game pauses, the item wheel included (whatever **hide
+world overlays over item wheel** says): what they show stops with the game, and the wheel turns the game's camera.
+Under the list: how many of each there are near.
 
 #### 2.3.2 Save position
 
@@ -526,7 +571,7 @@ Caveats:
 
 **actors**: like gz's actors menu.
 
-- **browse currently loaded actors**: the free camera over a beam on the ground, as when placing (below) but with nothing to place: for going from actor to actor, going to them and killing them. What **d-left** and **d-right** go through starts as **look at** says, under it: **all kinds** (enemies, NPCs, objects and items; to start with), **enemies**, **npcs** or **objects**. While browsing, **L** and **R** change it, moving on to the nearest of them at once. (Placing, they go through all kinds.) Leaving the beam on an actor (letting go of the stick) locks on to it, as **d-left** and **d-right** do, and the camera follows it as it walks (a guard on its patrol); moving the stick lets go. **Actor options**: the panel lists the switches the actor has, one under another with a checkbox each, off at first: a guard's **vision** and **patrol path**; any other actor the map gives a path to walk (a townsperson, a dog, a cucco, a moving platform: the layout links it to its rail) its **path**, drawn as a guard's is; and for anything Link can talk to or act on its **talk radius**, **z-target talk** and **target break line** (named by what A does: a sign's **check radius**, a door's **open door prompt radius**, its A prompt's reach, apart from its **door open/close radius**), and a door's **door open/close radius** ([2.3.1](#231-environment)) and **close timer watch**: ticked, the **door close timer** watch joins the watches (and the watches are turned on) for that door: the frames before it shuts once nobody holds it open (135 while someone does: it counts down from there and shuts at 0). A door counts in its own AI when it was opened for an NPC and in its opening event when Link opened it; the watch shows whichever is counting. The counts are looked for while the door is watched, so a new one can take a moment to show; **closed** before the door has been opened. Unticking takes the watch off; it's forgotten when the door goes (a map change). A door's menu also has **open door** while it's shut and **close door** while it's open (the pose of its panel, however it was opened; the item changes as the door does). **open door** opens it by itself, as it opens for an NPC, wherever Link is; **close door** shuts it at once, even with Link (or anyone) in the half disc that would hold it open, pushing whoever is in the way. Either is done once, and the door then goes on as it does (open, it shuts 135 frames after nobody is near). Neither needs the watch. **door open/close radius** also draws, in red, where the door pushes whatever is in its way as it shuts: a half disc as wide as the door, on the side it swings to. They're its own, whatever scene > environment says (that draws them for everything near). **minus** (**actor options** in the controls bar) opens a menu of them for that actor; **return** closes it and you're back browsing, on the same actor. They're forgotten when it goes (a map change). The browser also looks round its own spot, so an actor far from Link is drawn too. Under its switches, a **position** heading with the actor's x, y and z, or, when the beam isn't on an actor, a **cursor** heading with the beam's spot (it follows the sticks). The explorer shows its cursor the same way, and the free camera a small panel with the camera's position. What NPCs hold (a guard's spear) isn't stepped to: it stands where its NPC does.
+- **browse currently loaded actors**: the free camera over a beam on the ground, as when placing (below) but with nothing to place: for going from actor to actor, going to them and killing them. What **d-left** and **d-right** go through starts as **look at** says, under it: **all kinds** (enemies, NPCs, objects, items and chests; to start with), **enemies**, **npcs** or **objects** (chests among them). While browsing, **L** and **R** change it, moving on to the nearest of them at once. (Placing, they go through all kinds.) Leaving the beam on an actor (letting go of the stick) locks on to it, as **d-left** and **d-right** do, and the camera follows it as it walks (a guard on its patrol); moving the stick lets go. **Actor options**: the panel lists the switches the actor has, one under another with a checkbox each, off at first: a guard's **vision** and **patrol path**; any other actor the map gives a path to walk (a townsperson, a dog, a cucco, a moving platform: the layout links it to its rail) its **path**, drawn as a guard's is; and for anything Link can talk to or act on its **talk radius**, **z-target talk** and **target break line** (on something that can't be Z-targeted, a chest or a sign, it's where the A prompt goes as Link walks away: **open prompt break line**, **check prompt break line**; and it has no z-target switch) (named by what A does: a sign's **check radius**, a door's **open door prompt radius**, its A prompt's reach, apart from its **door open/close radius**), and a door's **door open/close radius** ([2.3.1](#231-environment)) and **close timer watch**: ticked, the **door close timer** watch joins the watches (and the watches are turned on) for that door: the frames before it shuts once nobody holds it open (135 while someone does: it counts down from there and shuts at 0). A door counts in its own AI when it was opened for an NPC and in its opening event when Link opened it; the watch shows whichever is counting. The counts are looked for while the door is watched, so a new one can take a moment to show; **closed** before the door has been opened. Unticking takes the watch off; it's forgotten when the door goes (a map change). A door's menu also has **open door** while it's shut and **close door** while it's open (the pose of its panel, however it was opened; the item changes as the door does). **open door** opens it by itself, as it opens for an NPC, wherever Link is; **close door** shuts it at once, even with Link (or anyone) in the half disc that would hold it open, pushing whoever is in the way. Either is done once, and the door then goes on as it does (open, it shuts 135 frames after nobody is near). Neither needs the watch. **door open/close radius** also draws, in red, where the door pushes whatever is in its way as it shuts: a half disc as wide as the door, on the side it swings to. They're its own, whatever scene > environment says (that draws them for everything near). Its hitbox switches are the kinds it has ([2.3.1](#231-environment)): **attack hitboxes**, **bump boxes**, **hurtboxes**, **invincibility** (for something with hurtboxes that can be fought) and **collectables** (a rupee, a heart, a bug), each listed only when its bodies include one, whether it's on at the moment or not (an enemy's attack counts between swings). A chest, a fence or a sign has none. An actor with no switches at all has no **actor options** (**minus** does nothing). **minus** (**actor options** in the controls bar) opens a menu of them for that actor; **return** closes it and you're back browsing, on the same actor. They're forgotten when it goes (a map change). The browser also looks round its own spot, so an actor far from Link is drawn too. Under its name, what the map's layout says it holds: a chest's **contains** (the item it gives, by the game's name: `TBox_Rupee_Red`, `Item_Dungeon_SmallKey`, `Item_ScrubBusinessSeed` the business scrub seed) and, for the chests that check, what it gives instead when Link already has something (**TBox_Rupee_Red if Link has TBox_Shield_Deku**); a pot's, a rock's or a bush's **drops**. It's read from the layout the game has loaded, so spawned actors have none, and the treasure chest game's chests show what their layout says, which may not be what the game decides when it's played. Under its switches, a **position** heading with the actor's x, y and z, or, when the beam isn't on an actor, a **cursor** heading with the beam's spot (it follows the sticks). The explorer shows its cursor the same way, and the free camera a small panel with the camera's position. What NPCs hold (a guard's spear) isn't stepped to: it stands where its NPC does.
   - **A** goes to the actor: Link is put where it is, the way **load position** moves him, without changing your saved position. Inside something solid (a bed, a door) the game puts him straight back.
   - **Y** kills or despawns it, sending the actor the game's own death request, the one a fall into a bottomless pit sends: it fades out, with no drop. Where the game refuses it (bosses and the like, and some NPCs), where the actor has no death of its own, or where it's taken but the actor is still standing half a second later, the actor is despawned instead: the game's own delete, as its AI uses, with no death, drop or respawn flag. A despawned boss's fight won't finish as it should. Scenery, the game's system actors and Link are never touched. A killed or despawned actor may be back when the map reloads.
 - **quick spawn**: the actors to make, by kind: **animals** (Epona, a cucco, a bug, a cow...), **enemies**,
@@ -545,7 +590,7 @@ Caveats:
   anyway).
 - **spawn where**: **placed with the sticks** (to start with) or **in front of Link**. Placed, the menu closes and the free camera looks down on a yellow beam standing on a ring, with an arrow for the way the actor will face, as furniture is placed in The Sims on a console. The spot starts 3 m in front of Link, or where the free camera is looking if it's already on.
 
-  While placing or browsing, a panel at the top left names what's under the beam (with its life under the name, if it has any) and what d-left and d-right go through, and the controls are shown in a band across the bottom of the screen with the game's own button glyphs, fading in and out with it (in gz's menu style they're in the panel instead):
+  While placing or browsing, a panel at the top left names what's under the beam (with its life under the name if it can be killed, and **invincible** while it can't be hurt; nothing for an NPC, sign or Deku Scrub, which the game makes invincible from the start with its default life of 100) and what d-left and d-right go through, and the controls are shown in a band across the bottom of the screen with the game's own button glyphs, fading in and out with it (in gz's menu style they're in the panel instead):
   - the **left stick** moves the spot over the ground, as the camera faces; it keeps to the ground (up steps and slopes, off ledges) and turns orange where there's no ground under it, keeping its height
   - **d-up** and **d-down** move it up and down: it turns orange, keeps that height as the left stick moves it, and a line goes down from it to the ground under it
   - **L3** (pressing the left stick): back to Link, the spot on the ground where he stands and the camera with it
@@ -860,6 +905,18 @@ game's pause screen closed):
   menu, the watches, the input display and the log stay live over it. The menu can be opened and used while
   paused; its button works the menu then. (If the game's picture is larger than 2560x1440, the last frame stays
   on screen as it was and a menu opened while paused can't be seen; run again then closes it.)
+- **The free camera and the actor browser work while paused** (**debug > free camera** or its bind, **debug > actors
+  > browse currently loaded actors**, the explorer): the game goes on drawing with its world stopped (the game's
+  own pause, as its pause screen's, made to leave its camera running), so you can fly the camera and step from actor
+  to actor with every control as when the game runs, and nothing in the world moves meanwhile: Link, the actors,
+  a boomerang in flight stay exactly where they were. With the free camera, frame advance's button works as ever:
+  a tap plays one frame (the world moves on by just that one, the camera staying where you put it), held they play
+  one after another; and with the game running, a tap pauses it with the camera kept. (In the actor browser it
+  waits, as its **L** and **R** are its own, and so does **run again**, whose **L3** is the camera's.) Leaving it
+  (**B**, or unticking the free camera) holds the game again where it was, with its own view back; the next tap
+  plays the very next frame. **One catch:** an actor that was off the screen when the game paused isn't
+  drawn while it's paused (what's drawn is decided in each actor's own update, which is what's stopped); the browser
+  still steps to it and shows its options, and it's back as soon as a frame plays.
 
 ## 5 Settings file
 

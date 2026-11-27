@@ -17,6 +17,7 @@ typedef struct {
   float pos[3];        /* where it stands (its feet), world space */
   float height;        /* how far above pos to draw the bar */
   int32_t life, max_life;
+  bool invincible;     /* its Life component holds an invincibility now */
 } enemy_t;
 
 /* actors.c: the enemies in the scene, up to max */
@@ -50,8 +51,21 @@ typedef struct {
   bool running;
   bool has_life;        /* life and max_life read from its Life component */
   int32_t life, max_life;
+  bool killable;        /* has_life, a Death component, and not made invincible (an NPC's default 100 life) */
+  bool invincible;      /* its Life component holds an invincibility now */
 } actor_read_t;
 bool actor_read(uintptr_t actor, actor_read_t *out);
+/* actors.c: its Life component holds an invincibility now (any reason); game thread */
+bool actor_invincible(uintptr_t actor);
+/* actors.c: the same, and whether it can be killed (actor_read_t's killable); game thread */
+void actor_combat(uintptr_t actor, bool *invincible, bool *killable);
+/* actors.c: a string from its entry in the map's layout (its Dynamic: "Drop__DropActor", what a chest holds or a pot
+ * drops), read from the layout file the game keeps loaded (FINDINGS 9.46); false where it has none (spawned actors,
+ * the key not there, not a string); game thread */
+bool actor_layout_string(uintptr_t actor, const char *key, char *out, int len);
+/* actors.c: the name of the pack it was made from (the layout's Gyaml: Obj_TBox_A_01), where its own name (+0x20,
+ * actor_read's) is its ActorName (TBox_Field_Iron, shared by every field chest); 0 if unreadable; game thread */
+const char *actor_pack_name(uintptr_t actor);
 
 /* actors.c: kill an actor found earlier, the game's way (FINDINGS 9.27): a death request, reason FallIntoAbyss (the
  * void's), to its Death component; with none, an NPC or a thing (Npc_, Obj_, Item_) is deleted as the AI's delete

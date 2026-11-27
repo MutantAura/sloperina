@@ -36,6 +36,7 @@
 #include "settings.h"
 #include "voidmap.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "warp.h"
 #include "watches.h"
@@ -54,6 +55,7 @@
 #include "remake.h"
 #include "actorsmenu.h"
 #include "freecam.h"
+#include "pausemgr.h"
 #include "placer.h"
 #include "remote.h"
 #include "eventskip.h"
@@ -153,7 +155,8 @@ static fa_event_t fa_read_button(void)
   uint64_t ticks_per_ms = sys_tick_freq() / 1000;
   uint64_t now = sys_tick();
 
-  if (menu_current || fa_menu_was_open || placer_active || freecam_on) { /* the menu's, the placer's, the camera's */
+  /* the menu's, the placer's (its L and R are its own); the free camera's only with frame advance off */
+  if (menu_current || fa_menu_was_open || placer_active || (freecam_on && !frame_advance)) {
     fa_button_down = false;
     fa_blocked_after_menu = true;
     fa_menu_closed_at = now;
@@ -211,7 +214,7 @@ static void command_context(void)
   for (int c = 0; c < CMD_COUNT; c++)
     binds_set_enabled((command_t)c, command_info[c].group == CMD_GROUP_MENU ? open : !open && !placing);
   binds_set_enabled(CMD_MENU, true);
-  binds_set_enabled(CMD_ADVANCE, frame_advance && !open && !placing);
+  binds_set_enabled(CMD_ADVANCE, frame_advance && !open && !placer_active); /* (the free camera's too) */
   binds_set_enabled(CMD_RUN, frame_advance && !placing);
   binds_set_enabled(CMD_LEVITATE, levitate_enabled && !open && !placing);
   binds_set_enabled(CMD_FREECAM, !open); /* its own bind turns it off again */
@@ -286,6 +289,50 @@ static void fa_release_buffered_input(void)
   input_force_active = buffered_buttons || buffered_stick_moved[0] || buffered_stick_moved[1];
 }
 
+/* The camera tools while frame advance holds the game (the free camera, the explorer, browsing actors: placer.c,
+ * freecam.c): they need frames drawn, which a held game doesn't make. So the game is let run with its world stopped
+ * by the pause manager (pausemgr_freeze, FINDINGS 9.41): nothing moves (the actors, Link, the timers) while its
+ * camera and drawing go on, and the tools work as with the game running. Left, the game is held again where it was:
+ * the world's frames are the same before and after. */
+static bool fa_tools_frozen;
+static bool fa_tools_ending;  /* the tool was left: one more frame, so the picture held is the game's own view */
+static bool fa_tools_stepped; /* the frame advance button, with the free camera: this frame plays, the world going */
+
+static bool fa_tool_wanted(void) { return placer_active || freecam_on; }
+
+/* fa_frame, first: true while this frame goes through stopped for a tool */
+static bool fa_tools_frame(void)
+{
+  if (!fa_tools_frozen)
+    return false;
+  if (fa_tools_stepped) { /* the frame let through has played: stopped again (at once: the next is) */
+    pausemgr_freeze(true);
+    fa_tools_stepped = false;
+  }
+  if (fa_paused && (frame_advance || fa_by_remote) && fa_tool_wanted()) {
+    fa_tools_ending = false;
+    /* With the free camera (not the placer, whose L and R are its own), frame advance's button works as while
+     * held: a tap lets one frame play, held they play one after another. The world goes for that one frame (the
+     * freeze lowered now and raised again at the next frame's hook, both at once: pausemgr.c). */
+    if (frame_advance && freecam_on && !placer_active) {
+      if (bind_length(binds[CMD_ADVANCE]) == 1)
+        input_hide_from_game |= cmd_mask(CMD_ADVANCE);
+      fa_event_t event = fa_read_button();
+      if ((event == FA_TAP || event == FA_REPEAT) && pausemgr_freeze(false))
+        fa_tools_stepped = true;
+    }
+    return true;
+  }
+  if (fa_paused && !fa_tools_ending) {
+    fa_tools_ending = true;
+    return true;
+  }
+  pausemgr_freeze(false);
+  fa_tools_frozen = fa_tools_ending = false;
+  log_printf("frame advance: the camera tool is done: held again");
+  return false;
+}
+
 /* Holds the game's thread here while paused, running the menu and overlays, until a frame is let
  * through or the game is set running again. */
 static void fa_hold_game(void)
@@ -338,6 +385,15 @@ static void fa_hold_game(void)
     }
     menu_controls();
     actorsmenu_frame();
+    /* a camera tool (from the menu, or the free camera's bind): the game goes on with its world stopped */
+    if (!menu_current && cmd_pressed(CMD_FREECAM))
+      freecam_set(true);
+    if (fa_tool_wanted() && pausemgr_freeze(true)) {
+      fa_tools_frozen = true;
+      fa_tools_ending = false;
+      log_printf("frame advance: a camera tool: the world stopped, the game drawing it");
+      break;
+    }
     /* return to title screen: chosen in the menu, by its bind or by a script, the game is let go to leave play */
     if (cmd_pressed(CMD_TITLE)) {
       const char *problem = title_start();
@@ -386,6 +442,8 @@ static void fa_hold_game(void)
 
 static void fa_frame(void)
 {
+  if (fa_tools_frame())
+    return;
   if (remote_take_pause() && !fa_paused) { /* a script's pause: as a tap of the button, below */
     fa_paused = true;
     fa_by_remote = true;
@@ -474,6 +532,7 @@ static void frame(void)
   voidmap_frame();
   guardview_frame(); /* the guards' sight: before airwall_frame draws it */
   interactview_frame(); /* where Link can talk to or act on actors: the same */
+  hitview_frame();      /* the hitboxes: the same */
   airwall_frame(overlays_on_gpu);
   enemyhp_frame(overlays_on_gpu);
   menus_research_frame();

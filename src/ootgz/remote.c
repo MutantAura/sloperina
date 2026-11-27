@@ -10,14 +10,20 @@
 #include "enemyhp.h"
 #include "gamedata.h"
 #include "input.h"
+#include "pausemgr.h"
 #include "link.h"
 #include "menu.h"
 #include "levitate.h"
 #include "menus.h"
+#include "frametrace.h"
+#include "nvn.h"
+#include "physdump.h"
 #include "position.h"
+#include "pouch.h"
 #include "sdfs.h"
 #include "settings.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "sys.h"
 #include "title.h"
@@ -1019,6 +1025,190 @@ static void run_line(char *line, bool held)
     run_place(args);
   } else if (same(verb, "actor")) {
     run_actor(args);
+  } else if (same(verb, "texdump")) {
+    uint64_t texture = parse_hex(take_word(&args));
+    int32_t bpp = 8;
+    char *b = take_word(&args);
+    if (*b)
+      parse_int(b, &bpp);
+    nvn_texdump((uintptr_t)texture, (int)bpp);
+    result(texture != 0, "texdump %#llx", (unsigned long long)texture);
+  } else if (same(verb, "hudtest")) { /* hudtest <hex target> [<hex cmd> <nth bind>] | off */
+    char *what = take_word(&args);
+    nvn_hud_test = same(what, "on");
+    nvn_hud_test_target = 0;
+    if (!same(what, "off") && !same(what, "on")) {
+      nvn_hud_test_target = (uintptr_t)parse_hex(what);
+      char *cmd = take_word(&args);
+      int32_t k = 0;
+      nvn_hud_test_cmd = *cmd ? (uintptr_t)parse_hex(cmd) : 0;
+      parse_int(take_word(&args), &k);
+      nvn_hud_test_bind = (int)k;
+      nvn_hud_test = k > 0;
+    }
+    result(true, "hudtest %#lx %#lx %d", (unsigned long)nvn_hud_test_target, (unsigned long)nvn_hud_test_cmd,
+           nvn_hud_test_bind);
+  } else if (same(verb, "rtbinds")) {
+    uintptr_t cmds[16];
+    int binds[16];
+    int n = nvn_hud_binds(cmds, binds, 16);
+    for (int i = 0; i < n; i++)
+      result(true, "rtbinds: cmd %#lx: %d binds", (unsigned long)cmds[i], binds[i]);
+    result(true, "rtbinds: %d command buffers", n);
+    static char text[3072];
+    nvn_hud_bind_log(text, sizeof(text));
+    for (char *line = text; *line;) {
+      char *end = line;
+      while (*end && *end != '\n')
+        end++;
+      char keep = *end;
+      *end = 0;
+      result(true, "rtbinds: %s", line);
+      if (!keep)
+        break;
+      line = end + 1;
+    }
+  } else if (same(verb, "hitlist")) {
+    static char text[24576];
+    char *name = take_word(&args);
+    if (*name)
+      hitview_list_all(name, text, sizeof(text));
+    else
+      hitview_list(text, sizeof(text));
+    int n = 0;
+    for (char *line = text; *line; n++) {
+      char *end = line;
+      while (*end && *end != '\n')
+        end++;
+      char keep = *end;
+      *end = 0;
+      result(true, "hitlist: %s", line);
+      if (!keep)
+        break;
+      line = end + 1;
+    }
+    result(true, "hitlist: %d", n);
+  } else if (same(verb, "nohit")) { /* nohit <owner hex> <0|1>: debugging, a body's ForceNoHit (cct.c's switch) */
+    char *word = take_word(&args);
+    uint64_t owner = parse_hex(word);
+    if (!owner || !sys_mapped((uintptr_t)owner + 0x70, 8, SYS_PERM_R) || !z64hd_game->cct_force_no_hit ||
+        !parse_int(args, &number) || number < 0 || number > 1) {
+      result(false, "nohit: a body owner (hex), then 0 or 1");
+    } else {
+      MAIN_FN(void (*)(uintptr_t, bool), z64hd_game->cct_force_no_hit)((uintptr_t)owner, number != 0);
+      result(true, "nohit %#llx %d", (unsigned long long)owner, (int)number);
+    }
+  } else if (same(verb, "hitparts")) { /* hitparts <actor name>: debugging, the hitbox kinds the browser lists */
+    uintptr_t found[8];
+    int n = actors_named(args, found, 8);
+    static const char *const part_names[HV_PARTS] = { "attack", "bump", "invincible", "hurt", "pickup" };
+    for (int i = 0; i < n; i++) {
+      uint8_t parts = hitview_parts_of(found[i]);
+      char text[96] = "";
+      for (int part = 0; part < HV_PARTS; part++)
+        if (parts >> part & 1)
+          snprintf(text + strlen(text), sizeof(text) - strlen(text), " %s", part_names[part]);
+      result(true, "hitparts: %s %#lx:%s", args, (unsigned long)found[i], parts ? text : " none");
+    }
+    result(n > 0, "hitparts: %d named %s", n, args);
+  } else if (same(verb, "guardbits")) { /* guardbits <actor name>: debugging, an actor's BSA flags (FINDINGS 9.43) */
+    uintptr_t found[8];
+    int n = actors_named(take_word(&args), found, 8);
+    for (int i = 0; i < n; i++) {
+      uintptr_t comps = sys_ptr(found[i] + 0x270), bsa = comps ? sys_ptr(comps + 0x188) : 0;
+      uint32_t flags = 0;
+      if (bsa && sys_mapped(bsa + 0x24, 4, SYS_PERM_R))
+        flags = *(const volatile uint32_t *)(bsa + 0x24);
+      const volatile float *rot = (const volatile float *)(found[i] + 0x328);
+      double yaw = atan2f(rot[2], rot[8]) * 57.29578f;
+      /* the animation's hold events (QueryASGetHoldEventGuard, main+0x2984F80): each slot's, bit 0x10 Guard */
+      uintptr_t as = comps ? sys_ptr(comps + 0x40) : 0, a1 = as ? sys_ptr(as + 0x18) : 0, ctl = a1 ? sys_ptr(a1 + 0x18) : 0;
+      uint32_t n_slots = 0, holds = 0;
+      if (ctl && sys_mapped(ctl + 0x18, 0x10, SYS_PERM_R))
+        n_slots = *(const volatile uint32_t *)(ctl + 0x18);
+      uintptr_t slots = ctl ? sys_ptr(ctl + 0x20) : 0;
+      for (uint32_t k = 0; slots && k < n_slots && k < 8; k++) {
+        uintptr_t e = sys_ptr(slots + k * 0x48), h = e ? sys_ptr(e + 0x58) : 0;
+        if (h && sys_mapped(h + 0x40, 4, SYS_PERM_R))
+          holds |= (*(const volatile uint32_t *)(h + 0x40) & 0x10 ? 1u : 0u) << k;
+      }
+      actor_read_t ar;
+      bool got = actor_read(found[i], &ar);
+      int life = got && ar.has_life ? (int)ar.life : -1;
+      result(true, "guardbits %#lx: bsa %#lx flags %#x guard %d, as slots %u guard holds %#x, facing %.1f, life %d at %.2f %.2f",
+             (unsigned long)found[i], (unsigned long)bsa, (unsigned)flags, (int)(flags >> 5 & 1), (unsigned)n_slots,
+             (unsigned)holds, yaw < 0 ? yaw + 360 : yaw, life, got ? (double)ar.pos[0] : 0.0, got ? (double)ar.pos[2] : 0.0);
+    }
+    result(true, "guardbits: %d", n);
+  } else if (same(verb, "equip")) { /* equip shield <actor>: debugging */
+    char *what = take_word(&args), *item = take_word(&args);
+    static char kept[64];
+    snprintf(kept, sizeof(kept), "%s", item);
+    if (!same(what, "shield") || !*item || !pouch_equip_shield_now(kept))
+      result(false, "equip: shield <actor name> (Weapon_Shield_Deku, _Hylian, _Mirror), Link's gear found");
+    else
+      result(true, "equip shield %s", kept);
+  } else if (same(verb, "pausetype")) { /* pausetype [<name or hex id> <+n or -n>]: the game's pause types */
+    char *name = take_word(&args), *by = take_word(&args);
+    int32_t delta = 0;
+    if (*name && same(by, "masks")) { /* pausetype <name> masks <hex> <hex> <hex>: what it stops (debugging) */
+      uint32_t m[3], was[3];
+      for (int k = 0; k < 3; k++)
+        m[k] = pausemgr_id(take_word(&args));
+      if (!pausemgr_set_masks(pausemgr_id(name), m, was)) {
+        result(false, "pausetype: no such type");
+        return;
+      }
+      result(true, "pausetype %s masks %08x %08x %08x (were %08x %08x %08x)", name, (unsigned)m[0], (unsigned)m[1],
+             (unsigned)m[2], (unsigned)was[0], (unsigned)was[1], (unsigned)was[2]);
+    } else if (*name) {
+      uint32_t id = pausemgr_id(name);
+      if (!*by || !parse_int(by[0] == '+' ? by + 1 : by, &delta) || !pausemgr_add(id, delta)) {
+        result(false, "pausetype: a type's name or hex id, then +n or -n (and the manager found)");
+        return;
+      }
+      result(true, "pausetype %s %#x: count %d", name, (unsigned)id, pausemgr_count(id));
+    } else {
+      static char text[2048];
+      pausemgr_list(text, sizeof(text));
+      for (char *line = text; *line;) {
+        char *end = line;
+        while (*end && *end != '\n')
+          end++;
+        char keep = *end;
+        *end = 0;
+        result(true, "pausetype: %s", line);
+        if (!keep)
+          break;
+        line = end + 1;
+      }
+    }
+  } else if (same(verb, "button")) { /* button <0..3> [<item>]: an item button's choice, or put an item on it */
+    int32_t slot = -1;
+    parse_int(take_word(&args), &slot);
+    char *item = take_word(&args);
+    uint32_t was = 0;
+    bool ok = pouch_button((int)slot, item, &was);
+    result(ok, "button %d: was %#x%s%s", (int)slot, (unsigned)was, *item ? ", now " : "", item);
+  } else if (same(verb, "rtlist")) {
+    uintptr_t tex[48];
+    uint32_t sets[48];
+    int n = frametrace_targets(tex, sets, 48);
+    for (int i = 0; i < n; i++) {
+      int w = 0, h = 0, f = 0;
+      nvn_texture_info(tex[i], &w, &h, &f);
+      result(true, "rtlist: %#lx %dx%d format %#x, bound %u times", (unsigned long)tex[i], w, h, f, (unsigned)sets[i]);
+    }
+    result(true, "rtlist: %d targets", n);
+  } else if (same(verb, "frametrace")) {
+    frametrace_arm();
+    result(true, "frametrace: the next frame goes to the log");
+  } else if (same(verb, "physdump")) {
+    char *name = take_word(&args);
+    int records = 0;
+    int64_t bytes = 0;
+    bool ok = physdump_write(*name ? name : "phys", &records, &bytes);
+    result(ok, "physdump: %d records, %lld bytes", records, (long long)bytes);
   } else if (same(verb, "peek")) {
     run_peek(args);
   } else if (same(verb, "doortimer")) {
@@ -1239,8 +1429,14 @@ static void poll(void)
 /* Whether the line last run is still waiting; says so (its result) when the wait is over. */
 static bool waiting(bool held)
 {
-  if (wait_left > 0)
-    return true;
+  if (wait_left > 0) {
+    if (!held || stepping)
+      return true;
+    /* the game was held while it waited (frame advance, or leaving a camera tool under it): no frames pass now,
+     * so it ends here rather than never */
+    result(false, "wait: the game was held with %d frames to go (step lets them through)", (int)wait_left);
+    wait_left = 0;
+  }
   if (spawning.active && spawn_waiting())
     return true;
   if (pause_waiting) {
@@ -1274,6 +1470,8 @@ static bool waiting(bool held)
 
 void remote_frame(bool held)
 {
+  frametrace_write(); /* the debugging captures the render thread made: written here, on the game's thread */
+  nvn_texdump_write();
   if (!remote_enabled || !settings_sd()) {
     /* remote control off: what a script holds or has queued goes (its input would otherwise stay on the
      * controller, "for 0" for good, as nothing here counts it down) */

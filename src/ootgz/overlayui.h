@@ -8,7 +8,9 @@ enum { OVERLAY_LINES = 1, OVERLAY_BARS = 2, OVERLAY_PAUSE = 4 };
 
 /* render thread, in a gpuui frame over a w x h visible picture, with gfx_pause_icon's icon (0: none): what
  * it drew (OVERLAY_* bits) */
-int overlayui_draw(int w, int h, int pause_icon);
+int overlayui_draw(int w, int h, int pause_icon, bool lines); /* lines: the world's lines too (else they're
+                                                                 drawn under the game's HUD, overlayui_draw_world) */
+bool overlayui_draw_world(int w, int h);
 
 /* whether the overlays are drawn here, on the GPU: the game's style, its shader and type loaded, and the
  * GPU path not failed (nvn.c sets overlayui_failed if it does). The game thread then makes lines and bars

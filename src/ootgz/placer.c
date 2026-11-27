@@ -42,6 +42,7 @@
 #include "gamedata.h"
 #include "gfx.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "input.h"
 #include "lang.h"
@@ -262,7 +263,7 @@ static bool kind_of(const char *n, int kind)
   if (starts_with(n, "Npc_Equipment")) /* what an NPC holds (a guard's spear): it goes with its NPC; not menu text */
     return false;
   bool enemy = starts_with(n, "Enemy_"), npc = starts_with(n, "Npc_") || starts_with(n, "Animal_"), /* animals with */
-       object = starts_with(n, "Obj_") || starts_with(n, "Item_");                                      /* the npcs */
+       object = starts_with(n, "Obj_") || starts_with(n, "Item_") || starts_with(n, "TBox_"); /* the npcs; chests */
   return kind == SHOW_ENEMIES ? enemy : kind == SHOW_NPCS ? npc : kind == SHOW_OBJECTS ? object : enemy || npc || object;
 }
 
@@ -567,6 +568,24 @@ static bool door_watched(uintptr_t actor)
 {
   return actor && interactview_door_watched() == actor && watch_has(W_DOOR_CLOSE);
 }
+/* an actor's hitbox switches (hitview.h's parts, in order), as scene > environment > hitboxes names them */
+static const char *const hitbox_labels[HV_PARTS] = { "attack hitboxes", "bump boxes", "invincibility", "hurtboxes",
+                                                     "collectables" };
+
+
+/* it has options (minus): a guard's or a walker's path, an interaction's ranges, a door's, or hitboxes of some kind */
+static bool has_options(uintptr_t actor)
+{
+  if (!actor)
+    return false;
+  if (guardview_is_guard(actor) || guardview_has_path(actor) || interactview_has(actor) || interactview_is_door(actor) ||
+      hitview_parts_of(actor))
+    return true;
+  for (int part = 0; part < HV_PARTS; part++)
+    if (hitview_own(actor, part))
+      return true;
+  return false;
+}
 
 static void panel(void)
 {
@@ -574,7 +593,7 @@ static void panel(void)
     gfx_clear();
     return;
   }
-  char title[96], under[96], stats[64], list[96];
+  char title[96], under[96], stats[64], list[96], holds[96], instead[96];
   if (mode == MODE_EXPLORE)
     snprintf(title, sizeof(title), "%s", T("explorer"));
   else if (mode == MODE_LOOK)
@@ -584,6 +603,7 @@ static void panel(void)
   actor_read_t a;
   uintptr_t at = target ? target : hover;
   stats[0] = 0; /* its stats on the line under its name (kept, empty, so the panel doesn't jump) */
+  holds[0] = instead[0] = 0; /* what a chest holds or a pot drops, from its layout entry; and what instead when */
   if (mode == MODE_EXPLORE) { /* "room 3: deku baba x2, chest x2": its name, and what's in it under it */
     const char *label = place_at >= 0 ? T(data_places[place_at].label) : T("no place chosen");
     int cut = 0;
@@ -595,8 +615,23 @@ static void panel(void)
     at = 0;
   } else if (at && actor_read(at, &a)) {
     snprintf(under, sizeof(under), "%s", a.name);
-    if (a.has_life)
-      snprintf(stats, sizeof(stats), TF("life %d/%d"), (int)a.life, (int)a.max_life);
+    if (a.killable) /* none for one that can't be killed: its life is the default 100 */
+      snprintf(stats, sizeof(stats), a.invincible ? TF("life %d/%d, invincible") : TF("life %d/%d"), (int)a.life,
+               (int)a.max_life);
+    char drop[64], check[64];
+    bool chest = false; /* TBox_Field_Iron and the like; the layout's Obj_TBox_A_01... */
+    for (const char *c = a.name; *c && !chest; c++)
+      chest = c[0] == 'T' && c[1] == 'B' && c[2] == 'o' && c[3] == 'x';
+    if (actor_layout_string(at, "Drop__DropActor", drop, sizeof(drop)))
+      snprintf(holds, sizeof(holds), chest ? TF("contains %s") : TF("drops %s"), drop);
+    else if (chest)
+      snprintf(holds, sizeof(holds), "%s", T("contents not in its layout"));
+    if (actor_layout_string(at, "Drop__DropActor_Substitute", drop, sizeof(drop))) { /* Link has it already */
+      if (actor_layout_string(at, "Drop__CheckActor", check, sizeof(check)))
+        snprintf(instead, sizeof(instead), TF("%s if Link has %s"), drop, check);
+      else
+        snprintf(instead, sizeof(instead), TF("or %s"), drop);
+    }
   } else {
     snprintf(under, sizeof(under), "%s", grounded ? T("nothing under the beam") : T("no ground under the beam"));
   }
@@ -642,7 +677,7 @@ static void panel(void)
   static const char *const guard_hints[3] = { "LS move  d-up/down height  L3 back to Link  R3 hide controls",
                                               "RS camera  ZL/ZR zoom  X faster  d-left/right next",
                                               "L/R kind  A go to  Y kill  minus actor options  B done" };
-  bool on_guard = mode == MODE_LOOK && at && (guardview_has_path(at) || interactview_has(at)); /* it has options */
+  bool on_guard = mode == MODE_LOOK && has_options(at); /* minus: its options */
   if (on_guard)
     h = guard_hints;
   const char *take = placer_take_link ? T("on") : T("off"); /* exploring: Y take Link, as it is now */
@@ -662,8 +697,8 @@ static void panel(void)
   gfx_row(2, GFX_ROW_LINE);
   /* its own switches (its options, minus), one under another with their checkboxes as the menu draws them */
   char check[64];
-  const char *labels[2 + IV_PARTS + 1];
-  bool on[2 + IV_PARTS + 1];
+  const char *labels[2 + IV_PARTS + 1 + HV_PARTS];
+  bool on[2 + IV_PARTS + 1 + HV_PARTS];
   int n_checks = 0;
   if (mode == MODE_LOOK && at) {
     if (guardview_is_guard(at)) {
@@ -674,15 +709,27 @@ static void panel(void)
     }
     if (interactview_has(at)) /* talk radius, z-target talk, target break line; a door's door close */
       for (int part = 0; part < IV_PARTS; part++)
-        if (part != IV_DOOR || interactview_is_door(at))
+        if (interactview_has_part(at, part) || interactview_own(at, part))
           labels[n_checks] = interactview_part_label(at, part), on[n_checks++] = interactview_own(at, part);
     if (interactview_is_door(at)) {
       labels[n_checks] = T("close timer watch"), on[n_checks++] = door_watched(at);
     }
+    uint8_t has = hitview_parts_of(at); /* only the kinds it has (and one still ticked, to untick it) */
+    for (int part = 0; part < HV_PARTS; part++) /* its hitboxes, each kind on its own */
+      if ((has >> part & 1) || hitview_own(at, part))
+        labels[n_checks] = T(hitbox_labels[part]), on[n_checks++] = hitview_own(at, part);
   }
   int row = 3;
-  if (stats[0] || !n_checks) { /* its stats (an empty line kept for one with none, so the panel doesn't jump) */
+  if (stats[0] || (!n_checks && !holds[0])) { /* its stats (an empty line kept for one with none: no jumping) */
     gfx_text(PANEL_COL, row, GFX_NORMAL, stats[0] ? stats : "\x7F"); /* 0x7F: an empty line that's still a line */
+    gfx_row(row++, GFX_ROW_LINE);
+  }
+  if (holds[0]) {
+    gfx_text(PANEL_COL, row, GFX_NORMAL, holds);
+    gfx_row(row++, GFX_ROW_LINE);
+  }
+  if (instead[0]) {
+    gfx_text(PANEL_COL, row, GFX_DIM, instead);
     gfx_row(row++, GFX_ROW_LINE);
   }
   {
@@ -798,7 +845,18 @@ static void set_interact(menu_item_t *it, bool on)
     interactview_toggle(menu_guard, (int)it->data);
 }
 
-void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 4); }
+/* (hitbox_labels, above the panel) */
+/* its hitboxes (hitview.c), each kind on its own (the item's data: its HV_ part): shown whatever scene > environment
+ * > hitboxes says */
+static bool get_hitboxes(menu_item_t *it) { return hitview_own(menu_guard, (int)it->data); }
+
+static void set_hitboxes(menu_item_t *it, bool on)
+{
+  if (hitview_own(menu_guard, (int)it->data) != on)
+    hitview_toggle(menu_guard, (int)it->data);
+}
+
+void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 4 + HV_PARTS); }
 
 /* this actor's own switches, each for it alone (whatever scene > environment says): its items made again for it */
 static void open_guard_menu(uintptr_t actor)
@@ -836,7 +894,7 @@ static void open_guard_menu(uintptr_t actor)
                                                  "dashed: where each breaks as link walks away",
                                                  "where it's held open: leave it and it closes 135 frames later" };
     for (int part = 0; part < IV_PARTS; part++) {
-      if (part == IV_DOOR && !interactview_is_door(actor))
+      if (!interactview_has_part(actor, part) && !interactview_own(actor, part))
         continue;
       snprintf(menu_actions[part], sizeof(menu_actions[part]), "%s", interactview_part_label(actor, part));
       item = menu_add_check(&m_guard, menu_actions[part], get_interact, set_interact, part);
@@ -856,6 +914,23 @@ static void open_guard_menu(uintptr_t actor)
     if (door_action) {
       door_action->hint = "L: it opens by itself, or it shuts at once, even with link holding it open";
       door_action->log_label = "";
+    }
+  }
+  static const char *const hitbox_hints[HV_PARTS] = {
+    "its attacks while they can hit (red), as scene > environment > hitboxes draws them",
+    "the bodies it bumps into link with (white)",
+    "where it's hit while it's invincible (purple)",
+    "where it can be hit (blue)",
+    "where link picks it up or catches it (gold)",
+  };
+  uint8_t has = hitview_parts_of(actor); /* only the kinds it has (and one still ticked, to untick it) */
+  for (int part = 0; part < HV_PARTS; part++) {
+    if (!(has >> part & 1) && !hitview_own(actor, part))
+      continue;
+    item = menu_add_check(&m_guard, hitbox_labels[part], get_hitboxes, set_hitboxes, part);
+    if (item) {
+      item->hint = hitbox_hints[part];
+      item->log_label = "its hitboxes:";
     }
   }
   menu_add_return(&m_guard); /* back to browsing: the menu closes, the browser is still on */
@@ -935,7 +1010,7 @@ void placer_frame(bool menu_open)
   }
   if (mode == MODE_LOOK && pressed & BTN_MINUS) { /* its options (a guard's vision and path, its interaction range) */
     uintptr_t actor = target ? target : hover;
-    if (actor && (guardview_has_path(actor) || interactview_has(actor)))
+    if (has_options(actor))
       open_guard_menu(actor);
   }
   if (mode != MODE_EXPLORE && pressed & BTN_Y) { /* the actor locked on to, or under the beam */

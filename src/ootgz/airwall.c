@@ -15,6 +15,7 @@
 
 #include "data.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "gamedata.h"
 #include "hsstore.h"
@@ -446,7 +447,8 @@ static int n_dots[PUBLISH_BUFFERS];
 static aw_line_t lines[PUBLISH_BUFFERS][MAX_LINES];
 static int n_lines[PUBLISH_BUFFERS];
 #define AREA_MAX_FACES 160 /* the void areas' sides, after voidmap.c's faces */
-static aw_face_t faces[PUBLISH_BUFFERS][VOIDMAP_MAX_FACES + AREA_MAX_FACES + GUARDVIEW_MAX_FACES + INTERACTVIEW_MAX_FACES];
+static aw_face_t faces[PUBLISH_BUFFERS][VOIDMAP_MAX_FACES + AREA_MAX_FACES + GUARDVIEW_MAX_FACES + INTERACTVIEW_MAX_FACES +
+                                         HITVIEW_MAX_FACES];
 static int n_faces[PUBLISH_BUFFERS];
 static view_cam_t cams[PUBLISH_BUFFERS]; /* the camera a frame's lines and faces go with */
 static float void_ends[VOIDMAP_MAX_LINES][2][3]; /* voidmap_lines' for this frame, before they're projected */
@@ -665,7 +667,9 @@ static void add_edge_dots(aw_dot_t *out, int *n, aw_line_t *line_out, int *n_lin
     return;
   if (line_out) {
     /* the depth is linear along the line on the picture (as 1 / distance is): the cut ends' from the ends' */
-    float da = line_depth(cam, va[2], scene), db = line_depth(cam, vb[2], scene);
+    /* (a hitbox's lines don't lie on the ground's cells: the walls' margin, so Link hides what's behind him) */
+    bool loose = scene && !(color >= AW_HIT_ATTACK && color <= AW_HIT_GUARD);
+    float da = line_depth(cam, va[2], loose), db = line_depth(cam, vb[2], loose);
     if (*n_line < MAX_LINES)
       line_out[(*n_line)++] = (aw_line_t){ x0 / REF_WIDTH, y0 / REF_HEIGHT, x1 / REF_WIDTH, y1 / REF_HEIGHT,
                                            va[2] < vb[2] ? va[2] : vb[2], da + t0 * (db - da), da + t1 * (db - da),
@@ -709,7 +713,8 @@ static bool game_is_paused(void)
 #define FADE_FRAMES 20 /* a third of a second to fade out or in (game_is_paused) */
 #define FADE_STEP (1.0f / FADE_FRAMES)
 volatile float airwall_fade = 1;
-static float fade = 1;
+volatile float airwall_hit_fade = 1;
+static float fade = 1, hit_fade = 1;
 static bool fade_started; /* a frame has been built since the module started */
 
 static int16_t near_order[MAX_WALLS];  /* walls within AW_RANGE of the camera, nearest first */
@@ -796,7 +801,9 @@ void airwall_frame(bool gpu)
   bool hide = game_is_paused();
   if (gd_game_paused(0, 0) && fade_started) {
     fade = hide ? (fade > FADE_STEP ? fade - FADE_STEP : 0) : (fade + FADE_STEP < 1 ? fade + FADE_STEP : 1);
+    hit_fade = hit_fade > FADE_STEP ? hit_fade - FADE_STEP : 0;
     airwall_fade = fade;
+    airwall_hit_fade = hit_fade;
     scenedepth_keep_last = fade > 0;
     if (fade <= 0)
       publish_set(&published, -1);
@@ -804,8 +811,10 @@ void airwall_frame(bool gpu)
   }
   scenedepth_keep_last = false;
   fade = fade_started ? (fade + FADE_STEP < 1 ? fade + FADE_STEP : 1) : 1;
+  hit_fade = fade_started ? (hit_fade + FADE_STEP < 1 ? hit_fade + FADE_STEP : 1) : 1;
   fade_started = true;
   airwall_fade = fade;
+  airwall_hit_fade = hit_fade;
   int f = publish_next(&published), n = 0, nl = 0;
   n_faces[f] = 0;
   n_near = 0;
@@ -813,7 +822,7 @@ void airwall_frame(bool gpu)
   link_boxes[f].ok = false;
   bool walls = (airwalls_shown || void_areas_shown()) && current_map;
   bool draw = walls || savepos_shown || voidmap_shown || hsstore_shown || placer_active || guardview_active() ||
-              interactview_active();
+              interactview_active() || hitview_active();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
     /* the actor placer's beam and ring (placer.c) first: a few lines nothing else's budget cuts */
@@ -855,12 +864,20 @@ void airwall_frame(bool gpu)
     int n_talk = interactview_lines(talk_ends, talk_colours, INTERACTVIEW_MAX_LINES);
     for (int i = 0; i < n_talk; i++)
       add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, talk_ends[i][0], talk_ends[i][1], talk_colours[i], true);
+    /* the hitboxes (hitview.c): hidden by what's nearer, or through walls only by Link (as the air walls are) */
+    static float hit_ends[HITVIEW_MAX_LINES][2][3];
+    static uint8_t hit_colours[HITVIEW_MAX_LINES];
+    int n_hit = hitview_lines(hit_ends, hit_colours, HITVIEW_MAX_LINES);
+    for (int i = 0; i < n_hit; i++)
+      add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, hit_ends[i][0], hit_ends[i][1], hit_colours[i],
+                    !hitview_xray);
     if (gpu) {
       n_faces[f] = voidmap_faces(faces[f], VOIDMAP_MAX_FACES);
       n_faces[f] += guardview_faces(faces[f] + n_faces[f], GUARDVIEW_MAX_FACES);
       n_faces[f] += interactview_faces(faces[f] + n_faces[f], INTERACTVIEW_MAX_FACES);
+      n_faces[f] += hitview_faces(faces[f] + n_faces[f], HITVIEW_MAX_FACES);
     }
-    int max_faces = VOIDMAP_MAX_FACES + AREA_MAX_FACES + GUARDVIEW_MAX_FACES + INTERACTVIEW_MAX_FACES;
+    int max_faces = VOIDMAP_MAX_FACES + AREA_MAX_FACES + GUARDVIEW_MAX_FACES + INTERACTVIEW_MAX_FACES + HITVIEW_MAX_FACES;
     cams[f] = cam;
     /* nearest wall first, so the budget goes to what's close */
     n_near = walls ? sort_near_walls(&cam) : 0;
@@ -878,7 +895,7 @@ void airwall_frame(bool gpu)
       if (area && gpu)
         add_wall_faces(i, faces[f], &n_faces[f], max_faces, color, scene);
     }
-    if (gpu && nl)
+    if (gpu && (nl || n_faces[f])) /* (the faces not behind the scenery are behind Link) */
       find_link_box(&cam, &link_boxes[f]);
   }
   n_dots[f] = n;

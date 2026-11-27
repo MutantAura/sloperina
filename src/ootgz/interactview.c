@@ -107,10 +107,18 @@ static const interact_actor_t *row_of(const char *name)
   return 0;
 }
 
+/* an actor found just now (name: its own, as read): the data's by its pack's name, chests running as TBox_Field_Iron */
+static const interact_actor_t *row_of_named(uintptr_t actor, const char *name)
+{
+  const char *pack = actor_pack_name(actor);
+  const interact_actor_t *row = pack ? row_of(pack) : 0;
+  return row ? row : name ? row_of(name) : 0;
+}
+
 static const interact_actor_t *row_of_actor(uintptr_t actor)
 {
   actor_read_t a;
-  return actor && actor_read(actor, &a) && a.name ? row_of(a.name) : 0;
+  return actor && actor_read(actor, &a) ? row_of_named(actor, a.name) : 0;
 }
 
 /* --- choices ------------------------------------------------------------------------------------- */
@@ -124,6 +132,21 @@ static int choice_of(uintptr_t actor)
 }
 
 bool interactview_has(uintptr_t actor) { return row_of_actor(actor) != 0; }
+
+bool interactview_has_part(uintptr_t actor, int part)
+{
+  const interact_actor_t *row = row_of_actor(actor);
+  if (!row)
+    return false;
+  if (part == IV_DOOR)
+    return row->door_radius > 0;
+  if (part == IV_BREAK)
+    return row->n > 0;
+  for (int c = 0; c < row->n; c++) /* A's reach: its plain clients; Z-targeting's: its lock-on ones */
+    if (data_interact_clients[row->first + c].lock_on == (part == IV_ZTARGET))
+      return true;
+  return false;
+}
 
 bool interactview_is_door(uintptr_t actor)
 {
@@ -716,7 +739,7 @@ static bool contains(const char *text, const char *word)
 const char *interactview_part_label(uintptr_t actor, int part)
 {
   static char labels[IV_PARTS][40];
-  if (part == IV_BREAK)
+  if (part == IV_BREAK && interactview_has_part(actor, IV_ZTARGET))
     return T("target break line");
   if (part == IV_DOOR)
     return T("door open/close radius");
@@ -727,7 +750,10 @@ const char *interactview_part_label(uintptr_t actor, int part)
       what[k] = 0; /* the first */
   if (!what[0])
     snprintf(what, sizeof(what), "%s", T("interaction"));
-  if (part == IV_RADIUS && !compare(what, "open door")) /* its A prompt's reach, not the door's own (door close) */
+  if (part == IV_BREAK) /* none to Z-target: only where its A prompt goes, walking away ("open prompt break line") */
+    snprintf(labels[part], sizeof(labels[part]), TF("%s prompt break line"),
+             !compare(what, "open treasure box") ? T("open") : what);
+  else if (part == IV_RADIUS && !compare(what, "open door")) /* its A prompt's reach, not the door's own (door close) */
     snprintf(labels[part], sizeof(labels[part]), TF("%s prompt radius"), what);
   else
     snprintf(labels[part], sizeof(labels[part]), part == IV_RADIUS ? TF("%s radius") : TF("z-target %s"), what);
@@ -974,7 +1000,7 @@ static void scan(void)
     int n = pass == 0 ? actors_near(RANGE, near_buf, NEAR_READ)
                       : placer_spot(spot) ? actors_near_point(spot, RANGE, near_buf, NEAR_READ) : 0;
     for (int i = 0; i < n && n_found < MAX_ACTORS; i++)
-      if (near_buf[i].name && row_of(near_buf[i].name) && shows_any(near_buf[i].actor))
+      if (near_buf[i].name && row_of_named(near_buf[i].actor, near_buf[i].name) && shows_any(near_buf[i].actor))
         add_found(near_buf[i].actor);
   }
   for (int i = 0; i < n_choices && n_found < MAX_ACTORS; i++) { /* one chosen in the browser, wherever it is */
@@ -1014,7 +1040,7 @@ void interactview_frame(void)
     actor_read_t a;
     if (!actor_read(found[i], &a) || !a.running || !shows_any(found[i]))
       continue;
-    const interact_actor_t *row = row_of(a.name);
+    const interact_actor_t *row = row_of_named(found[i], a.name);
     if (!row)
       continue;
     shown_t *s = &shown[n_shown];

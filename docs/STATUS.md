@@ -1,6 +1,6 @@
 # Status
 
-Where the work stands, for picking it up again. Last updated 26th November 2026, after the 0.0.14 release.
+Where the work stands, for picking it up again. Last updated 27th November 2026: 0.0.14 released, hitboxes on feat/hitboxes.
 
 ## Released
 
@@ -63,6 +63,82 @@ Where the work stands, for picking it up again. Last updated 26th November 2026,
 - CONTRIBUTORS from GitHub's contributors list.
 
 The game patches are the same as 0.0.11's (patch v6).
+
+## On branch feat/hitboxes (not merged, not released)
+
+- **scene > environment > hitboxes** (hitview.c, FINDINGS 9.39): the game's own physics shapes near Link or the
+  camera, read live from both Havok worlds each frame, in gz's hit view colours and, as gz, only what can touch
+  something now (switched on; a sensor with a contact collection): **attacks** (red, gz's AT, while their hit mask
+  has Link's layer in it), **bump boxes** (white, gz's OC), **hurtboxes** (blue, gz's AC), **invincibility** (purple,
+  filled: Link's or a fightable actor's hurtboxes while invincible; gz has none then). The user found a red box they
+  stood in unhurt (the wagon horse's, no contact collection): fixed by those two checks. Not yet seen in game after
+  the fix: an attack drawn only while it's switched on (a Deku Baba's bite).
+  Checked on 1.1.1 with a Deku Baba (its bite red as it lunges, Link blue for about half a second after each bite),
+  a Deku Scrub (its nut red) and the market's NPCs (grey). About 2 FPS on Lichii.
+- **Enemy health / actor browser:** no bar and no life line for actors that can't be killed (no Death component, or
+  still invincible from the start: NPCs, Deku Scrubs, Bongo Bongo's hands, signs, whose life is the game's default
+  100). The browser's life line says **invincible** while it is.
+- **Link's own attacks** (PlayerAttack sensors, his sword) drawn red while they're out, as gz's AT list has them:
+  seen in game (the sword is **Y** in this game: a remote `input Y` swings). Its sensor is on 4 frames in normal play
+  (switched off by a queued request on the 2nd, applied 3 frames later) and 1 frame under frame advance: whatever
+  applies the request runs on while frame advance holds the game, so frame advance shortens the live window itself.
+  Not followed further.
+- **Options** (asked for 27th November): each kind **off / outline / fill**; **only link's**; **through walls** (off
+  at first: lines and fills hidden by the scene depth, actors included, as gz's); an actor's own **hitboxes** switch in
+  the actor browser's options (every actor now has options). Seen in game: hidden vs through walls, only Link's,
+  fill. Not seen: the actor browser's switch.
+- **Under the HUD: tried, then turned off** at the user's word, as it flashed (FINDINGS 9.40): the world's overlays
+  are drawn at present time again, over the HUD. The code stays behind WORLD_UNDER_HUD (nvn.c, off; gpuui.c's SLOTS
+  to 5 with it), and the game's render target calls aren't wrapped while it's off. What it would need: a dependable
+  marker for where the game's HUD starts in its 1920x1080 picture.
+- **Fill** is solid shapes at about 30% opacity, back faces left out (as gz's); from inside a sphere or capsule its
+  inner side.
+- **Bump boxes and hurtboxes** only for actors that are out (state 4 or 5): a bombchu's stayed after it went off
+  (the user saw it); checked gone. Hidden enemies (a Wolfos in the ground) lose theirs too.
+- **Drawn as the air walls are** (asked for 27th November: "not collide with the HUD, Link, prompts and overlays
+  when you open the quick equip wheel"): Link hides what's behind him (the lines' depth margin is the walls' 3 cm,
+  not the ground lines' 30 cm; through walls, Link's depth alone, not over everything), and they fade out whenever the
+  game pauses (the wheel too, whatever the setting). Seen: the wheel (gone), Link and the horse (their far sides
+  hidden). Still over the HUD and the action prompt: under the HUD is FINDINGS 9.40's (turned off).
+- **The boomerang's attack** didn't show until a second, bigger sensor came on 13 frames into the flight: its first
+  (PlayerAttack, on 2 frames after it leaves his hand) is a 32-point shape with more faces than the 40 allowed, and
+  the box drawn instead was lines only, which fill leaves out. Now up to 255 faces, and the box is filled. Seen.
+- **Shield guard angle** (asked for 27th November, "the radius of how the shields work", and the Hylian and Mirror
+  shields): while Link guards, green: every direction within 110° of his front, a bubble with a cone cut out
+  behind (FINDINGS 9.42; first drawn as a flat fan, the user asked for its height). Level measured, above and
+  below from the parameters. Measured with a Deku Baba on the Deku
+  and Hylian shields, the Mirror Shield's front and back alike (no side bite landed); its beam reflection
+  (ReflectShield) isn't drawn. Remote `equip shield <actor>` for trying them.
+- **Collectables** (asked for 27th November: rupees, drops, bugs, fish): a fifth kind, gold, their pickup sensors
+  (FINDINGS 9.44), its own style (settings key hitbox_collectables) and actor browser switch. Seen on a spawned red
+  rupee (and a heart and magic jar listed); bugs, fish, butterflies not seen.
+- **Enemies' guards** (asked for 27th November, a Stalfos's shield, and Dark Link's): green, 50° each way from their
+  front while their animation's Guard hold event is on (FINDINGS 9.43); Link's now from the same event (not his
+  action ids). Seen on a Stalfos in Hyrule Field. Dark Link not seen (Water Temple). Lichii hung once after a
+  Stalfos spawn (the user's).
+- **The actor browser's hitbox switches** are four now (asked for 27th November): attacks, bump boxes, invincibility,
+  hurtboxes, each on its own for that actor (a ticked kind is drawn whatever show and its style say). Seen: an NPC's
+  bump box alone, then with its hurtbox, then its hurtbox alone, with show off.
+- **Frame advance's camera tools** (asked for 27th November): the free camera, the actor browser and the explorer work
+  while frame advance holds the game: it draws with its world stopped (`DebugPause` raised with one bit more,
+  pausemgr.c, FINDINGS 9.41), and is held again where it was when they're left. Seen in game on 1.1.1: the free
+  camera flown and the browser stepped through actors; the actors within 30 m and a boomerang in flight identical
+  before and after; one step after moved it one frame. Catch: actors off screen at the pause aren't drawn meanwhile.
+  With the free camera, frame advance's button steps frames (the freeze lowered for one frame) and pauses a running
+  game: checked by walking Link (L3, control Link): 0.13 m a tap, none between, a hold plays them on.
+  1.0.0 not tried (its pause manager offset is 1.1.1's less 0x70460, checked by the table's shape before use).
+- **Link's items** drawn while they can hit: Deku Nuts, Din's Fire, the boomerang, slingshot seeds (seen); arrows not
+  tried (adult only). Spent ones (put away, state 6) left out.
+- **Bomb blasts** drawn as attacks (FINDINGS 9.39): seen with a bomb going off in Link's hands. Not seen: a thrown
+  one from outside, bombchus, Dodongos, bomb flowers.
+- Remote: `physdump` (raw capture of the Havok bodies for working out layouts offline).
+- **Not checked:** 1.0.0 (the body, owner and shape offsets are assumed the same; `vt_cct_body` is known there);
+  boss attacks, Wolfos / Stalfos swings (a Wolfos spawn hung Lichii, below), NPCAttack (moving spikes), fire; enemy
+  invincibility other than the Deku Baba's (guarding Stalfos, Iron Knuckle); the timed reservations at `L+0x60`;
+  gz's (non-GPU) drawing style.
+- **Lichii hangs on some enemy spawns** (twice on 27th November: a Wolfos, a Deku Baba): its GPU thread stops about
+  2 s after "ASTC GPU decodes" for the new actor's textures; the same as the hang seen on 25th November. Looks like
+  Lichii's GPU-side ASTC path, not the module (the game thread ran on).
 
 ## Open pull requests
 

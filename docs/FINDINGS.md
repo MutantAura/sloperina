@@ -2411,3 +2411,254 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - So: a half disc of 2 m on the door's -X side (where it swings to), drawn as **door close** (interactview.c). Not
   checked in game: walking out of it and timing the close.
 
+
+### 9.39 Hitboxes, bump boxes and invincibility (1.1.1; drawn in game, 27th November 2026; 1.0.0 not checked)
+- **The two Havok worlds** (Havok 2025.2, hknp): cct.c's path (`[[[[phive_mgr]+0xC0]+0xC8 + 8 w]+0xE0]`) gives
+  world 0, the solid bodies ("entities"), and world 1, the sensors. Bodies are 0xC0 bytes, 42 to a block, the blocks'
+  pointers at `[world+0x48]`, the capacity at `+0x130` (6144 and 10240 in Hyrule Castle's grounds, about 500 and
+  600 in use).
+- **A body:** its transform at `+0x00` (three columns of four floats: world = c0 x + c1 y + c2 z + the position at
+  `+0x30`); flags `+0x50`; id `+0x58`; `+0x5C` a collision filter word that isn't phive's layer; its bounding box from
+  `+0x60` (max x y z, then min z x y; FLT_MAX while it isn't in the world); its shape `+0x78`; motion id `+0x80`;
+  phive's own object for it (the "owner", cct.c's controller body for Link) `+0xB8`.
+- **The owner:** `[[owner+0x108]+8]` its actor (none for some: one of Link's AttackAll sensors, a fire); `+0x120` its
+  layer hit mask (bit n: layer n of PhiveConfig's LayerEntityCollection, or LayerSensorCollection for a sensor; the
+  file's EnableLayerHitMask, e.g. HitToPlayer `0x80004` on a Deku Baba's AtkHead, 0x7FFFFFF Default where the file
+  gives none); `[[owner+0x150]+8]` its own layer, the low five bits an index in the same collection (the top bits
+  are flags: 0x84 for an enemy's Character bodies), `[[owner+0x150]+0xC]` a number the same on all of an actor's
+  bodies (Link's 0x20), even where the actor isn't at +0x108. Checked over every body in a capture: Link's character
+  controller Player (3), his sword PlayerAttack (7), NPCs' and enemies' bodies Character (4), their targets Enemy /
+  NPC, a Deku Baba's head and a Deku Scrub's nut EnemyAttack (8), chemistry ChemicalObject / ChemicalElement, areas
+  GeneralArea. The owner's class: 1.1.1 `main+0x4C34658` (CharacterMatterRigidBody, cct.c's `vt_cct_body`: every
+  character's controller), `+0x4C378C0` (other entities, ragdoll parts), `+0x4C37D20` (sensors).
+- **A shape** (hknpConvexShape and kin): its size `+0x08`; (offset, count) pairs, each offset from the pair itself:
+  points `+0x38` (12 bytes each), planes `+0x40`, faces `+0x48` (4 bytes: first index u16, count u8, an angle u8),
+  face point indices `+0x50` (u8); its convex radius `+0x68`. One point: a sphere round it; two: a capsule (a Deku
+  Scrub's TgtBody: (0, 0.5, 0), (0, 0.2, 0), 0.6, as its ShapeParam says); more: boxes (vtable `main+0x48936E8`, 8
+  points, 6 faces), cylinders as polytopes (`+0x4893780`, 32 points, 18 faces), hulls (`+0x4893AE8`, Link's
+  controller prism). Every decoded face is planar. Meshes and compounds (scenery) have other layouts.
+- **Switched on, and collected:** a body can stay in the world switched off: phive's set-enabled (`main+0x15B800`,
+  what OneShotSensorHitAtSensorOff ends in through `main+0x8D56F0`) keeps it in bit 6 (0x40) of `[owner+0x70]`, set
+  for off (a request in flight sits in `[owner+0x60]`: `+0x84` the state, `+0x100` bit 2 pending). A Deku Baba's
+  AtkHead read off between bites (`0x...960`). A sensor's contact collection, its controller unit's
+  ContactCollectionName ("Atk", "Tgt"), is at `[owner+0x158]`; the castle grounds' wagon horse (Animal_Horse_Wagon,
+  its layout Hash's low half `0x4E501C67` is the owner's `[[+0x150]+0xC]`) has an AttackAll capsule 1 m round, switched
+  on, mask Default, and none: Link stood in it unhurt. One of Link's own AttackAll sensors has none either. So the
+  hit view, like gz's of the game's AT / AC / OC lists, draws only bodies switched on and sensors with a collection.
+  Where an attack's power is kept (ExecuteSensorHitSetupAttack, `main+0x8D28C0` → `main+0x8D29C0`: into slot
+  objects of the collection's, `+0x80` on, fields `+0x190` to `+0x1A4`, through `main+0x2EA53D0`) isn't read.
+- **A bomb's blast** isn't an attack sensor: Item_Bomb has none (only Object, ChemicalObject and PerceptionEmitter
+  sensors). Its explosion is its chemistry's ExplodeBlast element (BombFruit_ExplodeBlast, ElementType 3011306755,
+  Size 4.3), which the game puts in the sensor world as a sphere of that radius on the ChemicalElement layer (12),
+  the bomb its actor, switched on, with a contact collection, for one frame (seen held in Link's hands, 27th November
+  2026: the frame before the fireball). The lit fuse is a much smaller element on the same bomb. 14 actors' packs have
+  an ExplodeBlast (Item_Bomb, Item_Bombchu, Obj_BombFlower_A_01 / A_04 and the Death Mountain one, Enemy_Dodongo
+  (4.5), Enemy_BabyDodongo, the Dodongo boss's, Enemy_Beamos (and For_High_Place), Enemy_Amos (and AlwaysRespawn),
+  Enemy_MiddleBoss_FlareDancer, Npc_Hylia_ImperialSoldier_Bomb); none smaller than 4.3. Nothing a pointer from the
+  sensor's owner, contact collection or actor holds the element's type, so the module goes by the actor's name and
+  a radius of 2 m or more. Other elements (water, torches' fire, light) are left out. The remote `button <0..3>
+  [item]` (pouch.c) reads or sets an item button: 2 is ZR (`SlingShot`, `Hookshot`, `Bomb` by name).
+- **An actor put away keeps its bodies:** a bombchu that has gone off isn't deleted: its actor goes to state 6 (as an
+  enemy that hasn't appeared yet) and its character controller stays in the world, switched on, where it fell (seen
+  27th November 2026, 400 frames on). So bump boxes and hurtboxes count only for actors in state 4 or 5; attacks
+  aren't held to it (a blast's last frame; switched off ones aren't drawn anyway).
+- **Link's items** (27th November 2026, used from ZR): each a PlayerAttack sensor that the game switches on while it
+  can hit: a Deku Nut's 4 m flash (from the frame it bursts), Din's Fire (ExpandFireField, its own sensor, and a fire
+  element), the boomerang for its flight (switched off when caught), a slingshot seed in flight (a 5 to 10 cm
+  capsule). The nut's and Din's Fire's have no contact collection, so Link's own aren't held to it. Spent ones are
+  put away (state 6: nuts, Din's Fire, the boomerang's) with the sensor still on, so attacks too count only for
+  running actors (not a bomb's blast). The boomerang's AttackAll sensor stays on in Link's hand: only PlayerAttack
+  counts for his things. Arrows (Arrow_Atk_0, PlayerAttack) not tried (adult).
+- **What's an attack, a bump:** the files' sensors (tools: every RigidBodySensorParam) put an enemy's attack on
+  EnemyAttack (226 of them with no EnableLayerHitMask), NPCAttack (moving spikes) or AttackAll (cuccos, Epona,
+  falling rocks, crazy floor tiles); its mask has Player (bit 2) while it can hit Link. A character controller's
+  mask (`0x3FBEFF`) hits Player; ragdoll parts have 0 or ground-only masks (`0x298365`).
+- **Invincibility:** the Life component `L = [[actor+0x270]+0x2B8]` has two queues of reasons (u32 name hashes,
+  rings: array `+0`, capacity `+8`, first `+0xC`, count `+0x10`) at `L+0x1C28` and `L+0x1C60`: either count over 0 is
+  invincible (QueryIsInvincibleAny, `main+0x2A32460`: `[L+0x1C70] > 0 || [L+0x1C38] > 0`). They're LifeParam's
+  InitInvincibilityType (an enum: None, `0x1A1CFA7E` into the first ring, `0xBA2AC343` into the second, the "no
+  damage reaction" one, QueryLifeIsInvincibleNoDamageReaction), pushed by the component's setup (`main+0x8D9310`)
+  with the reason `0xE89F6A7C`; AI nodes add and remove others. `L+0x1CA0` sums it up (0, 1, 2) with life
+  (`+0x1CA8`) and max (`+0x1CAC`). The pair of reads appears 9 times in each build (the same offsets on 1.0.0), and
+  1.0.0 pushes the same reason (`main+0x50E214`). A third queue, timed reservations (0x14 bytes each), is at `L+0x60` (count `+0x70`,
+  ExecuteLifeReserveInvincibility, `main+0x2E47B40`): not read.
+- **Link's invincibility after a hit** isn't in those: `[L+0x230]` holds timers (set through `main+0x2F7E270`, as
+  Farore's Wind's and a revival fairy's are), four slots of 16 bytes from `+0x50`, the first float the time left:
+  30 when a Deku Baba bit him, down to 0 in about 16 frames (the second float is last frame's, and keeps its last
+  value). Sampled every 2 frames through two bites (his life 80 to 78, refilled by infinite health); the rings
+  stayed empty.
+- **The game's default life:** an actor whose LifeParam names no LifeParameters has `Default`'s MaxLife 100. Of the
+  697 actors with a Life component, 425 have InitInvincibilityType `0x1A1CFA7E` (all NPCs, Deku Scrubs, Bongo Bongo's
+  hands, signs, switches, trees); those are the "100/100" ones. Enemy health and the actor browser leave out an actor
+  with no Death component, or whose start-up invincibility is still there.
+- **The boomerang's sensors:** while Link holds it, only a TgtHitAll hurtbox (layer 6, his number). Thrown
+  (a tap of ZR), it leaves his hand about 10 frames later and its PlayerAttack sensor (layer 7) comes on 2 frames
+  after that: a 32-point convex shape, radius 0.05, more than 40 faces. 13 frames later an AttackAll sensor (layer 10)
+  joins it, and all three change from Link's number (`0x1E`) to the boomerang's own. Caught, the PlayerAttack one goes
+  off; the AttackAll one stays on in his hand (so Link's AttackAll sensors are left out).
+- **A Lichii hang** (twice today, once on 25th November): about 2 s after an enemy was spawned (a Wolfos, then a Deku
+  Baba), Lichii's GPU thread stopped ("Waited N s for the GPU thread to submit tick ..."), right after it logged
+  "ASTC GPU decodes" and built a pipeline on the GPU thread; the module's game thread ran on until it stalled behind
+  it. Other spawns of the same actors were fine.
+
+### 9.40 Drawing under the game's HUD (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- **Where the HUD goes:** the game draws its HUD into a picture of its own, 1920x1080 (NVN format 0x3F), with the
+  scene composited in first, and its last pass (its own command buffer and queue, just before the present) binds
+  that picture and then the swapchain texture and scales it up (draws not seen through the C entry points: in
+  blocks it calls). So whatever is drawn into the swapchain texture at present time is over the HUD. Read back
+  (remote `texdump`): two 1920x1080 targets had the hearts and the map in them; the full-size RGBA8 one is part of
+  the scene's lighting.
+- **Found by clearing a magenta rectangle** (remote `hudtest`) into a target right after the game's
+  nvnCommandBufferSetRenderTargets, in its own command buffer, at each bind in turn. Per presented frame the main
+  command buffer binds the picture about 10 times: the 2nd right after a 192x192 R8 target, the rest one after
+  another. Cleared at the 5th or 6th, the rectangle is under the hearts and items and isn't drawn over; at the 3rd,
+  4th or 8th it's over them. A clear after the last pass's bind of the swapchain texture is covered by the scaled
+  picture.
+- **What the module does** (nvn.c): the HUD's picture is learnt from the last pass (the target it binds just before
+  the swapchain texture); the world's lines and faces (air walls, hitboxes, guard sight...) are recorded at present
+  time into a command buffer of ours aimed at it (gpuui's slots 2 to 4, our command memory after the panels'), and
+  the game's command buffer calls it (nvnCommandBufferCallCommands) at the 4th bind of the picture in a row: the
+  newest handle, kept until a newer one is ready (frames are recorded ahead of the present, so dropping it once
+  called missed every other frame). A fence after each present guards the slot a frame called. 98% of frames get it;
+  without a call (title, menus, before the picture is known) they're drawn at present time as before. Frame advance's
+  held picture already has them when its frame did.
+- **Why it's off (WORLD_UNDER_HUD 0):** the 4th bind in a row isn't a fixed point. Over a few hundred frames the runs
+  of the picture's binds on a command buffer were 1 to 15 long (2: 1940 times, 6: 429, 9: 159, 10: 144...), so some
+  frames called the overlays twice and some not at all (calls per present, 64 at a time: 60 to 65), and judging a
+  present by whether its frame called them drew them again at present time after every gap (the game makes no frame
+  for some presents, two for the next). The user saw it flash. A real marker for the HUD's start (the UI renderer's
+  own command buffer or calls) would be needed.
+- **The game's state after our block:** its HUD draws on correctly (its programs and pools set again; ours restore
+  the texture and sampler pools).
+- **Hooks:** wrapping the game's draw calls, EndRecording / SubmitCommands and CallCommands / CopyCommands for a full
+  frame trace crashed the game about a minute in, three times (an abort in nn::fs::CloseFile from its "movie"
+  module); wrapping only nvnCommandBufferSetRenderTargets ran four minutes clean. The trace is off unless built with
+  FRAMETRACE_HOOKS.
+
+### 9.41 The world stopped while the game draws: the pause manager's masks (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- **What the game's systems read** is the pause manager's `+0x30` (§9.1): three words, the OR of the masks
+  (`+0x0C`, `+0x10`, `+0x14`) of the types whose count is above 0, worked out once a frame after the module's frame
+  hook. So a count raised by the module took effect a frame late (raised while frame advance held the game, the next
+  frame still played); working the three words out at once as well (pausemgr.c) makes it the very next frame, both
+  ways. Checked with a boomerang in flight: held, raised, 30 frames drawn, lowered, held: the same position, and one
+  step moved it one frame's worth.
+- **Masks** (1.1.1): `GamePause` `7f3a9f14 2c9022af 0001269f`, `DebugPause` `7c2f4ab0 a698251f 0001e28d`,
+  `ClickPause` `782f4820 a698252f 0001e28f`. Tried by giving `DebugPause` other masks (remote `pausetype <type> masks`)
+  and raising it, the free camera flown, the actors within 30 m compared before and after:
+  - `DebugPause`'s own: everything stopped (Navi too), but so is the game's camera: its view isn't built at all (the
+    render camera's matrix function, §9.30, isn't called), so the free camera's doesn't show.
+  - `GamePause`'s: everything stopped and the view goes on, but Link isn't drawn. The third word's `0x10` is what
+    hides him (and, alone, what stops him).
+  - `DebugPause`'s with the third word's `0x2` (or `0x400`) as well: everything stopped, Link drawn, lighting as
+    ever. The game still doesn't build its view, but the free camera builds it itself where the game's call would
+    (the camera's own `+0x08`, as its matrix function's out), so its view shows. Used for frame advance's camera
+    tools (ootgz.c, `pausemgr_freeze`).
+  - The shared bits alone (`DebugPause` and `GamePause`'s AND) don't stop Link's pose; `GamePause`'s without its two
+    `0x10`s leave the actors running. With the second word's `DebugPause`-only bits added to that, everything
+    stopped but the lighting went white (its exposure).
+- **What isn't drawn while stopped:** an actor off the screen when the world stopped (Malon and the Gossip Stone at
+  Hyrule Castle, seen from the free camera) isn't drawn until it runs again, with every mask that stops it; one on the
+  screen stays drawn. Its visibility is evidently worked out in its own update.
+- **The game's camera** doesn't run while stopped, so its view isn't built again when the free camera goes off:
+  freecam.c keeps the game's eye, look-at and up (as its camera last set them) and puts them back and builds the view
+  itself.
+
+### 9.42 Guarding with a shield (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- **No shape decides it.** Each shield has a target box (`Tgt`, 0.8 × 0.8 × 0.2 m, on the sensor Object layer, its
+  hit mask CustomReceiver alone) and a ChemicalObject sphere (0.3 m), both on whether Link guards or not; neither can
+  touch an enemy's attack. What decides it is Link's `Life/DamageParameters/Player`: `GuardableAngleMaxDeg` 120
+  (also `...ForToggle`), `BackwardAttackAngleMinDeg` 150, `IsUseGuardableAngleForToggle` false,
+  `BackwardAtkAngleMinDegForToggle` 90; `SensorHitParam` `GuardBasePosZOffset` 0; `PlayerGameParam`
+  `MoveShieldLimitAngleLeft/Right/Up/Down` 50 (the shield turns towards the attacker that far).
+- **Measured** with a Deku Baba (Kakariko, adult, ZL held: guarding without a target is Link's main action 65,
+  a blocked hit 142, a hit taken 134 with 16 frames of invincibility), Link placed 1.5 m from it at a bearing, the
+  angle taken from his facing on the frame before the reaction: blocked at 1–83° and at −110°, −76°; hit at +115°,
+  +131°, +136°, +139°. So about 110° each way from his front: 60° round the shield (120 in all) with the shield
+  turned up to 50°, as the parameters read. Deku and Hylian alike; the Mirror Shield blocked in front and was hit at
+  +130° (no bite landed between 70° and 110° with it). Lichii hung twice after the Baba was spawned (the known
+  spawn hang). Guarding turns Link to the camera's direction
+  within ten frames, and often towards the Baba, so most placements ended with it in front.
+- **Shields differ** only in `ShieldParam.BadConditionAttackGuard` (attack conditions they can block: the Deku
+  Shield has two false that the Hylian and Mirror have true, likely fire) and the Mirror Shield's light reflection
+  (`LightReflect` chemical element, `MirrorShieldParam` beam absorbing) and Link's `ReflectShield` body (a 0.3 m
+  capsule on his shield hand, entity layer Player, sub-layer mask HitOnlyBeam: beams only).
+- **Not flat.** The guard direction is a 3D vector (`GuardDir`, `GuardDirection` in main) and the shield turns up
+  and down as far as left and right (`MoveShieldLimitAngleUp/Down` 50), so what's guarded is every direction
+  within about 60 + 50 = 110° of Link's front: a sphere with a 70° cone cut out behind. Above and below weren't
+  measured (the Baba bites level); the check's code wasn't found (the parameter's loader is `main+0x2F6A360`, the
+  angle at `+0x188` of its block, the toggle flag at `+0x1A5`; no function reading both was found).
+- Drawn by hitview.c (**shield guard angle**) while Link's action is 65 or 142: that sphere (1.3 m, only for
+  seeing it) at the shield's height, its back cone and rim.
+
+### 9.43 When an actor is guarding, and enemies' guards (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- **The Guard hold event.** `QueryASGetHoldEventGuard` (`main+0x2984F80`, Dark Link's AI uses it) reads the actor's
+  animation: `[[actor+0x270]+0x40]` the AS component, `+0x18`, `+0x18` its slots (count `+0x18`, array `+0x20`,
+  0x48 bytes each), each slot's `[+0x58]` hold events, bit `0x10` of their `+0x40` the Guard event. Seen on for
+  Link while he guards (slot 1) and off otherwise; on for a Stalfos in 112 of 210 frames while Link swung at it,
+  which took no damage then (it took hits when it wasn't).
+- **Not the BSA's request.** `ExecuteBSASetIsRequestedGuard` sets bit `0x20` of `[[[actor+0x270]+0x188]+0x24]` (the
+  BSA component, `main+0x974EB0`); a Stalfos guarding never had it.
+- **Enemies' angle:** every enemy pack that has DamageParameters (145) has `GuardableAngleMaxDeg` 100 (the
+  default), Link 120; enemies have no MoveShield parameters. A Stalfos guarding with Link placed beside or behind it
+  was square to him again (within 2°) before his sword was out, ten frames on, so side blocks couldn't be measured;
+  drawn as 50° each way from its front. The Stalfos's own `GuardMaxAngle` 105 and `QuickGuardProbability` 0.5
+  (StalfosParam) are its AI's. Its `AntiOverlapShield` (a Character body on its Root bone, HitOnlyPlayer) is a bump
+  box. Dark Link: `GuardableAngleMaxDeg` 100 as well, Link's `Player_ReflectShield` capsule and a shield actor of its
+  own (`Weapon_Shield_DarkLinkShield`); not seen in game.
+- Remote `guardbits <actor>` (debugging): those bits, its facing (from its rotation at `+0x328`) and life.
+
+### 9.44 Collectables' pickup sensors (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- A drop (a spawned `Obj_Rupee_Green`, `Obj_Rupee_Red`, `Obj_Heart`, `Obj_MagicJar_Small`) has a body in the entity
+  world (SmallObject layer, a 0.1 m capsule or a 0.2 m sphere for the heart, its hit mask without Player: it lands
+  but Link doesn't bump it) and a sensor on the sensor **Object** layer (0), its own shape (32 points), hit mask
+  all, with a contact collection: what Link's body sensors touch when he takes it. Link's `ForArea` sensor (Player
+  layer, a 0.4 m capsule 0.4 to 1.5 m up) has the sub-layer mask HitToArea: areas only, not pickups.
+- Pots and other breakables have Object sensors too, so hitview.c tells collectables by name: `Obj_Rupee_`,
+  `Obj_RupeeToken`, `Obj_Heart`, `Obj_MagicJar`, `Obj_ArrowBundle`, `Obj_DekuNut/Seed/Stick`,
+  `Obj_ScrubBusinessSeed`, `Obj_Fairy`, `Obj_Bomb`, `Obj_Bombchu`, and the animals `Animal_Insect`,
+  `Animal_Kokiri_Insect`, `Animal_Fish`, `Animal_Butterfly`, `Insect_` (any of their sensors on the Object,
+  SmallObject or target layers). Bugs and fish weren't near to check.
+- Spawned drops in Hyrule Field sometimes fell through the ground (a heart and a magic jar ended 13 to 17 m below).
+
+### 9.45 Bodies taken out of the world (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- After a save loads, a set of Link's bodies stays where he was placed: an entity capsule (0.35 m), a hurt capsule
+  (0.4 m), attack sensors and more, the Player actor's, switched on (`[owner+0x70]` bit 6 clear), contacts set, and
+  never moved again. hknp keeps them in its body arrays; the hit view drew the hurt capsule as a blue box at the
+  spawn point. A Gossip Stone's spare bodies, one of Ingo's, one of Navi's and one of the Deku Shield's are the same.
+- What they share is `[owner+0x70]` bits 25 and 41. Phive's removal (`main+0x4D8F80`) clears bits 15 and 10 and sets
+  25 and 41; its add (`main+0x4DAB20`) sets 10, 32 and 25, and 15 unless switched off; the world's step (functions
+  round `main+0x281D0`) clears 25 and 41 once it has dealt with the change. Bit 15 is only awake: Link's live
+  hurtbox loses it standing still.
+- The contact pass (`main+0x354EC0`, at `+0x354FA4`) drops a pair where either owner (`+0x110`, `+0x118` of the
+  pair) has bit 41, through `main+0x3503F0`. So bit 41 is out of the world, whatever bit 6 says; the hit view treats
+  it as switched off. Of 636 bodies in Hyrule Field, the 19 with bit 41 were all such spares.
+- Collisions switched off the other way, ForceNoHit (`[owner+0x70]` bit 11, or `[[owner+0x60]+0xF8]` bit 0 while
+  that request's `+0x100` bit 19 is set; see the levitation notes), leave a body in place too: a spawned Stalfos
+  kept a 0.3 m Character capsule (state `0x300100001c80`, bit 6 clear) where it had been while it walked on, drawn
+  white. Of the switched-on bodies in Hyrule Field only the camera's PerceptionEmitter and a removed spare of
+  Ingo's had bit 11; the hit view leaves these out as well.
+
+### 9.46 A placed actor's layout entry, and what chests hold (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- Chests are placed as `Obj_TBox_A_01` and the like (`_NoBake`, `_A_02` to `_A_06`, `Obj_TBox_GlassTruth_A_01`,
+  `Obj_HrlCity_Shop_TBox_A_01/02`) but run under another name: Hyrule Field's four are `TBox_Field_Iron`. What one
+  gives is its layout entry's `Dynamic.Drop__DropActor` (238 of the 248 chests in all layouts): rupees
+  (`TBox_Rupee_Green` to `_Gold`), dungeon keys, maps, compasses, `Item_*` equipment, `Item_ScrubBusinessSeed` (20).
+  Nine also have `Drop__CheckActor` and `Drop__DropActor_Substitute` (a Deku Shield chest gives rupees once Link
+  has one); the treasure chest game's have `GetEventName`, `DropViewActor` and `IsEnableRepeatOpen`. Ten have none
+  (Inside Ganon's Castle's four `Obj_TBox_A_04` among them). Pots, grass, rocks, crates, beehives and a few enemies
+  carry `Drop__DropActor` too.
+- The layout stays loaded: an actor's PreActor `[actor+0x3D8]` (whose `+0x88` is its instance id, the layout's
+  Hash) has at `+0xB0` its Dynamic dictionary as the BYML file's start (u64, "YB" version 7), the node's offset in
+  it (u32) and its type (u32, 0xC1), and at `+0xC0` its Phive the same. Read so, Hyrule Field's chests gave what the
+  Static and Dynamic layout files say (`Item_ScrubBusinessSeed` on the castle wall, `TBox_Rupee_Red` twice).
+  actors.c's `actor_layout_string` reads a string from it; the actor browser shows it.
+- An actor keeps its pack's name at `actor+0x260` (`Obj_TBox_A_01`, `Obj_TBox_A_01_NoBake`) beside its ActorName at
+  `+0x20` (`TBox_Field_Iron` for both: the pack's `ActorNameRef`). The two are the same for most actors; they differ
+  for chests, a chest's rupee (`Obj_Rupee_Red` from pack `TBox_Rupee_Red`) and a second Ingo
+  (`Npc_Hylia_Ingo_003_Adult`). Data keyed by pack (interactions.json) is looked up by `+0x260`: a field chest's
+  OpenTreasureBox range (a 0.5 m fan round its model box, all the way round, and Link's 2 m fan) then draws, its
+  A prompt showing at the disc's edge. Its only client isn't a lock-on one: a chest can't be Z-targeted.
+- **What stops Link at a chest** isn't settled. Its bodies (spawned `Obj_TBox_A_01` on flat ground): `Body` (Object,
+  8-point box, hit mask none), `CloseBody` (GroundObject, 16 points, mask with Player, bit 6 set yet solid), the
+  lid's (Object, a compound) and `AirWall` (GroundObject, hits SmallObject only). Link dropped on it stands 0.65 m
+  up; with CloseBody's ForceNoHit on, 0.57 m; with all four on, still 0.57 m. Something else holds him there.

@@ -311,6 +311,12 @@ static bool job_unequip(job_t *job)
   return true;
 }
 
+/* debugging (remote "equip shield <actor>"): Link's shield set and his gear applied again, at once */
+bool pouch_equip_shield_now(const char *item)
+{
+  return gd_set_str(GD_STR_SHIELD, item) && gear_reapply_now(); /* (as a memfile load does) */
+}
+
 void pouch_unequip(uint32_t str_slot, const char *item)
 {
   job_submit(JOB_KEY(JOB_UNEQUIP, murmur3(item)), job_unequip, str_slot, (intptr_t)item, 0, 0);
@@ -390,6 +396,18 @@ void pouch_frame(void)
   }
   if (changed)
     pouch_refresh_screen(z64hd_game->vt_hud);
+}
+
+/* debugging (remote button): item button `slot`'s choice (its murmur3), and with `choice` put that on it */
+bool pouch_button(int slot, const char *choice, uint32_t *was)
+{
+  if (slot < 0 || slot >= (int)N_BUTTON_SLOTS || !gd_get_enum(button_slots[slot], was))
+    return false;
+  if (choice && *choice) {
+    gd_set_enum(button_slots[slot], murmur3(choice));
+    pouch_refresh_screen(z64hd_game->vt_hud);
+  }
+  return true;
 }
 
 /* --- upgrades ------------------------------------------------------------------------------ */

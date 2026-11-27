@@ -101,9 +101,48 @@ static void note_lean(const float *up)
   }
 }
 
+/* With the game's world stopped under frame advance (ootgz.c's camera tools, pausemgr_freeze) its camera doesn't
+ * run, and nothing builds the view: freecam_frame builds it itself on a frame the game didn't, where the game's call
+ * puts it (the camera's own +0x08, as seen; the last call's place if one was seen). And the game's own view (its
+ * eye, look-at and up as its camera last left them) is kept, to be put back and built when the free camera goes off
+ * while it's stopped. */
+#define CAM_MATRIX 0x08
+static size_t matrix_at = CAM_MATRIX;
+static uint32_t matrix_calls;
+static double game_eye[3], game_at[3];
+static float game_up[3];
+static bool game_view_kept;
+
+static void keep_game_view(uintptr_t cam)
+{
+  memcpy(game_eye, (const void *)(cam + CAM_EYE_D), sizeof(game_eye));
+  memcpy(game_at, (const void *)(cam + CAM_AT_D), sizeof(game_at));
+  memcpy(game_up, (const void *)(cam + CAM_UP_F), sizeof(game_up));
+  game_view_kept = true;
+}
+
+static void put_view(uintptr_t cam, const double *e_to, const double *a_to, const float *up_to)
+{
+  double *e = (double *)(cam + CAM_EYE_D), *a = (double *)(cam + CAM_AT_D);
+  float *ef = (float *)(cam + CAM_EYE_F), *af = (float *)(cam + CAM_AT_F), *up = (float *)(cam + CAM_UP_F);
+  for (int i = 0; i < 3; i++) {
+    e[i] = e_to[i];
+    a[i] = a_to[i];
+    ef[i] = (float)e_to[i];
+    af[i] = (float)a_to[i];
+    up[i] = up_to[i];
+  }
+}
+
 static void matrix_hook(uintptr_t cam, float *out)
 {
+  if (cam == hooked) {
+    matrix_calls++;
+    if ((uintptr_t)out >= cam && (uintptr_t)out - cam < 0x400)
+      matrix_at = (uintptr_t)out - cam;
+  }
   if (freecam_on && cam == hooked) {
+    keep_game_view(cam); /* (as the game's camera just set it) */
     double *e = (double *)(cam + CAM_EYE_D), *a = (double *)(cam + CAM_AT_D);
     float *ef = (float *)(cam + CAM_EYE_F), *af = (float *)(cam + CAM_AT_F), *up = (float *)(cam + CAM_UP_F);
     for (int i = 0; i < 3; i++) {
@@ -181,6 +220,7 @@ static bool start(bool quiet)
   const double *e = (const double *)(cam + CAM_EYE_D), *a = (const double *)(cam + CAM_AT_D);
   float dx = (float)(a[0] - e[0]), dy = (float)(a[1] - e[1]), dz = (float)(a[2] - e[2]);
   memcpy(eye, e, sizeof(eye));
+  keep_game_view(cam);
   yaw = atan2f(dx, dz);
   pitch = atan2f(dy, root(dx * dx + dz * dz));
   look_from_angles();
@@ -202,6 +242,14 @@ static bool start(bool quiet)
 
 static void stop(bool quiet)
 {
+  /* the game's view back, and built: if its camera is stopped (the world stopped under frame advance) it won't */
+  if (hooked && game_view_kept && readable(hooked + matrix_at, 48)) {
+    put_view(hooked, game_eye, game_at, game_up);
+    own_matrix(hooked, (float *)(hooked + matrix_at));
+  }
+  game_view_kept = false;
+  if (!steered)
+    gfx_clear(); /* its panel (the menu draws its own again, if it's open) */
   freecam_on = false;
   link_control = false;
   follow = false;
@@ -311,7 +359,28 @@ static void keep_follow_off(void)
     follow_off[0] = eye[0] - link.x, follow_off[1] = eye[1] - link.y, follow_off[2] = eye[2] - link.z;
 }
 
+static void frame_body(bool menu_open);
+
 void freecam_frame(bool menu_open)
+{
+  static uint32_t calls_before;
+  frame_body(menu_open);
+  bool built = matrix_calls != calls_before;
+  calls_before = matrix_calls;
+  if (built || !freecam_on || !hooked || !readable(hooked + matrix_at, 48))
+    return;
+  static bool said;
+  if (!said) {
+    said = true;
+    log_printf("freecam: the game didn't build its view this frame (its camera stopped): built at cam+%#lx",
+               (unsigned long)matrix_at);
+  }
+  float up[3] = { 0, 1, 0 };
+  put_view(hooked, eye, at, up);
+  own_matrix(hooked, (float *)(hooked + matrix_at));
+}
+
+static void frame_body(bool menu_open)
 {
   if (!menu_open && cmd_pressed(CMD_FREECAM)) /* unbound unless given buttons (settings > rebind commands) */
     freecam_set(!freecam_on);

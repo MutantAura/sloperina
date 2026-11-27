@@ -33,6 +33,7 @@
 #include "placer.h"
 #include "tpose.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "hsstore.h"
 #include "lank.h"
@@ -2299,7 +2300,7 @@ static void build_watches(void)
 
 /* --- scene ------------------------------------------------------------------------------------ */
 
-static menu_t m_scene, m_collision, m_air_walls, m_guards, m_actor_ranges;
+static menu_t m_scene, m_collision, m_air_walls, m_guards, m_actor_ranges, m_hitboxes;
 
 static bool get_air_walls_shown(menu_item_t *it)
 {
@@ -2402,6 +2403,22 @@ static bool get_interact_ranges(menu_item_t *it) { return interactview_shown; }
 static void set_interact_ranges(menu_item_t *it, bool on) { interactview_shown = on; }
 static bool get_interact_part(menu_item_t *it) { return interactview_parts[it->data]; }
 static void set_interact_part(menu_item_t *it, bool on) { interactview_parts[it->data] = on; }
+
+static bool get_hitboxes(menu_item_t *it) { return hitview_shown; }
+static void set_hitboxes(menu_item_t *it, bool on) { hitview_shown = on; }
+static int get_hitbox_style(menu_item_t *it) { return hitview_style[it->data]; }
+static void set_hitbox_style(menu_item_t *it, int style) { hitview_style[it->data] = style; }
+static bool get_hitbox_link_only(menu_item_t *it) { return hitview_link_only; }
+static void set_hitbox_link_only(menu_item_t *it, bool on) { hitview_link_only = on; }
+static bool get_hitbox_xray(menu_item_t *it) { return hitview_xray; }
+static void set_hitbox_xray(menu_item_t *it, bool on) { hitview_xray = on; }
+static bool get_hitbox_guard(menu_item_t *it) { return hitview_guard; }
+static void set_hitbox_guard(menu_item_t *it, bool on) { hitview_guard = on; }
+
+static void text_hitboxes(menu_item_t *it, char *buf, int len)
+{
+  hitview_text(buf, len);
+}
 
 static void text_interact_ranges(menu_item_t *it, char *buf, int len)
 {
@@ -3086,7 +3103,7 @@ static void build_scene(void)
   menu_add_return(&m_scene);
 
   /* environment: a submenu for each kind of thing it draws */
-  menu_init(&m_collision, "environment", 4);
+  menu_init(&m_collision, "environment", 5);
   menu_item_t *sub = menu_add_submenu(&m_collision, "air walls", &m_air_walls);
   if (sub)
     sub->hint = "the map's invisible walls, drawn as outlines";
@@ -3096,6 +3113,9 @@ static void build_scene(void)
   sub = menu_add_submenu(&m_collision, "actors", &m_actor_ranges);
   if (sub)
     sub->hint = "where link can talk to or act on what's near";
+  sub = menu_add_submenu(&m_collision, "hitboxes", &m_hitboxes);
+  if (sub)
+    sub->hint = "attacks, bodies and invincibility, as the game's physics has them";
   menu_add_return(&m_collision);
 
   menu_init(&m_air_walls, "air walls", 8);
@@ -3174,6 +3194,56 @@ static void build_scene(void)
   menu_add_return(&m_actor_ranges);
   menu_add_text(&m_actor_ranges, text_interact_ranges, 0);
   m_actor_ranges.footer = 1;
+
+  menu_init(&m_hitboxes, "hitboxes", 6 + HV_PARTS);
+  menu_item_t *hits = menu_add_check(&m_hitboxes, "show", get_hitboxes, set_hitboxes, 0);
+  if (hits) {
+    hits->hint = "the kinds under it, near link and the camera (an actor's own: debug > actors, its options)";
+    hits->log_label = "hitboxes:";
+  }
+  static const char *const hit_parts[HV_PARTS] = { "attack hitboxes", "bump boxes", "invincibility", "hurtboxes",
+                                                   "collectables" };
+  static const char *const hit_hints[HV_PARTS] = {
+    "red (gz's AT): an attack, only while it can hit",
+    "white (gz's OC): the bodies link bumps into, and his own",
+    "purple: where link or a foe is hit, while they're invincible",
+    "blue (gz's AC): where link or an actor can be hit now",
+    "gold: where link picks up a rupee, heart or other drop, or catches a bug or fish",
+  };
+  static const char *const hit_labels[HV_PARTS] = { "hitboxes, attack hitboxes:", "hitboxes, bump boxes:",
+                                                     "hitboxes, invincibility:", "hitboxes, hurtboxes:",
+                                                     "hitboxes, collectables:" };
+  static const char *const hit_styles[HV_STYLES] = { "off", "outline", "fill" };
+  for (int part = 0; part < HV_PARTS; part++) {
+    menu_item_t *it = menu_add_option(&m_hitboxes, hit_parts[part], HV_STYLES, hit_styles, get_hitbox_style,
+                                      set_hitbox_style, part);
+    if (it) {
+      it->hint = hit_hints[part];
+      it->log_label = hit_labels[part];
+      it->indent = 2;
+    }
+  }
+  menu_item_t *guard = menu_add_check(&m_hitboxes, "shield guard angle", get_hitbox_guard, set_hitbox_guard, 0);
+  if (guard) {
+    guard->hint = "green, while link guards: where his shield blocks attacks from (110 degrees each way)";
+    guard->log_label = "hitboxes, shield guard angle:";
+    guard->indent = 2;
+  }
+  menu_item_t *link_only = menu_add_check(&m_hitboxes, "only link's", get_hitbox_link_only, set_hitbox_link_only, 0);
+  if (link_only) {
+    link_only->hint = "show: link's own alone (his body, his sword...)";
+    link_only->log_label = "hitboxes, only link's:";
+    link_only->indent = 2;
+  }
+  menu_item_t *hit_xray = menu_add_check(&m_hitboxes, "through walls", get_hitbox_xray, set_hitbox_xray, 0);
+  if (hit_xray) {
+    hit_xray->hint = "also behind walls and scenery (else hidden by whatever is nearer, as in gz)";
+    hit_xray->log_label = "hitboxes through walls:";
+    hit_xray->indent = 2;
+  }
+  menu_add_return(&m_hitboxes);
+  menu_add_text(&m_hitboxes, text_hitboxes, 0);
+  m_hitboxes.footer = 1;
 }
 
 /* --- settings --------------------------------------------------------------------------------- */

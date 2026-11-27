@@ -30,6 +30,9 @@ void interactview_text(char *buf, int len);
  * one a part, off until turned on, forgotten when it goes; interactview_shows: drawn now (its own, or the menu's) */
 bool interactview_has(uintptr_t actor);
 bool interactview_is_door(uintptr_t actor); /* has the IV_DOOR part */
+/* it has that part: IV_RADIUS a client A works through, IV_ZTARGET a lock-on one (a chest has none), IV_BREAK any, IV_DOOR
+ * a swinging door */
+bool interactview_has_part(uintptr_t actor, int part);
 /* the door close watch (watches.h W_DOOR_CLOSE): the door it's for (0: none; forgotten when it goes), and its value:
  * frames left before the door shuts (CloseWaitFrame while it's held open), "closed" with no door event running */
 void interactview_door_watch(uintptr_t door);

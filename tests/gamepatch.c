@@ -42,10 +42,12 @@ uint32_t sdk_open(void *out, const char *path, int mode)
 }
 uint8_t *gamefile_read_zs(const char *path, size_t *size_out) { return (void)path, (void)size_out, NULL; }
 /* what lank.c's menu and apply reach: not run here */
-void remake_request(bool on) { (void)on; }
+bool remake_start(int age) { return (void)age, false; }
 bool remake_pending(void) { return false; }
+int age_current(void) { return -1; }
+void age_set_override(int age) { (void)age; }
+const char *gd_get_str(uint32_t hash) { return (void)hash, NULL; }
 void gfx_notice(const char *s) { (void)s; }
-void age_reload_map(void) {}
 void menu_close(void) {}
 uintptr_t link_actor(void) { return 0; }
 const char *T(const char *s) { return s; }

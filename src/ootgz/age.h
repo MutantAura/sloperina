@@ -26,5 +26,9 @@ void age_set_override(int age);
 /* Before a menu warp: with override age set, give Link that age now and keep DebugParam.IsSetChildhoodManually on
  * through the map load, so a map that forces an age (GerudoFortress_Adult) keeps the one set here. */
 void age_prepare_warp(void);
+/* Reload the map Link is in, as it is named, with Link at `age`: his age is set and the map's own age switch held
+ * off as age_prepare_warp does, so it works in a map made for the other age too. False, with a notice, if it
+ * can't be started. */
+bool age_reload_map_as(int age);
 
 #endif

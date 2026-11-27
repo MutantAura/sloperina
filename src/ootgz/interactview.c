@@ -739,7 +739,7 @@ static bool contains(const char *text, const char *word)
 const char *interactview_part_label(uintptr_t actor, int part)
 {
   static char labels[IV_PARTS][40];
-  if (part == IV_BREAK)
+  if (part == IV_BREAK && interactview_has_part(actor, IV_ZTARGET))
     return T("target break line");
   if (part == IV_DOOR)
     return T("door open/close radius");
@@ -750,7 +750,10 @@ const char *interactview_part_label(uintptr_t actor, int part)
       what[k] = 0; /* the first */
   if (!what[0])
     snprintf(what, sizeof(what), "%s", T("interaction"));
-  if (part == IV_RADIUS && !compare(what, "open door")) /* its A prompt's reach, not the door's own (door close) */
+  if (part == IV_BREAK) /* none to Z-target: only where its A prompt goes, walking away ("open prompt break line") */
+    snprintf(labels[part], sizeof(labels[part]), TF("%s prompt break line"),
+             !compare(what, "open treasure box") ? T("open") : what);
+  else if (part == IV_RADIUS && !compare(what, "open door")) /* its A prompt's reach, not the door's own (door close) */
     snprintf(labels[part], sizeof(labels[part]), TF("%s prompt radius"), what);
   else
     snprintf(labels[part], sizeof(labels[part]), part == IV_RADIUS ? TF("%s radius") : TF("z-target %s"), what);

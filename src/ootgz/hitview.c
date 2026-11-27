@@ -123,7 +123,7 @@ static void forget_gone(void)
 
 /* PhiveConfig's layers */
 enum { SENSOR_PLAYER = 2, SENSOR_ENEMY = 3, SENSOR_NPC = 4, SENSOR_ANIMAL = 5, SENSOR_TGT_HIT_ALL = 6,
-       SENSOR_PLAYER_ATTACK = 7, SENSOR_ENEMY_ATTACK = 8, SENSOR_NPC_ATTACK = 9, SENSOR_ATTACK_ALL = 10 };
+       SENSOR_PLAYER_ATTACK = 7, SENSOR_ENEMY_ATTACK = 8, SENSOR_CHEMICAL_ELEMENT = 12, SENSOR_NPC_ATTACK = 9, SENSOR_ATTACK_ALL = 10 };
 enum { ENTITY_PLAYER = 3, ENTITY_CHARACTER = 4 };
 
 enum { K_ATTACK, K_INVINCIBLE, K_BUMP_LINK, K_BUMP, K_HURT, N_KINDS }; /* drawing order */
@@ -216,9 +216,48 @@ static bool switched_on(uintptr_t owner)
 /* debugging (the log): each frame, the state of the PlayerAttack sensors within 3 m of Link that changed: in the world,
  * on, a pending change, its mask */
 #define WATCH_SWORD 0 /* 1: log them */
+static uint32_t frame_no;
+#define WATCH_NEW 0   /* debugging: 1 logs sensors as they come into the world near Link */
+#define WATCH_ATTACKS 0 /* debugging: 1 logs each attack shape as it first counts */
+static struct { uintptr_t body; uint32_t seen; } fresh[64];
+static void watch_new(uintptr_t body, const vec3f_t *link_pos)
+{
+  const volatile float *top = (const volatile float *)(body + BODY_AABB_MAX);
+  if (!sane(top[0]))
+    return;
+  const volatile float *pos = (const volatile float *)(body + BODY_POS);
+  float dx = pos[0] - link_pos->x, dy = pos[1] - link_pos->y, dz = pos[2] - link_pos->z;
+  if (!(dx * dx + dy * dy + dz * dz < 400))
+    return;
+  int slot = -1, oldest = 0;
+  for (int i = 0; i < 64; i++) {
+    if (fresh[i].body == body) {
+      fresh[i].seen = frame_no;
+      return;
+    }
+    if (fresh[i].seen < fresh[oldest].seen)
+      oldest = i;
+  }
+  slot = oldest;
+  bool was_known = fresh[slot].body && frame_no - fresh[slot].seen < 2;
+  fresh[slot].body = body, fresh[slot].seen = frame_no;
+  if (was_known || frame_no < 60)
+    return;
+  uintptr_t owner = *(const volatile uintptr_t *)(body + BODY_OWNER), shape = *(const volatile uintptr_t *)(body + BODY_SHAPE);
+  uintptr_t layer_obj = rd(owner, OWNER_LAYER), actor_link = rd(owner, OWNER_ACTOR), actor = actor_link ? rd(actor_link, 8) : 0;
+  uintptr_t name = actor ? rd(actor, 0x20) : 0;
+  uint32_t points = 0;
+  sys_read32(shape + SHAPE_POINTS + 4, &points);
+  float r = heap_ptr(shape) && sys_mapped(shape + SHAPE_RADIUS, 4, SYS_PERM_R) ? *(const volatile float *)(shape + SHAPE_RADIUS) : -1;
+  log_printf("hitboxes: new sensor %#lx owner %#lx (vt %#lx) layer %#llx mask %#llx contacts %#lx on %d, %u points r %.2f, "
+             "%s at %.2f %.2f %.2f", (unsigned long)body, (unsigned long)owner,
+             (unsigned long)(rd(owner, 0) - z64hd_main), (unsigned long long)(layer_obj ? rd(layer_obj, 8) : 0),
+             (unsigned long long)rd(owner, OWNER_HIT_MASK), (unsigned long)rd(owner, OWNER_CONTACTS), switched_on(owner),
+             points, (double)r, name && sys_mapped(name, 8, SYS_PERM_R) ? (const char *)name : "(no actor)",
+             (double)pos[0], (double)pos[1], (double)pos[2]);
+}
 #define WATCH_MAX 16
 static struct { uintptr_t body; uint32_t state; } watched[WATCH_MAX];
-static uint32_t frame_no;
 static void watch_link_attacks(uintptr_t body, const vec3f_t *link_pos)
 {
   uintptr_t owner = *(const volatile uintptr_t *)(body + BODY_OWNER);
@@ -253,7 +292,39 @@ static void watch_link_attacks(uintptr_t body, const vec3f_t *link_pos)
              (int)(state >> 24 & 1));
 }
 
-static int classify(int world, uintptr_t owner, uintptr_t link)
+/* The actors whose chemistry has an explosion (an ExplodeBlast element, ElementType 3011306755: Item_Bomb's
+ * BombFruit_ExplodeBlast, Size 4.3), from every pack's Chemical/ElementParam (FINDINGS 9.39). A blast isn't an attack
+ * sensor: it's a sphere on the ChemicalElement layer, the element's Size round, belonging to the bomb (its actor),
+ * there for a moment. Other elements (water, a torch's fire, light) are left out. */
+static const char *const explosive[] = {
+  "Enemy_Amos", "Enemy_Amos_AlwaysRespawn", "Enemy_BabyDodongo", "Enemy_Beamos", "Enemy_Beamos_For_High_Place",
+  "Enemy_Dodongo", "Enemy_DungeonBoss_Dodongo_SpawnBabyDodongo", "Enemy_MiddleBoss_FlareDancer", "Item_Bomb",
+  "Item_Bombchu", "Npc_Hylia_ImperialSoldier_Bomb", "Obj_BombFlower_A_01", "Obj_BombFlower_A_04",
+  "Obj_BombFlower_Fruit_For_Break_Obj_DeathMtTrail_BrokenRock_A_01",
+};
+
+static bool is_explosive(uintptr_t actor)
+{
+  uintptr_t name = actor ? rd(actor, 0x20) : 0;
+  if (!name || !sys_mapped(name, 8, SYS_PERM_R))
+    return false;
+  const char *n = (const char *)name;
+  for (unsigned i = 0; i < sizeof(explosive) / sizeof(*explosive); i++) {
+    const char *e = explosive[i];
+    int k = 0;
+    while (e[k] && n[k] == e[k])
+      k++;
+    if (!e[k] && !n[k])
+      return true;
+  }
+  return false;
+}
+
+/* a blast's sphere is the element's Size round (4.3 m a bomb's, 4.5 a Dodongo's, 15 the default); the lit fuse's fire
+ * on the same bomb is a far smaller element */
+#define BLAST_MIN_RADIUS 2.0f
+
+static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
 {
   uintptr_t layer_obj = rd(owner, OWNER_LAYER);
   if (!layer_obj || !sys_mapped(layer_obj + 8, 8, SYS_PERM_R) || !sys_mapped(owner + OWNER_HIT_MASK, 8, SYS_PERM_R))
@@ -288,6 +359,12 @@ static int classify(int world, uintptr_t owner, uintptr_t link)
         return -1;
       link_attacks++;
       return K_ATTACK;
+    }
+    /* an explosion: an explosive's chemical element (a bomb's blast hurts Link too, his own or not) */
+    if (layer == SENSOR_CHEMICAL_ELEMENT) {
+      float r = heap_ptr(shape) && sys_mapped(shape + SHAPE_RADIUS, 4, SYS_PERM_R) ?
+                *(const volatile float *)(shape + SHAPE_RADIUS) : 0;
+      return hitview_style[HV_ATTACK] != HV_OFF && r >= BLAST_MIN_RADIUS && is_explosive(actor) ? K_ATTACK : -1;
     }
     /* anyone else's, while it can hurt Link */
     if (layer == SENSOR_ENEMY_ATTACK || layer == SENSOR_NPC_ATTACK || layer == SENSOR_ATTACK_ALL)
@@ -344,7 +421,24 @@ static void consider(int world, uintptr_t body, const vec3f_t *link_pos, uintptr
   float distance = to_link < to_cam ? to_link : to_cam;
   if (distance > RANGE)
     return;
-  int kind = classify(world, owner, link);
+  int kind = classify(world, owner, link, shape);
+  if (WATCH_ATTACKS && kind == K_ATTACK) { /* debugging: each attack shape, the first frame it counts */
+    static uintptr_t logged[32];
+    bool known = false;
+    for (int i = 0; i < 32; i++)
+      known |= logged[i] == body;
+    if (!known) {
+      static int at;
+      logged[at++ % 32] = body;
+      uintptr_t lo = rd(owner, OWNER_LAYER), al = rd(owner, OWNER_ACTOR), ac = al ? rd(al, 8) : 0, nm = ac ? rd(ac, 0x20) : 0;
+      float r = sys_mapped(shape + SHAPE_RADIUS, 4, SYS_PERM_R) ? *(const volatile float *)(shape + SHAPE_RADIUS) : -1;
+      uint32_t pts = 0;
+      sys_read32(shape + SHAPE_POINTS + 4, &pts);
+      log_printf("hitboxes: attack %#lx layer %#llx %s, %u points r %.2f, at %.2f %.2f %.2f", (unsigned long)body,
+                 (unsigned long long)(lo ? rd(lo, 8) : 0), nm && sys_mapped(nm, 8, SYS_PERM_R) ? (const char *)nm : "-",
+                 pts, (double)r, (double)p[0], (double)p[1], (double)p[2]);
+    }
+  }
   if (kind < 0)
     return;
   counts[kind]++;
@@ -382,6 +476,8 @@ static void walk(const vec3f_t *link_pos, uintptr_t link)
       for (unsigned i = 0; i < BODIES_PER_BLOCK && b * BODIES_PER_BLOCK + i < capacity; i++) {
         if (WATCH_SWORD && w == 1 && heap_ptr(*(const volatile uintptr_t *)(block + i * BODY_SIZE + BODY_OWNER)))
           watch_link_attacks(block + i * BODY_SIZE, link_pos);
+        if (WATCH_NEW && w == 1 && heap_ptr(*(const volatile uintptr_t *)(block + i * BODY_SIZE + BODY_OWNER)))
+          watch_new(block + i * BODY_SIZE, link_pos);
         consider(w, block + i * BODY_SIZE, link_pos, link);
       }
     }
@@ -469,6 +565,8 @@ static void square_to(const float d[3], float p[3], float q[3])
 
 /* a triangle of a filled shape, if its side faces the camera (each surface drawn once, as gz's: the same opacity
  * all over); `inside`: a point inside the shape, to tell its outer side */
+static bool camera_inside; /* the camera is inside the shape being filled: its inner side is drawn instead */
+
 static void face_out(const float a[3], const float b[3], const float c[3], const float inside[3], uint8_t colour)
 {
   float u[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, v[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] }, n[3];
@@ -480,7 +578,7 @@ static void face_out(const float a[3], const float b[3], const float c[3], const
   if (dot(n, out) < 0)
     n[0] = -n[0], n[1] = -n[1], n[2] = -n[2];
   float view[3] = { mid[0] - cam.pos[0], mid[1] - cam.pos[1], mid[2] - cam.pos[2] };
-  if (dot(n, view) < 0)
+  if ((dot(n, view) < 0) != camera_inside)
     triangle(a, b, c, colour);
 }
 
@@ -510,6 +608,13 @@ static void capsule_mesh(const float a[3], const float b[3], float r, uint8_t co
       n_rings++;
     }
   float inside[3] = { (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2 };
+  { /* the camera inside it (a bomb's blast round Link): its inner side, as gz shows a sphere from within */
+    float ab[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, ac[3] = { cam.pos[0] - a[0], cam.pos[1] - a[1], cam.pos[2] - a[2] };
+    float len2 = dot(ab, ab), t = len2 > 0 ? dot(ac, ab) / len2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    float off[3] = { ac[0] - ab[0] * t, ac[1] - ab[1] * t, ac[2] - ab[2] * t };
+    camera_inside = dot(off, off) < r * r;
+  }
   for (int i = 0; i + 1 < n_rings; i++)
     for (int k = 0; k < MESH_SEGS; k++) {
       int k1 = (k + 1) % MESH_SEGS;
@@ -518,6 +623,7 @@ static void capsule_mesh(const float a[3], const float b[3], float r, uint8_t co
       face_out(ring[i][k], ring[i][k1], ring[i + 1][k1], in, colour);
       face_out(ring[i][k], ring[i + 1][k1], ring[i + 1][k], in, colour);
     }
+  camera_inside = false;
 }
 
 static void sphere(const float c[3], float r, uint8_t colour, bool fill)

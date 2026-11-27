@@ -18,6 +18,7 @@
 #include "nvn.h"
 #include "physdump.h"
 #include "position.h"
+#include "pouch.h"
 #include "sdfs.h"
 #include "settings.h"
 #include "guardview.h"
@@ -1065,6 +1066,13 @@ static void run_line(char *line, bool held)
         break;
       line = end + 1;
     }
+  } else if (same(verb, "button")) { /* button <0..3> [<item>]: an item button's choice, or put an item on it */
+    int32_t slot = -1;
+    parse_int(take_word(&args), &slot);
+    char *item = take_word(&args);
+    uint32_t was = 0;
+    bool ok = pouch_button((int)slot, item, &was);
+    result(ok, "button %d: was %#x%s%s", (int)slot, (unsigned)was, *item ? ", now " : "", item);
   } else if (same(verb, "rtlist")) {
     uintptr_t tex[48];
     uint32_t sets[48];

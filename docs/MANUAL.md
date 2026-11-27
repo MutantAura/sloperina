@@ -237,7 +237,8 @@ the game has switched off (an enemy's bite between bites, Link's sword between s
 collects no hits for (the castle grounds' wagon horse has one round it that never hurts Link). **show** turns them
 on; under it, each kind has a switch, **off**, **outline** or **fill**:
 - **attacks** (fill at first): **red** (gz's AT): an attack while it can hit: an enemy's bite or swing, a projectile
-  (a Deku Scrub's nut), and Link's own sword while it's out. The game has a sword swing's live for only a few frames
+  (a Deku Scrub's nut), a bomb's or bombchu's blast (or a Dodongo's, a bomb flower's...: its 4.3 m sphere, for the
+  one frame the game has it; seen from inside, the view goes red), and Link's own sword while it's out. The game has a sword swing's live for only a few frames
   (4 in normal play); under frame advance fewer (1 seen), as the game applies the change that switches it off while
   frame advance holds it.
 - **bump boxes** (outline at first): **white** (gz's OC): the bodies Link bumps into and pushes against (each

@@ -91,7 +91,10 @@ The game patches are the same as 0.0.11's (patch v6).
   are drawn at present time again, over the HUD. The code stays behind WORLD_UNDER_HUD (nvn.c, off; gpuui.c's SLOTS
   to 5 with it), and the game's render target calls aren't wrapped while it's off. What it would need: a dependable
   marker for where the game's HUD starts in its 1920x1080 picture.
-- **Fill** is solid shapes at about 30% opacity, back faces left out (as gz's).
+- **Fill** is solid shapes at about 30% opacity, back faces left out (as gz's); from inside a sphere or capsule its
+  inner side.
+- **Bomb blasts** drawn as attacks (FINDINGS 9.39): seen with a bomb going off in Link's hands. Not seen: a thrown
+  one from outside, bombchus, Dodongos, bomb flowers.
 - Remote: `physdump` (raw capture of the Havok bodies for working out layouts offline).
 - **Not checked:** 1.0.0 (the body, owner and shape offsets are assumed the same; `vt_cct_body` is known there);
   boss attacks, Wolfos / Stalfos swings (a Wolfos spawn hung Lichii, below), NPCAttack (moving spikes), fire; enemy

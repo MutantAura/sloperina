@@ -2447,6 +2447,17 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   hit view, like gz's of the game's AT / AC / OC lists, draws only bodies switched on and sensors with a collection.
   Where an attack's power is kept (ExecuteSensorHitSetupAttack, `main+0x8D28C0` → `main+0x8D29C0`: into slot
   objects of the collection's, `+0x80` on, fields `+0x190` to `+0x1A4`, through `main+0x2EA53D0`) isn't read.
+- **A bomb's blast** isn't an attack sensor: Item_Bomb has none (only Object, ChemicalObject and PerceptionEmitter
+  sensors). Its explosion is its chemistry's ExplodeBlast element (BombFruit_ExplodeBlast, ElementType 3011306755,
+  Size 4.3), which the game puts in the sensor world as a sphere of that radius on the ChemicalElement layer (12),
+  the bomb its actor, switched on, with a contact collection, for one frame (seen held in Link's hands, 27th November
+  2026: the frame before the fireball). The lit fuse is a much smaller element on the same bomb. 14 actors' packs have
+  an ExplodeBlast (Item_Bomb, Item_Bombchu, Obj_BombFlower_A_01 / A_04 and the Death Mountain one, Enemy_Dodongo
+  (4.5), Enemy_BabyDodongo, the Dodongo boss's, Enemy_Beamos (and For_High_Place), Enemy_Amos (and AlwaysRespawn),
+  Enemy_MiddleBoss_FlareDancer, Npc_Hylia_ImperialSoldier_Bomb); none smaller than 4.3. Nothing a pointer from the
+  sensor's owner, contact collection or actor holds the element's type, so the module goes by the actor's name and
+  a radius of 2 m or more. Other elements (water, torches' fire, light) are left out. The remote `button <0..3>
+  [item]` (pouch.c) reads or sets an item button: 2 is ZR (`SlingShot`, `Hookshot`, `Bomb` by name).
 - **What's an attack, a bump:** the files' sensors (tools: every RigidBodySensorParam) put an enemy's attack on
   EnemyAttack (226 of them with no EnableLayerHitMask), NPCAttack (moving spikes) or AttackAll (cuccos, Epona,
   falling rocks, crazy floor tiles); its mask has Player (bit 2) while it can hit Link. A character controller's

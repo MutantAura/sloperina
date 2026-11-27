@@ -2574,8 +2574,9 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   a blocked hit 142, a hit taken 134 with 16 frames of invincibility), Link placed 1.5 m from it at a bearing, the
   angle taken from his facing on the frame before the reaction: blocked at 1–83° and at −110°, −76°; hit at +115°,
   +131°, +136°, +139°. So about 110° each way from his front: 60° round the shield (120 in all) with the shield
-  turned up to 50°, as the parameters read. Deku and Hylian alike (the Mirror Shield wasn't tried: Lichii hung
-  twice after the Baba was spawned, FINDINGS' known spawn hang). Guarding turns Link to the camera's direction
+  turned up to 50°, as the parameters read. Deku and Hylian alike; the Mirror Shield blocked in front and was hit at
+  +130° (no bite landed between 70° and 110° with it). Lichii hung twice after the Baba was spawned (the known
+  spawn hang). Guarding turns Link to the camera's direction
   within ten frames, and often towards the Baba, so most placements ended with it in front.
 - **Shields differ** only in `ShieldParam.BadConditionAttackGuard` (attack conditions they can block: the Deku
   Shield has two false that the Hylian and Mirror have true, likely fire) and the Mirror Shield's light reflection

@@ -105,8 +105,8 @@ The game patches are the same as 0.0.11's (patch v6).
   the box drawn instead was lines only, which fill leaves out. Now up to 255 faces, and the box is filled. Seen.
 - **Shield guard angle** (asked for 27th November, "the radius of how the shields work", and the Hylian and Mirror
   shields): a green fan 110° each way while Link guards (FINDINGS 9.42). Measured with a Deku Baba on the Deku
-  and Hylian shields; the Mirror Shield's guard not tried (Lichii hung twice after spawning the Baba), nor its beam
-  reflection (ReflectShield, not drawn). Remote `equip shield <actor>` for trying them.
+  and Hylian shields, the Mirror Shield's front and back alike (no side bite landed); its beam reflection
+  (ReflectShield) isn't drawn. Remote `equip shield <actor>` for trying them.
 - **The actor browser's hitbox switches** are four now (asked for 27th November): attacks, bump boxes, invincibility,
   hurtboxes, each on its own for that actor (a ticked kind is drawn whatever show and its style say). Seen: an NPC's
   bump box alone, then with its hurtbox, then its hurtbox alone, with show off.

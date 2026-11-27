@@ -877,40 +877,55 @@ static int by_kind_then_distance(const found_t *a, const found_t *b)
 }
 
 /* Where Link's raised shield blocks from (FINDINGS 9.42): while he guards (his guard action, or its reaction to a
- * blocked hit), a flat fan round his front at the shield's height, GUARD_HALF_DEG each way. The game's check is
- * DamageParameters' GuardableAngleMaxDeg 120 (60 each way, round the shield, which turns up to 50 towards the
- * attacker: MoveShieldLimitAngle); measured, a Deku Baba's bites were blocked up to 110 from his front and got
- * through from 115, with the Deku and Hylian shields alike. The fan's radius is only for seeing it: the check has
- * none. */
-#define GUARD_HALF_DEG 110.0f
-#define GUARD_RADIUS 1.5f
+ * blocked hit), every direction within GUARD_DEG of his front, round him at the shield's height: a bubble with a
+ * cone cut out at his back. The game checks the angle between the attack and the shield's guard direction (a 3D
+ * vector) against DamageParameters' GuardableAngleMaxDeg 120 (60 each way), and the shield turns up to 50 towards
+ * the attacker every way (MoveShieldLimitAngleLeft/Right/Up/Down): 110 from his front, above and below as to the
+ * sides. Measured level with him (a Deku Baba's bites): blocked to 110, through from 115; above and below not
+ * measured. Its radius is only for seeing it: the check has none. */
+#define GUARD_DEG 110.0f
+#define GUARD_RADIUS 1.3f
 #define GUARD_HEIGHT_ADULT 0.95f
 #define GUARD_HEIGHT_CHILD 0.6f
-#define GUARD_SEGMENTS 22
-#define ACTION_GUARD 65         /* Link's main actions (status act=): guarding */
+#define GUARD_RINGS 5    /* bands from his front to the rim */
+#define GUARD_AROUND 16  /* segments round */
+#define ACTION_GUARD 65           /* Link's main actions (status act=): guarding */
 #define ACTION_GUARD_REACTION 142 /* ...and a hit blocked */
 
-static void guard_fan(const vec3f_t *link_pos)
+static void guard_dome(const vec3f_t *link_pos)
 {
   int action = remote_link_action();
-  double fx, fz;
-  if ((action != ACTION_GUARD && action != ACTION_GUARD_REACTION) || !link_facing(&fx, &fz))
+  double dfx, dfz;
+  if ((action != ACTION_GUARD && action != ACTION_GUARD_REACTION) || !link_facing(&dfx, &dfz))
     return;
-  float yaw = atan2f((float)fx, (float)fz), half = GUARD_HALF_DEG * PI / 180.0f;
-  float c[3] = { link_pos->x, link_pos->y + (age_current() == 0 ? GUARD_HEIGHT_CHILD : GUARD_HEIGHT_ADULT), link_pos->z };
-  float prev[3];
-  for (int i = 0; i <= GUARD_SEGMENTS; i++) {
-    float a = yaw - half + 2 * half * (float)i / GUARD_SEGMENTS;
-    float p[3] = { c[0] + GUARD_RADIUS * sinf(a), c[1], c[2] + GUARD_RADIUS * cosf(a) };
-    outline = true;
-    if (i == 0 || i == GUARD_SEGMENTS)
-      line(c, p, AW_HIT_GUARD); /* its two edges */
-    if (i > 0) {
-      line(prev, p, AW_HIT_GUARD); /* the arc */
-      triangle(c, prev, p, AW_HIT_GUARD);
+  /* his front f, and two directions across it (u level, v up), round the shield's height c */
+  float f[3] = { (float)dfx, 0, (float)dfz }, u[3] = { (float)dfz, 0, -(float)dfx }, v[3] = { 0, 1, 0 };
+  float c[3] = { link_pos->x, link_pos->y + (age_current() == 0 ? GUARD_HEIGHT_CHILD : GUARD_HEIGHT_ADULT),
+                 link_pos->z };
+  float inside[3] = { c[0] + f[0] * GUARD_RADIUS * 0.4f, c[1], c[2] + f[2] * GUARD_RADIUS * 0.4f };
+  float dc[3] = { cam.pos[0] - inside[0], cam.pos[1] - inside[1], cam.pos[2] - inside[2] };
+  camera_inside = dot(dc, dc) < GUARD_RADIUS * GUARD_RADIUS * 0.5f; /* (roughly: drawn from inside then) */
+  float pts[GUARD_RINGS + 1][GUARD_AROUND][3];
+  for (int r = 0; r <= GUARD_RINGS; r++) {
+    float t = GUARD_DEG * PI / 180.0f * (float)r / GUARD_RINGS, ct = cosf(t), st = sinf(t);
+    for (int k = 0; k < GUARD_AROUND; k++) {
+      float p = 2 * PI * (float)k / GUARD_AROUND, cp = cosf(p), sp = sinf(p);
+      for (int i = 0; i < 3; i++)
+        pts[r][k][i] = c[i] + GUARD_RADIUS * (f[i] * ct + st * (u[i] * cp + v[i] * sp));
     }
-    memcpy(prev, p, sizeof(prev));
   }
+  outline = true;
+  for (int k = 0; k < GUARD_AROUND; k++) {
+    int k1 = (k + 1) % GUARD_AROUND;
+    for (int r = 0; r < GUARD_RINGS; r++) { /* the sphere's part, front to rim */
+      face_out(pts[r][k], pts[r + 1][k], pts[r + 1][k1], inside, AW_HIT_GUARD);
+      if (r > 0)
+        face_out(pts[r][k], pts[r + 1][k1], pts[r][k1], inside, AW_HIT_GUARD);
+    }
+    face_out(c, pts[GUARD_RINGS][k], pts[GUARD_RINGS][k1], inside, AW_HIT_GUARD); /* the cone cut out behind */
+    line(pts[GUARD_RINGS][k], pts[GUARD_RINGS][k1], AW_HIT_GUARD);                /* its rim */
+  }
+  camera_inside = false;
 }
 
 void hitview_frame(void)
@@ -940,7 +955,7 @@ void hitview_frame(void)
   for (int i = 0; i < n_found && n_lines < HITVIEW_MAX_LINES; i++)
     draw(&found[i]);
   if (hitview_shown && hitview_guard)
-    guard_fan(&link_pos);
+    guard_dome(&link_pos);
   if (WATCH_SWORD && link_attacks && !link_attacks_before)
     log_printf("hitboxes: Link's attack out (%d shapes)", link_attacks);
   report();

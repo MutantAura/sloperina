@@ -104,7 +104,9 @@ The game patches are the same as 0.0.11's (patch v6).
   (PlayerAttack, on 2 frames after it leaves his hand) is a 32-point shape with more faces than the 40 allowed, and
   the box drawn instead was lines only, which fill leaves out. Now up to 255 faces, and the box is filled. Seen.
 - **Shield guard angle** (asked for 27th November, "the radius of how the shields work", and the Hylian and Mirror
-  shields): a green fan 110° each way while Link guards (FINDINGS 9.42). Measured with a Deku Baba on the Deku
+  shields): while Link guards, green: every direction within 110° of his front, a bubble with a cone cut out
+  behind (FINDINGS 9.42; first drawn as a flat fan, the user asked for its height). Level measured, above and
+  below from the parameters. Measured with a Deku Baba on the Deku
   and Hylian shields, the Mirror Shield's front and back alike (no side bite landed); its beam reflection
   (ReflectShield) isn't drawn. Remote `equip shield <actor>` for trying them.
 - **The actor browser's hitbox switches** are four now (asked for 27th November): attacks, bump boxes, invincibility,

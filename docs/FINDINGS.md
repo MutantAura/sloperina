@@ -2582,4 +2582,10 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   Shield has two false that the Hylian and Mirror have true, likely fire) and the Mirror Shield's light reflection
   (`LightReflect` chemical element, `MirrorShieldParam` beam absorbing) and Link's `ReflectShield` body (a 0.3 m
   capsule on his shield hand, entity layer Player, sub-layer mask HitOnlyBeam: beams only).
-- Drawn by hitview.c (**shield guard angle**): a 110° fan each way while Link's action is 65 or 142.
+- **Not flat.** The guard direction is a 3D vector (`GuardDir`, `GuardDirection` in main) and the shield turns up
+  and down as far as left and right (`MoveShieldLimitAngleUp/Down` 50), so what's guarded is every direction
+  within about 60 + 50 = 110° of Link's front: a sphere with a 70° cone cut out behind. Above and below weren't
+  measured (the Baba bites level); the check's code wasn't found (the parameter's loader is `main+0x2F6A360`, the
+  angle at `+0x188` of its block, the toggle flag at `+0x1A5`; no function reading both was found).
+- Drawn by hitview.c (**shield guard angle**) while Link's action is 65 or 142: that sphere (1.3 m, only for
+  seeing it) at the shield's height, its back cone and rim.

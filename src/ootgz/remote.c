@@ -44,6 +44,7 @@
 #define STICK_MAX 32767
 
 bool remote_enabled;
+static bool tool_paused(void); /* a camera tool has frame advance's world stopped (remote_paused_by_tool) */
 
 static char script[SCRIPT_MAX];
 static size_t script_len, cursor;
@@ -1340,7 +1341,7 @@ static void run_line(char *line, bool held)
       stepping = true; /* its result once they've gone through and the game is held again */
     }
   } else if (same(verb, "run")) {
-    if (!held)
+    if (!held && !tool_paused()) /* (a camera tool's stop is frame advance's too: run lets it go) */
       result(true, "running");
     else {
       run_wanted = true;
@@ -1520,6 +1521,25 @@ bool remote_take_pause(void)
   bool wanted = pause_wanted;
   pause_wanted = false;
   return wanted;
+}
+
+static uint32_t tool_paused_at = 0xFFFFFFFFu; /* the last frame a camera tool had the world stopped */
+
+static bool tool_paused(void)
+{
+  return frame_counter() - tool_paused_at <= 1;
+}
+
+void remote_paused_by_tool(void)
+{
+  tool_paused_at = frame_counter();
+  if (!pause_wanted)
+    return;
+  pause_wanted = false;
+  if (pause_waiting) {
+    pause_waiting = false;
+    result(true, "paused (a camera tool has the world stopped)");
+  }
 }
 
 bool remote_take_step(void)

@@ -80,6 +80,9 @@ void remote_frame(bool held);
 /* For frame advance (ootgz.c): the script asked to hold the game; to let one frame through (true once per
  * frame of a step); to run again. Each is taken by the call. */
 bool remote_take_pause(void);
+/* the same while frame advance's camera tool (the free camera, the placer) has the world stopped: the game isn't held
+ * then, but nothing moves, so a script's pause is done at once (else it would wait for ever) */
+void remote_paused_by_tool(void);
 bool remote_take_step(void);
 bool remote_take_run(void);
 

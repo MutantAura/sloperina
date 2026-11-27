@@ -309,6 +309,11 @@ static bool fa_tools_frame(void)
     pausemgr_freeze(true);
     fa_tools_stepped = false;
   }
+  /* a script's run lets frame advance go (run again's bind waits: its L3 is the free camera's, MANUAL) */
+  if (fa_paused && (frame_advance || fa_by_remote) && remote_take_run()) {
+    fa_paused = false;
+    gfx_pause_icon = 0;
+  }
   if (fa_paused && (frame_advance || fa_by_remote) && fa_tool_wanted()) {
     fa_tools_ending = false;
     /* With the free camera (not the placer, whose L and R are its own), frame advance's button works as while
@@ -442,8 +447,10 @@ static void fa_hold_game(void)
 
 static void fa_frame(void)
 {
-  if (fa_tools_frame())
+  if (fa_tools_frame()) {
+    remote_paused_by_tool();
     return;
+  }
   if (remote_take_pause() && !fa_paused) { /* a script's pause: as a tap of the button, below */
     fa_paused = true;
     fa_by_remote = true;

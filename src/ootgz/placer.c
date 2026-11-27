@@ -263,7 +263,7 @@ static bool kind_of(const char *n, int kind)
   if (starts_with(n, "Npc_Equipment")) /* what an NPC holds (a guard's spear): it goes with its NPC; not menu text */
     return false;
   bool enemy = starts_with(n, "Enemy_"), npc = starts_with(n, "Npc_") || starts_with(n, "Animal_"), /* animals with */
-       object = starts_with(n, "Obj_") || starts_with(n, "Item_");                                      /* the npcs */
+       object = starts_with(n, "Obj_") || starts_with(n, "Item_") || starts_with(n, "TBox_"); /* the npcs; chests */
   return kind == SHOW_ENEMIES ? enemy : kind == SHOW_NPCS ? npc : kind == SHOW_OBJECTS ? object : enemy || npc || object;
 }
 
@@ -579,7 +579,7 @@ static void panel(void)
     gfx_clear();
     return;
   }
-  char title[96], under[96], stats[64], list[96];
+  char title[96], under[96], stats[64], list[96], holds[96], instead[96];
   if (mode == MODE_EXPLORE)
     snprintf(title, sizeof(title), "%s", T("explorer"));
   else if (mode == MODE_LOOK)
@@ -589,6 +589,7 @@ static void panel(void)
   actor_read_t a;
   uintptr_t at = target ? target : hover;
   stats[0] = 0; /* its stats on the line under its name (kept, empty, so the panel doesn't jump) */
+  holds[0] = instead[0] = 0; /* what a chest holds or a pot drops, from its layout entry; and what instead when */
   if (mode == MODE_EXPLORE) { /* "room 3: deku baba x2, chest x2": its name, and what's in it under it */
     const char *label = place_at >= 0 ? T(data_places[place_at].label) : T("no place chosen");
     int cut = 0;
@@ -603,6 +604,20 @@ static void panel(void)
     if (a.killable) /* none for one that can't be killed: its life is the default 100 */
       snprintf(stats, sizeof(stats), a.invincible ? TF("life %d/%d, invincible") : TF("life %d/%d"), (int)a.life,
                (int)a.max_life);
+    char drop[64], check[64];
+    bool chest = false; /* TBox_Field_Iron and the like; the layout's Obj_TBox_A_01... */
+    for (const char *c = a.name; *c && !chest; c++)
+      chest = c[0] == 'T' && c[1] == 'B' && c[2] == 'o' && c[3] == 'x';
+    if (actor_layout_string(at, "Drop__DropActor", drop, sizeof(drop)))
+      snprintf(holds, sizeof(holds), chest ? TF("contains %s") : TF("drops %s"), drop);
+    else if (chest)
+      snprintf(holds, sizeof(holds), "%s", T("contents not in its layout"));
+    if (actor_layout_string(at, "Drop__DropActor_Substitute", drop, sizeof(drop))) { /* Link has it already */
+      if (actor_layout_string(at, "Drop__CheckActor", check, sizeof(check)))
+        snprintf(instead, sizeof(instead), TF("%s if Link has %s"), drop, check);
+      else
+        snprintf(instead, sizeof(instead), TF("or %s"), drop);
+    }
   } else {
     snprintf(under, sizeof(under), "%s", grounded ? T("nothing under the beam") : T("no ground under the beam"));
   }
@@ -689,8 +704,16 @@ static void panel(void)
       labels[n_checks] = T(hitbox_labels[part]), on[n_checks++] = hitview_own(at, part);
   }
   int row = 3;
-  if (stats[0] || !n_checks) { /* its stats (an empty line kept for one with none, so the panel doesn't jump) */
+  if (stats[0] || (!n_checks && !holds[0])) { /* its stats (an empty line kept for one with none: no jumping) */
     gfx_text(PANEL_COL, row, GFX_NORMAL, stats[0] ? stats : "\x7F"); /* 0x7F: an empty line that's still a line */
+    gfx_row(row++, GFX_ROW_LINE);
+  }
+  if (holds[0]) {
+    gfx_text(PANEL_COL, row, GFX_NORMAL, holds);
+    gfx_row(row++, GFX_ROW_LINE);
+  }
+  if (instead[0]) {
+    gfx_text(PANEL_COL, row, GFX_DIM, instead);
     gfx_row(row++, GFX_ROW_LINE);
   }
   {

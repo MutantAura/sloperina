@@ -59,6 +59,10 @@ bool actor_read(uintptr_t actor, actor_read_t *out);
 bool actor_invincible(uintptr_t actor);
 /* actors.c: the same, and whether it can be killed (actor_read_t's killable); game thread */
 void actor_combat(uintptr_t actor, bool *invincible, bool *killable);
+/* actors.c: a string from its entry in the map's layout (its Dynamic: "Drop__DropActor", what a chest holds or a pot
+ * drops), read from the layout file the game keeps loaded (FINDINGS 9.46); false where it has none (spawned actors,
+ * the key not there, not a string); game thread */
+bool actor_layout_string(uintptr_t actor, const char *key, char *out, int len);
 
 /* actors.c: kill an actor found earlier, the game's way (FINDINGS 9.27): a death request, reason FallIntoAbyss (the
  * void's), to its Death component; with none, an NPC or a thing (Npc_, Obj_, Item_) is deleted as the AI's delete

@@ -580,6 +580,74 @@ bool actor_read(uintptr_t actor, actor_read_t *out)
   return true;
 }
 
+/* --- its layout entry (FINDINGS 9.46) -------------------------------------------------------------- */
+
+/* A placed actor's PreActor [actor+0x3D8] keeps where its entry is in the map's layout file, which stays loaded (the
+ * BYML of romfs/Banc/<map>/<layout>_{Static,Dynamic}.bcett.byml): +0xB0 its Dynamic dictionary, as the file's start
+ * (u64) then the node's offset in it (u32) and its type (u32, 0xC1 a dictionary); +0xC0 its Phive the same. */
+#define ACTOR_PREACTOR 0x3D8
+#define PRE_DYNAMIC 0xB0
+#define BYML_MAGIC 0x4259 /* "YB": little-endian */
+#define BYML_DICT 0xC1
+#define BYML_STRINGS 0xC2
+#define BYML_STRING 0xA0
+#define BYML_MAX_ENTRIES 256
+
+static bool byml_u32(uintptr_t at, uint32_t *v)
+{
+  return !(at & 3) && sys_read32(at, v);
+}
+
+/* a string table's string i, copied (false: out of range or unreadable) */
+static bool byml_string(uintptr_t table, uint32_t i, char *out, int len)
+{
+  uint32_t head, off;
+  if (!byml_u32(table, &head) || (head & 0xFF) != BYML_STRINGS || i >= head >> 8 || !byml_u32(table + 4 + 4 * i, &off))
+    return false;
+  uintptr_t s = table + off;
+  for (int n = 0; n < len; n++) {
+    if (!sys_mapped(s + n, 1, SYS_PERM_R))
+      return false;
+    out[n] = *(const volatile char *)(s + n);
+    if (!out[n])
+      return true;
+  }
+  out[len - 1] = 0;
+  return true;
+}
+
+bool actor_layout_string(uintptr_t actor, const char *key, char *out, int len)
+{
+  out[0] = 0;
+  uintptr_t pre = sys_ptr(actor + ACTOR_PREACTOR);
+  if (!pre || (pre & 7) || !sys_mapped(pre + PRE_DYNAMIC, 16, SYS_PERM_R))
+    return false;
+  uintptr_t file = *(const volatile uintptr_t *)(pre + PRE_DYNAMIC);
+  uint32_t node_off = *(const volatile uint32_t *)(pre + PRE_DYNAMIC + 8);
+  uint32_t node_type = *(const volatile uint32_t *)(pre + PRE_DYNAMIC + 12);
+  uint32_t magic, keys_off, strings_off, head;
+  if (!file || (file & 3) || node_type != BYML_DICT || !byml_u32(file, &magic) || (magic & 0xFFFF) != BYML_MAGIC ||
+      !byml_u32(file + 4, &keys_off) || !byml_u32(file + 8, &strings_off) || !byml_u32(file + node_off, &head) ||
+      (head & 0xFF) != BYML_DICT || head >> 8 > BYML_MAX_ENTRIES)
+    return false;
+  char name[64];
+  for (uint32_t i = 0; i < head >> 8; i++) {
+    uint32_t entry, value;
+    uintptr_t e = file + node_off + 4 + 8 * i;
+    if (!byml_u32(e, &entry) || !byml_u32(e + 4, &value))
+      return false;
+    if (!byml_string(file + keys_off, entry & 0xFFFFFF, name, sizeof(name)))
+      continue;
+    int k = 0;
+    while (name[k] && name[k] == key[k])
+      k++;
+    if (name[k] != key[k])
+      continue;
+    return entry >> 24 == BYML_STRING && byml_string(file + strings_off, value, out, len);
+  }
+  return false;
+}
+
 /* --- killing one (debug > actors > kill, FINDINGS 9.27) ------------------------------------------ */
 
 #define DEATH_FALL_INTO_ABYSS 8u   /* game__death DeathReason: what the void areas send */

@@ -2637,3 +2637,18 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   kept a 0.3 m Character capsule (state `0x300100001c80`, bit 6 clear) where it had been while it walked on, drawn
   white. Of the switched-on bodies in Hyrule Field only the camera's PerceptionEmitter and a removed spare of
   Ingo's had bit 11; the hit view leaves these out as well.
+
+### 9.46 A placed actor's layout entry, and what chests hold (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- Chests are placed as `Obj_TBox_A_01` and the like (`_NoBake`, `_A_02` to `_A_06`, `Obj_TBox_GlassTruth_A_01`,
+  `Obj_HrlCity_Shop_TBox_A_01/02`) but run under another name: Hyrule Field's four are `TBox_Field_Iron`. What one
+  gives is its layout entry's `Dynamic.Drop__DropActor` (238 of the 248 chests in all layouts): rupees
+  (`TBox_Rupee_Green` to `_Gold`), dungeon keys, maps, compasses, `Item_*` equipment, `Item_ScrubBusinessSeed` (20).
+  Nine also have `Drop__CheckActor` and `Drop__DropActor_Substitute` (a Deku Shield chest gives rupees once Link
+  has one); the treasure chest game's have `GetEventName`, `DropViewActor` and `IsEnableRepeatOpen`. Ten have none
+  (Inside Ganon's Castle's four `Obj_TBox_A_04` among them). Pots, grass, rocks, crates, beehives and a few enemies
+  carry `Drop__DropActor` too.
+- The layout stays loaded: an actor's PreActor `[actor+0x3D8]` (whose `+0x88` is its instance id, the layout's
+  Hash) has at `+0xB0` its Dynamic dictionary as the BYML file's start (u64, "YB" version 7), the node's offset in
+  it (u32) and its type (u32, 0xC1), and at `+0xC0` its Phive the same. Read so, Hyrule Field's chests gave what the
+  Static and Dynamic layout files say (`Item_ScrubBusinessSeed` on the castle wall, `TBox_Rupee_Red` twice).
+  actors.c's `actor_layout_string` reads a string from it; the actor browser shows it.

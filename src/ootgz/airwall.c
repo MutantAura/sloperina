@@ -857,12 +857,13 @@ void airwall_frame(bool gpu)
     int n_talk = interactview_lines(talk_ends, talk_colours, INTERACTVIEW_MAX_LINES);
     for (int i = 0; i < n_talk; i++)
       add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, talk_ends[i][0], talk_ends[i][1], talk_colours[i], true);
-    /* the hitboxes (hitview.c): over everything */
+    /* the hitboxes (hitview.c): hidden by what's nearer, unless through walls */
     static float hit_ends[HITVIEW_MAX_LINES][2][3];
     static uint8_t hit_colours[HITVIEW_MAX_LINES];
     int n_hit = hitview_lines(hit_ends, hit_colours, HITVIEW_MAX_LINES);
     for (int i = 0; i < n_hit; i++)
-      add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, hit_ends[i][0], hit_ends[i][1], hit_colours[i], false);
+      add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, hit_ends[i][0], hit_ends[i][1], hit_colours[i],
+                    !hitview_xray);
     if (gpu) {
       n_faces[f] = voidmap_faces(faces[f], VOIDMAP_MAX_FACES);
       n_faces[f] += guardview_faces(faces[f] + n_faces[f], GUARDVIEW_MAX_FACES);

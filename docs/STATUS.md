@@ -79,7 +79,14 @@ The game patches are the same as 0.0.11's (patch v6).
   still invincible from the start: NPCs, Deku Scrubs, Bongo Bongo's hands, signs, whose life is the game's default
   100). The browser's life line says **invincible** while it is.
 - **Link's own attacks** (PlayerAttack sensors, his sword) drawn red while they're out, as gz's AT list has them:
-  built, not yet seen in game (a remote B press doesn't swing; the user to swing).
+  seen in game (the sword is **Y** in this game: a remote `input Y` swings). Its sensor is on 4 frames in normal play
+  (switched off by a queued request on the 2nd, applied 3 frames later) and 1 frame under frame advance: whatever
+  applies the request runs on while frame advance holds the game, so frame advance shortens the live window itself.
+  Not followed further.
+- **Options** (asked for 27th November): each kind **off / outline / fill**; **only link's**; **through walls** (off
+  at first: lines and fills hidden by the scene depth, actors included, as gz's); an actor's own **hitboxes** switch in
+  the actor browser's options (every actor now has options). Seen in game: hidden vs through walls, only Link's,
+  fill. Not seen: the actor browser's switch.
 - **Under the HUD (asked for, not done):** everything the module draws goes on at present time, over the game's HUD.
   The game's last command buffer of a frame (its own queue) calls 9 recorded blocks, then sets a 1920x1080 target
   with no depth (NVN format 0x3F) twice and then the presented 2560x1440 one, with no draw calls of its own seen:

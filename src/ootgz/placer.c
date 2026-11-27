@@ -42,6 +42,7 @@
 #include "gamedata.h"
 #include "gfx.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "input.h"
 #include "lang.h"
@@ -643,7 +644,7 @@ static void panel(void)
   static const char *const guard_hints[3] = { "LS move  d-up/down height  L3 back to Link  R3 hide controls",
                                               "RS camera  ZL/ZR zoom  X faster  d-left/right next",
                                               "L/R kind  A go to  Y kill  minus actor options  B done" };
-  bool on_guard = mode == MODE_LOOK && at && (guardview_has_path(at) || interactview_has(at)); /* it has options */
+  bool on_guard = mode == MODE_LOOK && at; /* it has options (every actor: its hitboxes) */
   if (on_guard)
     h = guard_hints;
   const char *take = placer_take_link ? T("on") : T("off"); /* exploring: Y take Link, as it is now */
@@ -663,8 +664,8 @@ static void panel(void)
   gfx_row(2, GFX_ROW_LINE);
   /* its own switches (its options, minus), one under another with their checkboxes as the menu draws them */
   char check[64];
-  const char *labels[2 + IV_PARTS + 1];
-  bool on[2 + IV_PARTS + 1];
+  const char *labels[2 + IV_PARTS + 2];
+  bool on[2 + IV_PARTS + 2];
   int n_checks = 0;
   if (mode == MODE_LOOK && at) {
     if (guardview_is_guard(at)) {
@@ -680,6 +681,7 @@ static void panel(void)
     if (interactview_is_door(at)) {
       labels[n_checks] = T("close timer watch"), on[n_checks++] = door_watched(at);
     }
+    labels[n_checks] = T("hitboxes"), on[n_checks++] = hitview_own(at);
   }
   int row = 3;
   if (stats[0] || !n_checks) { /* its stats (an empty line kept for one with none, so the panel doesn't jump) */
@@ -799,7 +801,16 @@ static void set_interact(menu_item_t *it, bool on)
     interactview_toggle(menu_guard, (int)it->data);
 }
 
-void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 4); }
+/* its hitboxes (hitview.c): shown whatever scene > environment > hitboxes > show says */
+static bool get_hitboxes(menu_item_t *it) { return hitview_own(menu_guard); }
+
+static void set_hitboxes(menu_item_t *it, bool on)
+{
+  if (hitview_own(menu_guard) != on)
+    hitview_toggle(menu_guard);
+}
+
+void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 5); }
 
 /* this actor's own switches, each for it alone (whatever scene > environment says): its items made again for it */
 static void open_guard_menu(uintptr_t actor)
@@ -858,6 +869,11 @@ static void open_guard_menu(uintptr_t actor)
       door_action->hint = "L: it opens by itself, or it shuts at once, even with link holding it open";
       door_action->log_label = "";
     }
+  }
+  item = menu_add_check(&m_guard, "hitboxes", get_hitboxes, set_hitboxes, 0);
+  if (item) {
+    item->hint = "its attacks, bump boxes and hurtboxes, as scene > environment > hitboxes draws them";
+    item->log_label = "its hitboxes:";
   }
   menu_add_return(&m_guard); /* back to browsing: the menu closes, the browser is still on */
   if (!menu_current)
@@ -936,7 +952,7 @@ void placer_frame(bool menu_open)
   }
   if (mode == MODE_LOOK && pressed & BTN_MINUS) { /* its options (a guard's vision and path, its interaction range) */
     uintptr_t actor = target ? target : hover;
-    if (actor && (guardview_has_path(actor) || interactview_has(actor)))
+    if (actor) /* every actor has one: its hitboxes */
       open_guard_menu(actor);
   }
   if (mode != MODE_EXPLORE && pressed & BTN_Y) { /* the actor locked on to, or under the beam */

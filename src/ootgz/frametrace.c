@@ -153,7 +153,7 @@ void *frametrace_wrap(const char *name, void *proc)
       real_draw[k] = (draw_t)proc;
       return draw_hooks[k];
     }
-  (void)hook_call0, (void)hook_call1; /* CallCommands / CopyCommands: not wrapped (the game crashed with them) */
+  (void)hook_call0, (void)hook_call1, (void)call_names; /* CallCommands / CopyCommands: not wrapped (the game crashed with them) */
   if (same(name, "nvnCommandBufferEndRecording")) {
     real_end = (end_t)proc;
     return (void *)hook_end;

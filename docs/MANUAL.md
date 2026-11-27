@@ -232,20 +232,28 @@ bright while it is. Without one, a darker diamond over what **ZL** would take fo
 Z-target to talk to), whether ZL is held or not, and **ZL: ...** on the line.
 
 **hitboxes**: the game's own physics shapes round Link and whatever is near him or the camera (within 25 m), read
-from the game every frame and drawn over everything, in gz's hit view colours. As in gz, only what can touch
-something now is drawn: a shape the game has switched off (an enemy's bite between bites) isn't, and nor is one the
-game collects no hits for (the castle grounds' wagon horse has one round it that never hurts Link). **show** turns
-them on; the parts under it each have their own option (all on at first):
-- **attacks**: **red**, filled (gz's AT): an attack that can hurt Link, only while it can: an enemy's bite or
-  swing, a projectile (a Deku Scrub's nut). Link's own attacks aren't drawn.
-- **bump boxes**: **white** (gz's OC): the bodies Link bumps into and pushes against (each character's standing
-  shape, and such as a Wolfos's head), and his own.
-- **invincibility**: **purple**, filled: where Link, or an enemy that can be fought, is hit, while it's invincible:
-  Link for about half a second after he's hurt, an enemy while it can't be hurt. (In gz these just vanish.)
-- **hurtboxes**: **blue** (gz's AC): where Link and the actors can be hit now.
+from the game every frame, in gz's hit view colours. As in gz, only what can touch something now is drawn: a shape
+the game has switched off (an enemy's bite between bites, Link's sword between swings) isn't, and nor is one the game
+collects no hits for (the castle grounds' wagon horse has one round it that never hurts Link). **show** turns them
+on; under it, each kind has a switch, **off**, **outline** or **fill**:
+- **attacks** (fill at first): **red** (gz's AT): an attack while it can hit: an enemy's bite or swing, a projectile
+  (a Deku Scrub's nut), and Link's own sword while it's out. The game has a sword swing's live for only a few frames
+  (4 in normal play); under frame advance fewer (1 seen), as the game applies the change that switches it off while
+  frame advance holds it.
+- **bump boxes** (outline at first): **white** (gz's OC): the bodies Link bumps into and pushes against (each
+  character's standing shape, and such as a Wolfos's head), and his own.
+- **invincibility** (fill at first): **purple**: where Link, or an enemy that can be fought, is hit, while it's
+  invincible: Link for about half a second after he's hurt, an enemy while it can't be hurt. (In gz these vanish.)
+- **hurtboxes** (outline at first): **blue** (gz's AC): where Link and the actors can be hit now.
+
+**only link's**: **show** draws Link's own alone (his body, his hurtboxes, his sword). **through walls** (off at
+first): also where walls, scenery or the actors themselves are in front (otherwise hidden by whatever is nearer, as
+gz's are). An actor's own hitboxes can be turned on from the actor browser (**debug > actors > browse currently
+loaded actors**, **minus**, **hitboxes**): drawn whatever **show** says, in the styles chosen here.
 
 Spheres are drawn as their outline and a ring round their middle, capsules as their two end rings, sides and
-rounded ends, boxes and other shapes edge by edge. Under the list: how many of each there are near.
+rounded ends, boxes and other shapes edge by edge; filled, as their shape seen from the camera. Under the list: how
+many of each there are near.
 
 #### 2.3.2 Save position
 

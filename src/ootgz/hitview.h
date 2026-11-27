@@ -15,7 +15,15 @@ extern bool hitview_shown; /* scene > environment > hitboxes > show: the parts t
  * it; HV_BUMP solid character bodies that collide with Link (his own with the characters); HV_INVINCIBLE an invincible
  * Link's or fightable actor's target sensors; HV_HURT the other target sensors */
 enum { HV_ATTACK, HV_BUMP, HV_INVINCIBLE, HV_HURT, HV_PARTS };
-extern bool hitview_parts[HV_PARTS];
+/* each part's style: off, its outline, or filled */
+enum { HV_OFF, HV_OUTLINE, HV_FILL, HV_STYLES };
+extern int hitview_style[HV_PARTS];
+extern bool hitview_link_only; /* show: only Link's own (his body, his sword...) */
+extern bool hitview_xray;      /* also through walls and scenery (else hidden by whatever is nearer) */
+/* an actor's own switch (the actor browser's options): its hitboxes shown whatever the menu's show says, in the
+ * menu's styles; forgotten when it goes */
+bool hitview_own(uintptr_t actor);
+void hitview_toggle(uintptr_t actor);
 
 /* game thread, once a frame, before airwall_frame */
 void hitview_frame(void);

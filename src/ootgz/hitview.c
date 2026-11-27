@@ -43,7 +43,45 @@ static float root(float x) /* the sdk exports no sqrtf: the CPU's own instructio
 }
 
 bool hitview_shown;
-bool hitview_parts[HV_PARTS] = { true, true, true, true };
+int hitview_style[HV_PARTS] = { HV_FILL, HV_OUTLINE, HV_FILL, HV_OUTLINE };
+bool hitview_link_only;
+bool hitview_xray;
+
+/* actors whose hitboxes are shown whatever the menu says (the actor browser's options), forgotten when they go */
+#define MAX_OWN 16
+static uintptr_t own[MAX_OWN];
+static int n_own;
+
+bool hitview_own(uintptr_t actor)
+{
+  for (int i = 0; i < n_own; i++)
+    if (own[i] == actor)
+      return true;
+  return false;
+}
+
+void hitview_toggle(uintptr_t actor)
+{
+  for (int i = 0; i < n_own; i++)
+    if (own[i] == actor) {
+      own[i] = own[--n_own];
+      log_printf("hitboxes: %#lx's off", (unsigned long)actor);
+      return;
+    }
+  if (n_own < MAX_OWN) {
+    own[n_own++] = actor;
+    log_printf("hitboxes: %#lx's on", (unsigned long)actor);
+  }
+}
+
+static void forget_gone(void)
+{
+  for (int i = 0; i < n_own; i++) {
+    actor_read_t a;
+    if (!actor_read(own[i], &a) || !a.running)
+      own[i--] = own[--n_own];
+  }
+}
 
 #define RANGE 25.0f /* metres from Link or the camera: bodies further aren't drawn */
 #define PI 3.14159265f
@@ -65,6 +103,10 @@ bool hitview_parts[HV_PARTS] = { true, true, true, true };
 #define OWNER_LAYER 0x150 /* [+0x150]+8, low five bits */
 #define OWNER_STATE 0x70  /* bit 6 set: switched off */
 #define STATE_OFF 0x40
+#define OWNER_REQUEST 0x60 /* a change queued for the physics' next step: */
+#define REQUEST_ON 0x84    /*   the state asked for (1 on) */
+#define REQUEST_FLAGS 0x100
+#define REQUEST_PENDING 0x4 /*   ... while this bit is set (phive's set-enabled reads it the same way) */
 #define OWNER_CONTACTS 0x158 /* a sensor's contact collection (its controller unit's ContactCollectionName) */
 #define LAYER_MASK 0x1F
 #define LAYER_NUMBER 0xC  /* [+0x150]+0xC: a number of the actor's, the same on all its bodies (Link's 0x20) */
@@ -86,7 +128,7 @@ enum { ENTITY_PLAYER = 3, ENTITY_CHARACTER = 4 };
 
 enum { K_ATTACK, K_INVINCIBLE, K_BUMP_LINK, K_BUMP, K_HURT, N_KINDS }; /* drawing order */
 static const uint8_t kind_colour[N_KINDS] = { AW_HIT_ATTACK, AW_HIT_INVINCIBLE, AW_HIT_LINK, AW_HIT_BUMP, AW_HIT_HURT };
-static const bool kind_filled[N_KINDS] = { true, true, false, false, false }; /* attacks and invincibility */
+static const uint8_t kind_part[N_KINDS] = { HV_ATTACK, HV_INVINCIBLE, HV_BUMP, HV_BUMP, HV_HURT };
 
 #define MAX_FOUND 384
 typedef struct {
@@ -120,14 +162,17 @@ static bool sane(float f)
   return f == f && f < 1e7f && f > -1e7f;
 }
 
-bool hitview_active(void)
+static bool any_style(void)
 {
-  if (!hitview_shown)
-    return false;
   for (int i = 0; i < HV_PARTS; i++)
-    if (hitview_parts[i])
+    if (hitview_style[i] != HV_OFF)
       return true;
   return false;
+}
+
+bool hitview_active(void)
+{
+  return any_style() && (hitview_shown || n_own > 0);
 }
 
 /* --- whom a body is for ----------------------------------------------------------------------- */
@@ -156,6 +201,58 @@ static void combat_of(uintptr_t actor, uintptr_t link, bool *invincible, bool *f
 static uint32_t link_number;
 static int link_attacks, link_attacks_before; /* PlayerAttack shapes this frame and last: logged as they appear */
 
+/* on, as the game reads it (main+0x15B800): a change queued for the physics' next step counts already */
+static bool switched_on(uintptr_t owner)
+{
+  if (!sys_mapped(owner + OWNER_STATE, 8, SYS_PERM_R))
+    return false;
+  uintptr_t request = rd(owner, OWNER_REQUEST);
+  if (request && sys_mapped(request + REQUEST_FLAGS, 8, SYS_PERM_R) &&
+      (*(const volatile uint64_t *)(request + REQUEST_FLAGS) & REQUEST_PENDING))
+    return *(const volatile uint32_t *)(request + REQUEST_ON) != 0;
+  return !(*(const volatile uint64_t *)(owner + OWNER_STATE) & STATE_OFF);
+}
+
+/* debugging (the log): each frame, the state of the PlayerAttack sensors within 3 m of Link that changed: in the world,
+ * on, a pending change, its mask */
+#define WATCH_SWORD 0 /* 1: log them */
+#define WATCH_MAX 16
+static struct { uintptr_t body; uint32_t state; } watched[WATCH_MAX];
+static uint32_t frame_no;
+static void watch_link_attacks(uintptr_t body, const vec3f_t *link_pos)
+{
+  uintptr_t owner = *(const volatile uintptr_t *)(body + BODY_OWNER);
+  uintptr_t layer_obj = rd(owner, OWNER_LAYER);
+  if (!layer_obj || !sys_mapped(layer_obj + 8, 1, SYS_PERM_R) ||
+      (*(const volatile uint8_t *)(layer_obj + 8) & LAYER_MASK) != 7 || !sys_mapped(owner + OWNER_HIT_MASK, 8, SYS_PERM_R))
+    return;
+  const volatile float *pos = (const volatile float *)(body + BODY_POS);
+  float dx = pos[0] - link_pos->x, dy = pos[1] - link_pos->y, dz = pos[2] - link_pos->z;
+  if (!(dx * dx + dy * dy + dz * dz < 9))
+    return;
+  uintptr_t request = rd(owner, OWNER_REQUEST);
+  uint64_t flags = request && sys_mapped(request + REQUEST_FLAGS, 8, SYS_PERM_R) ? *(const volatile uint64_t *)(request + REQUEST_FLAGS) : 0;
+  uint32_t asked = request && sys_mapped(request + REQUEST_ON, 4, SYS_PERM_R) ? *(const volatile uint32_t *)(request + REQUEST_ON) : 9;
+  bool in_world = sane(((const volatile float *)(body + BODY_AABB_MAX))[0]);
+  uint32_t state = (uint32_t)in_world | (uint32_t)!(*(const volatile uint64_t *)(owner + OWNER_STATE) & STATE_OFF) << 1 |
+                   (uint32_t)(flags & 0xFFFF) << 4 | (asked & 0xF) << 20 |
+                   (uint32_t)(*(const volatile uint64_t *)(owner + OWNER_HIT_MASK) != 0) << 24;
+  int slot = -1;
+  for (int i = 0; i < WATCH_MAX; i++)
+    if (watched[i].body == body)
+      slot = i;
+  if (slot < 0)
+    for (int i = 0; i < WATCH_MAX && slot < 0; i++)
+      if (!watched[i].body)
+        slot = i, watched[i].body = body, watched[i].state = ~0u;
+  if (slot < 0 || watched[slot].state == state)
+    return;
+  watched[slot].state = state;
+  log_printf("hitboxes: frame %u sword body %#lx: in world %d, on %d, request flags %#x asks %u, mask %d", frame_no,
+             (unsigned long)body, in_world, (int)(state >> 1 & 1), (unsigned)(flags & 0xFFFF), (unsigned)asked,
+             (int)(state >> 24 & 1));
+}
+
 static int classify(int world, uintptr_t owner, uintptr_t link)
 {
   uintptr_t layer_obj = rd(owner, OWNER_LAYER);
@@ -168,10 +265,16 @@ static int classify(int world, uintptr_t owner, uintptr_t link)
   uintptr_t actor = actor_link ? rd(actor_link, 8) : 0;
   if (actor && actor == link)
     link_number = number;
-  bool links = (actor && actor == link) || (link_number && number == link_number);
+  bool links = (actor && actor == link) || (link_number && number == link_number) ||
+               (world == 1 && layer == SENSOR_PLAYER_ATTACK); /* his sword is an actor of its own */
+  /* whose: everyone's (or only Link's) with the menu's show, and the actors ticked in the actor browser */
+  bool wanted = (hitview_shown && (!hitview_link_only || links)) || (actor && hitview_own(actor)) ||
+                (links && hitview_own(link));
+  if (!wanted)
+    return -1;
   /* switched off (the AI's OneShotSensorHitAtSensorOff and the like: phive's set-enabled, main+0x15B800): there, but
    * nothing touches it */
-  if (!sys_mapped(owner + OWNER_STATE, 8, SYS_PERM_R) || (*(const volatile uint64_t *)(owner + OWNER_STATE) & STATE_OFF))
+  if (!switched_on(owner))
     return -1;
   /* a sensor nothing is collected for (no contact collection: the wagon horse's AttackAll, one of Link's) can't hit
    * or be hit: as gz draws only what the game's collision check has this frame */
@@ -181,25 +284,25 @@ static int classify(int world, uintptr_t owner, uintptr_t link)
     /* Link's own (his sword, a thrown nut...: PlayerAttack, put in the world or switched on only while it's out), as
      * gz's AT list has them */
     if (layer == SENSOR_PLAYER_ATTACK || (links && layer == SENSOR_ATTACK_ALL)) {
-      if (!hitview_parts[HV_ATTACK] || !mask)
+      if (hitview_style[HV_ATTACK] == HV_OFF || !mask)
         return -1;
       link_attacks++;
       return K_ATTACK;
     }
     /* anyone else's, while it can hurt Link */
     if (layer == SENSOR_ENEMY_ATTACK || layer == SENSOR_NPC_ATTACK || layer == SENSOR_ATTACK_ALL)
-      return hitview_parts[HV_ATTACK] && (mask & (1ull << SENSOR_PLAYER)) && !links ? K_ATTACK : -1;
+      return hitview_style[HV_ATTACK] != HV_OFF && (mask & (1ull << SENSOR_PLAYER)) && !links ? K_ATTACK : -1;
     if (layer < SENSOR_PLAYER || layer > SENSOR_TGT_HIT_ALL || (!actor && !links))
       return -1;
-    if (!hitview_parts[HV_INVINCIBLE] && !hitview_parts[HV_HURT])
+    if (hitview_style[HV_INVINCIBLE] == HV_OFF && hitview_style[HV_HURT] == HV_OFF)
       return -1;
     bool invincible = false, fightable = false;
     combat_of(links ? link : actor, link, &invincible, &fightable);
     if (fightable && invincible) /* gz has none then (the game doesn't register it): purple instead */
-      return hitview_parts[HV_INVINCIBLE] ? K_INVINCIBLE : -1;
-    return hitview_parts[HV_HURT] ? K_HURT : -1;
+      return hitview_style[HV_INVINCIBLE] != HV_OFF ? K_INVINCIBLE : -1;
+    return hitview_style[HV_HURT] != HV_OFF ? K_HURT : -1;
   }
-  if (!hitview_parts[HV_BUMP])
+  if (hitview_style[HV_BUMP] == HV_OFF)
     return -1;
   /* a character controller (the body a character stands and walks with, and pushes others with) */
   bool controller = Z64HD_VT_CCT_BODY && sys_ptr(owner) == MAIN(Z64HD_VT_CCT_BODY);
@@ -276,17 +379,22 @@ static void walk(const vec3f_t *link_pos, uintptr_t link)
       uintptr_t block = *(const volatile uintptr_t *)(blocks + b * 8);
       if (!heap_ptr(block) || !sys_mapped(block, BODIES_PER_BLOCK * BODY_SIZE, SYS_PERM_R))
         continue;
-      for (unsigned i = 0; i < BODIES_PER_BLOCK && b * BODIES_PER_BLOCK + i < capacity; i++)
+      for (unsigned i = 0; i < BODIES_PER_BLOCK && b * BODIES_PER_BLOCK + i < capacity; i++) {
+        if (WATCH_SWORD && w == 1 && heap_ptr(*(const volatile uintptr_t *)(block + i * BODY_SIZE + BODY_OWNER)))
+          watch_link_attacks(block + i * BODY_SIZE, link_pos);
         consider(w, block + i * BODY_SIZE, link_pos, link);
+      }
     }
   }
 }
 
 /* --- drawing ---------------------------------------------------------------------------------- */
 
+static bool outline = true; /* the shape being drawn: outlined (else filled, no lines) */
+
 static void line(const float a[3], const float b[3], uint8_t colour)
 {
-  if (n_lines >= HITVIEW_MAX_LINES)
+  if (!outline || n_lines >= HITVIEW_MAX_LINES)
     return;
   memcpy(lines[n_lines][0], a, sizeof(float) * 3);
   memcpy(lines[n_lines][1], b, sizeof(float) * 3);
@@ -301,7 +409,7 @@ static void triangle(const float a[3], const float b[3], const float c[3], uint8
   for (int k = 0; k < 3; k++)
     f->corner[k] = a[k], f->u[k] = b[k] - a[k], f->v[k] = c[k] - a[k];
   f->color = colour;
-  f->scene = false; /* over the actor it's on, not hidden by it */
+  f->scene = !hitview_xray; /* hidden by what's nearer (the scenery, and the actors), as gz's are */
   f->triangle = true;
 }
 
@@ -503,7 +611,8 @@ static void draw(const found_t *f)
         return;
     }
   uint8_t colour = kind_colour[f->kind];
-  bool fill = kind_filled[f->kind];
+  bool fill = hitview_style[kind_part[f->kind]] == HV_FILL;
+  outline = !fill;
   if (n == 1) {
     float c[3];
     to_world(f->body, local[0], c);
@@ -559,6 +668,7 @@ static int by_kind_then_distance(const found_t *a, const found_t *b)
 void hitview_frame(void)
 {
   n_lines = n_faces = n_found = n_seen = 0;
+  frame_no++;
   link_attacks_before = link_attacks;
   link_attacks = 0;
   memset(counts, 0, sizeof(counts));
@@ -566,6 +676,11 @@ void hitview_frame(void)
   if (!hitview_active() || !z64hd_game || !z64hd_game->phive_mgr_ptr || !link_drawn_pos(&link_pos) ||
       !view_camera(&cam))
     return;
+  static int forget_wait;
+  if (n_own && --forget_wait <= 0) {
+    forget_gone();
+    forget_wait = 30;
+  }
   walk(&link_pos, link_actor());
   for (int i = 1; i < n_found; i++) { /* attacks first, then nearest first: what the budget keeps */
     found_t f = found[i];
@@ -576,7 +691,7 @@ void hitview_frame(void)
   }
   for (int i = 0; i < n_found && n_lines < HITVIEW_MAX_LINES; i++)
     draw(&found[i]);
-  if (link_attacks && !link_attacks_before)
+  if (WATCH_SWORD && link_attacks && !link_attacks_before)
     log_printf("hitboxes: Link's attack out (%d shapes)", link_attacks);
   report();
 }

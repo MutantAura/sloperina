@@ -1070,7 +1070,11 @@ static void run_line(char *line, bool held)
     }
   } else if (same(verb, "hitlist")) {
     static char text[6144];
-    hitview_list(text, sizeof(text));
+    char *name = take_word(&args);
+    if (*name)
+      hitview_list_all(name, text, sizeof(text));
+    else
+      hitview_list(text, sizeof(text));
     int n = 0;
     for (char *line = text; *line; n++) {
       char *end = line;

@@ -20,10 +20,10 @@ enum { HV_OFF, HV_OUTLINE, HV_FILL, HV_STYLES };
 extern int hitview_style[HV_PARTS];
 extern bool hitview_link_only; /* show: only Link's own (his body, his sword...) */
 extern bool hitview_xray;      /* also through walls and scenery (else hidden by whatever is nearer) */
-/* an actor's own switch (the actor browser's options): its hitboxes shown whatever the menu's show says, in the
- * menu's styles; forgotten when it goes */
-bool hitview_own(uintptr_t actor);
-void hitview_toggle(uintptr_t actor);
+/* an actor's own switches (the actor browser's options), one per part (HV_ATTACK...): that part of its hitboxes shown
+ * whatever the menu's show says, in the menu's style for it (filled where that's off); forgotten when it goes */
+bool hitview_own(uintptr_t actor, int part);
+void hitview_toggle(uintptr_t actor, int part);
 
 /* game thread, once a frame, before airwall_frame */
 void hitview_frame(void);
@@ -38,5 +38,7 @@ int hitview_faces(aw_face_t faces[], int max);
 void hitview_text(char *buf, int len);
 /* debugging (remote hitlist): the shapes found last frame, a line each */
 int hitview_list(char *out, int len);
+/* debugging (remote "hitlist <name>"): every body of the actors with `name` in their name, drawn or not */
+int hitview_list_all(const char *name, char *out, int len);
 
 #endif

@@ -568,6 +568,9 @@ static bool door_watched(uintptr_t actor)
 {
   return actor && interactview_door_watched() == actor && watch_has(W_DOOR_CLOSE);
 }
+/* an actor's hitbox switches (hitview.h's parts, in order), as scene > environment > hitboxes names them */
+static const char *const hitbox_labels[HV_PARTS] = { "attacks", "bump boxes", "invincibility", "hurtboxes" };
+
 
 static void panel(void)
 {
@@ -664,8 +667,8 @@ static void panel(void)
   gfx_row(2, GFX_ROW_LINE);
   /* its own switches (its options, minus), one under another with their checkboxes as the menu draws them */
   char check[64];
-  const char *labels[2 + IV_PARTS + 2];
-  bool on[2 + IV_PARTS + 2];
+  const char *labels[2 + IV_PARTS + 1 + HV_PARTS];
+  bool on[2 + IV_PARTS + 1 + HV_PARTS];
   int n_checks = 0;
   if (mode == MODE_LOOK && at) {
     if (guardview_is_guard(at)) {
@@ -681,7 +684,8 @@ static void panel(void)
     if (interactview_is_door(at)) {
       labels[n_checks] = T("close timer watch"), on[n_checks++] = door_watched(at);
     }
-    labels[n_checks] = T("hitboxes"), on[n_checks++] = hitview_own(at);
+    for (int part = 0; part < HV_PARTS; part++) /* its hitboxes, each kind on its own */
+      labels[n_checks] = T(hitbox_labels[part]), on[n_checks++] = hitview_own(at, part);
   }
   int row = 3;
   if (stats[0] || !n_checks) { /* its stats (an empty line kept for one with none, so the panel doesn't jump) */
@@ -801,16 +805,18 @@ static void set_interact(menu_item_t *it, bool on)
     interactview_toggle(menu_guard, (int)it->data);
 }
 
-/* its hitboxes (hitview.c): shown whatever scene > environment > hitboxes > show says */
-static bool get_hitboxes(menu_item_t *it) { return hitview_own(menu_guard); }
+/* (hitbox_labels, above the panel) */
+/* its hitboxes (hitview.c), each kind on its own (the item's data: its HV_ part): shown whatever scene > environment
+ * > hitboxes says */
+static bool get_hitboxes(menu_item_t *it) { return hitview_own(menu_guard, (int)it->data); }
 
 static void set_hitboxes(menu_item_t *it, bool on)
 {
-  if (hitview_own(menu_guard) != on)
-    hitview_toggle(menu_guard);
+  if (hitview_own(menu_guard, (int)it->data) != on)
+    hitview_toggle(menu_guard, (int)it->data);
 }
 
-void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 5); }
+void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 4 + HV_PARTS); }
 
 /* this actor's own switches, each for it alone (whatever scene > environment says): its items made again for it */
 static void open_guard_menu(uintptr_t actor)
@@ -870,10 +876,18 @@ static void open_guard_menu(uintptr_t actor)
       door_action->log_label = "";
     }
   }
-  item = menu_add_check(&m_guard, "hitboxes", get_hitboxes, set_hitboxes, 0);
-  if (item) {
-    item->hint = "its attacks, bump boxes and hurtboxes, as scene > environment > hitboxes draws them";
-    item->log_label = "its hitboxes:";
+  static const char *const hitbox_hints[HV_PARTS] = {
+    "its attacks while they can hit (red), as scene > environment > hitboxes draws them",
+    "the bodies it bumps into link with (white)",
+    "where it's hit while it's invincible (purple)",
+    "where it can be hit (blue)",
+  };
+  for (int part = 0; part < HV_PARTS; part++) {
+    item = menu_add_check(&m_guard, hitbox_labels[part], get_hitboxes, set_hitboxes, part);
+    if (item) {
+      item->hint = hitbox_hints[part];
+      item->log_label = "its hitboxes:";
+    }
   }
   menu_add_return(&m_guard); /* back to browsing: the menu closes, the browser is still on */
   if (!menu_current)

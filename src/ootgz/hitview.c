@@ -47,38 +47,48 @@ int hitview_style[HV_PARTS] = { HV_FILL, HV_FILL, HV_FILL, HV_FILL };
 bool hitview_link_only;
 bool hitview_xray;
 
-/* actors whose hitboxes are shown whatever the menu says (the actor browser's options), forgotten when they go */
+/* actors whose hitboxes are shown whatever the menu says (the actor browser's options), each part on its own (a
+ * bit per HV_ part), forgotten when they go */
 #define MAX_OWN 16
-static uintptr_t own[MAX_OWN];
+static struct { uintptr_t actor; uint8_t parts; } own[MAX_OWN];
 static int n_own;
 
-bool hitview_own(uintptr_t actor)
+static uint8_t own_parts(uintptr_t actor)
 {
-  for (int i = 0; i < n_own; i++)
-    if (own[i] == actor)
-      return true;
-  return false;
+  for (int i = 0; actor && i < n_own; i++)
+    if (own[i].actor == actor)
+      return own[i].parts;
+  return 0;
 }
 
-void hitview_toggle(uintptr_t actor)
+bool hitview_own(uintptr_t actor, int part)
 {
-  for (int i = 0; i < n_own; i++)
-    if (own[i] == actor) {
-      own[i] = own[--n_own];
-      log_printf("hitboxes: %#lx's off", (unsigned long)actor);
+  return part >= 0 && part < HV_PARTS && (own_parts(actor) >> part & 1);
+}
+
+void hitview_toggle(uintptr_t actor, int part)
+{
+  if (!actor || part < 0 || part >= HV_PARTS)
+    return;
+  int i = 0;
+  while (i < n_own && own[i].actor != actor)
+    i++;
+  if (i == n_own) {
+    if (n_own == MAX_OWN)
       return;
-    }
-  if (n_own < MAX_OWN) {
-    own[n_own++] = actor;
-    log_printf("hitboxes: %#lx's on", (unsigned long)actor);
+    own[n_own++] = (typeof(own[0])){ actor, 0 };
   }
+  own[i].parts ^= (uint8_t)(1u << part);
+  log_printf("hitboxes: %#lx's part %d %s", (unsigned long)actor, part, own[i].parts >> part & 1 ? "on" : "off");
+  if (!own[i].parts)
+    own[i] = own[--n_own];
 }
 
 static void forget_gone(void)
 {
   for (int i = 0; i < n_own; i++) {
     actor_read_t a;
-    if (!actor_read(own[i], &a) || !a.running)
+    if (!actor_read(own[i].actor, &a) || !a.running)
       own[i--] = own[--n_own];
   }
 }
@@ -172,7 +182,7 @@ static bool any_style(void)
 
 bool hitview_active(void)
 {
-  return any_style() && (hitview_shown || n_own > 0);
+  return (hitview_shown && any_style()) || n_own > 0;
 }
 
 /* --- whom a body is for ----------------------------------------------------------------------- */
@@ -334,6 +344,8 @@ static bool running(uintptr_t actor)
   return !actor || (sys_read32(actor + ACTOR_STATE, &state) && (state == 4 || state == 5));
 }
 
+static bool part_on[HV_PARTS]; /* classify: the parts drawn for the body it's on */
+
 static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
 {
   uintptr_t layer_obj = rd(owner, OWNER_LAYER);
@@ -349,9 +361,13 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
   bool links = (actor && actor == link) || (link_number && number == link_number) ||
                (world == 1 && layer == SENSOR_PLAYER_ATTACK); /* his sword is an actor of its own */
   /* whose: everyone's (or only Link's) with the menu's show, and the actors ticked in the actor browser */
-  bool wanted = (hitview_shown && (!hitview_link_only || links)) || (actor && hitview_own(actor)) ||
-                (links && hitview_own(link));
-  if (!wanted)
+  /* whose: everyone's (or only Link's) with the menu's show, in its styles; and the parts ticked for an actor in the
+   * actor browser (Link's for his sword and his other bodies), whatever the styles say */
+  bool shown = hitview_shown && (!hitview_link_only || links);
+  uint8_t ticked = own_parts(actor) | (links ? own_parts(link) : 0);
+  for (int part = 0; part < HV_PARTS; part++)
+    part_on[part] = (shown && hitview_style[part] != HV_OFF) || (ticked >> part & 1);
+  if (!part_on[HV_ATTACK] && !part_on[HV_BUMP] && !part_on[HV_INVINCIBLE] && !part_on[HV_HURT])
     return -1;
   /* switched off (the AI's OneShotSensorHitAtSensorOff and the like: phive's set-enabled, main+0x15B800): there, but
    * nothing touches it */
@@ -366,7 +382,7 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
     /* Link's own (his sword, a thrown nut...: PlayerAttack, put in the world or switched on only while it's out), as
      * gz's AT list has them */
     if (layer == SENSOR_PLAYER_ATTACK) { /* (his AttackAll ones aren't: a caught boomerang's stays on in his hand) */
-      if (hitview_style[HV_ATTACK] == HV_OFF || !mask || !running(actor)) /* a spent nut, a caught boomerang: put away */
+      if (!part_on[HV_ATTACK] || !mask || !running(actor)) /* a spent nut, a caught boomerang: put away */
         return -1;
       link_attacks++;
       return K_ATTACK;
@@ -375,23 +391,23 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
     if (layer == SENSOR_CHEMICAL_ELEMENT) {
       float r = heap_ptr(shape) && sys_mapped(shape + SHAPE_RADIUS, 4, SYS_PERM_R) ?
                 *(const volatile float *)(shape + SHAPE_RADIUS) : 0;
-      return hitview_style[HV_ATTACK] != HV_OFF && r >= BLAST_MIN_RADIUS && is_explosive(actor) ? K_ATTACK : -1;
+      return part_on[HV_ATTACK] && r >= BLAST_MIN_RADIUS && is_explosive(actor) ? K_ATTACK : -1;
     }
     /* anyone else's, while it can hurt Link */
     if (layer == SENSOR_ENEMY_ATTACK || layer == SENSOR_NPC_ATTACK || layer == SENSOR_ATTACK_ALL)
-      return hitview_style[HV_ATTACK] != HV_OFF && (mask & (1ull << SENSOR_PLAYER)) && !links && running(actor) ? K_ATTACK
+      return part_on[HV_ATTACK] && (mask & (1ull << SENSOR_PLAYER)) && !links && running(actor) ? K_ATTACK
                                                                                                                : -1;
     if (layer < SENSOR_PLAYER || layer > SENSOR_TGT_HIT_ALL || (!actor && !links) || !running(actor))
       return -1;
-    if (hitview_style[HV_INVINCIBLE] == HV_OFF && hitview_style[HV_HURT] == HV_OFF)
+    if (!part_on[HV_INVINCIBLE] && !part_on[HV_HURT])
       return -1;
     bool invincible = false, fightable = false;
     combat_of(links ? link : actor, link, &invincible, &fightable);
     if (fightable && invincible) /* gz has none then (the game doesn't register it): purple instead */
-      return hitview_style[HV_INVINCIBLE] != HV_OFF ? K_INVINCIBLE : -1;
-    return hitview_style[HV_HURT] != HV_OFF ? K_HURT : -1;
+      return part_on[HV_INVINCIBLE] ? K_INVINCIBLE : -1;
+    return part_on[HV_HURT] ? K_HURT : -1;
   }
-  if (hitview_style[HV_BUMP] == HV_OFF || !running(actor))
+  if (!part_on[HV_BUMP] || !running(actor))
     return -1;
   /* a character controller (the body a character stands and walks with, and pushes others with) */
   bool controller = Z64HD_VT_CCT_BODY && sys_ptr(owner) == MAIN(Z64HD_VT_CCT_BODY);
@@ -796,7 +812,8 @@ static void draw(const found_t *f)
         return;
     }
   uint8_t colour = kind_colour[f->kind];
-  bool fill = hitview_style[kind_part[f->kind]] == HV_FILL;
+  int style = hitview_style[kind_part[f->kind]];
+  bool fill = style == HV_FILL || style == HV_OFF; /* (off: drawn for an actor's own switch, filled) */
   outline = !fill;
   if (n == 1) {
     float c[3];
@@ -903,6 +920,61 @@ int hitview_faces(aw_face_t out[], int max)
 }
 
 /* debugging (remote hitlist): the shapes found last frame, one a line */
+static bool has_text(const char *s, const char *part)
+{
+  for (; *s; s++) {
+    int k = 0;
+    while (part[k] && s[k] == part[k])
+      k++;
+    if (!part[k])
+      return true;
+  }
+  return false;
+}
+
+/* debugging (remote "hitlist <name>"): every body of the actors whose name has `name` in it, drawn or not */
+int hitview_list_all(const char *name, char *out, int len)
+{
+  int at = 0;
+  for (int w = 0; w < 2; w++) {
+    uintptr_t world = world_of(w);
+    uint32_t capacity = 0;
+    if (!world || !sys_read32(world + WORLD_BODY_CAPACITY, &capacity) || capacity > MAX_BODIES)
+      continue;
+    uintptr_t blocks = rd(world, WORLD_BODY_BLOCKS);
+    unsigned n_blocks = (capacity + BODIES_PER_BLOCK - 1) / BODIES_PER_BLOCK;
+    if (!blocks || !sys_mapped(blocks, n_blocks * 8, SYS_PERM_R))
+      continue;
+    for (unsigned b = 0; b < n_blocks; b++) {
+      uintptr_t block = *(const volatile uintptr_t *)(blocks + b * 8);
+      if (!heap_ptr(block) || !sys_mapped(block, BODIES_PER_BLOCK * BODY_SIZE, SYS_PERM_R))
+        continue;
+      for (unsigned i = 0; i < BODIES_PER_BLOCK && b * BODIES_PER_BLOCK + i < capacity && at < len - 300; i++) {
+        uintptr_t body = block + i * BODY_SIZE, owner = *(const volatile uintptr_t *)(body + BODY_OWNER);
+        if (!heap_ptr(owner))
+          continue;
+        uintptr_t al = rd(owner, OWNER_ACTOR), ac = al ? rd(al, 8) : 0, nm = ac ? rd(ac, 0x20) : 0;
+        if (!nm || !sys_mapped(nm, 8, SYS_PERM_R) || !has_text((const char *)nm, name))
+          continue;
+        uintptr_t lo = rd(owner, OWNER_LAYER), shape = *(const volatile uintptr_t *)(body + BODY_SHAPE);
+        uint32_t pts = 0;
+        if (heap_ptr(shape))
+          sys_read32(shape + SHAPE_POINTS + 4, &pts);
+        float r = heap_ptr(shape) && sys_mapped(shape + SHAPE_RADIUS, 4, SYS_PERM_R) ?
+                  *(const volatile float *)(shape + SHAPE_RADIUS) : -1;
+        const volatile float *p = (const volatile float *)(body + BODY_POS);
+        at += snprintf(out + at, (size_t)(len - at),
+                       "w%d %s layer %#llx mask %#llx contacts %d on %d world %d, %u points r %.2f at %.2f %.2f %.2f\n", w,
+                       (const char *)nm, (unsigned long long)(lo ? rd(lo, 8) : 0),
+                       (unsigned long long)rd(owner, OWNER_HIT_MASK), rd(owner, OWNER_CONTACTS) != 0,
+                       switched_on(owner), sane(((const volatile float *)(body + BODY_AABB_MAX))[0]), (unsigned)pts,
+                       (double)r, (double)p[0], (double)p[1], (double)p[2]);
+      }
+    }
+  }
+  return at;
+}
+
 int hitview_list(char *out, int len)
 {
   static const char *const kinds[N_KINDS] = { "attack", "invincible", "link", "bump", "hurt" };

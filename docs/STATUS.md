@@ -103,6 +103,9 @@ The game patches are the same as 0.0.11's (patch v6).
 - **The boomerang's attack** didn't show until a second, bigger sensor came on 13 frames into the flight: its first
   (PlayerAttack, on 2 frames after it leaves his hand) is a 32-point shape with more faces than the 40 allowed, and
   the box drawn instead was lines only, which fill leaves out. Now up to 255 faces, and the box is filled. Seen.
+- **The actor browser's hitbox switches** are four now (asked for 27th November): attacks, bump boxes, invincibility,
+  hurtboxes, each on its own for that actor (a ticked kind is drawn whatever show and its style say). Seen: an NPC's
+  bump box alone, then with its hurtbox, then its hurtbox alone, with show off.
 - **Frame advance's camera tools** (asked for 27th November): the free camera, the actor browser and the explorer work
   while frame advance holds the game: it draws with its world stopped (`DebugPause` raised with one bit more,
   pausemgr.c, FINDINGS 9.41), and is held again where it was when they're left. Seen in game on 1.1.1: the free

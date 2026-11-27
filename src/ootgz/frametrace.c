@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "nvn.h"
 #include "sdfs.h"
 #include "sys.h"
 
@@ -16,6 +17,13 @@ typedef void (*set_rt_t)(void *cmd, int n, const nvn_texture_t *const *colors, c
                          const nvn_texture_t *depth, const void *depth_view);
 typedef void (*draw_t)(void *cmd, uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e, uint64_t f);
 typedef nvn_handle_t (*end_t)(void *cmd);
+typedef void (*begin_t)(void *cmd);
+static begin_t real_begin;
+static void hook_begin(void *cmd)
+{
+  real_begin(cmd);
+  nvn_cmd_begun(cmd);
+}
 typedef void (*submit_t)(nvn_queue_t *q, int n, const nvn_handle_t *handles);
 typedef int (*tex_int_t)(const nvn_texture_t *t);
 
@@ -44,6 +52,7 @@ static const char *const draw_names[8] = {
   "nvnCommandBufferDrawElementsIndirect", "nvnCommandBufferDispatchCompute",
 };
 static end_t real_end;
+static nvn_handle_t hook_end(void *cmd);
 static submit_t real_submit;
 static tex_int_t tex_w, tex_h, tex_fmt;
 
@@ -69,9 +78,41 @@ static void log_call(int k, void *cmd, int n, const nvn_handle_t *handles)
 }
 static void hook_call0(void *cmd, int n, const nvn_handle_t *h) { log_call(0, cmd, n, h); real_call[0](cmd, n, h); }
 static void hook_call1(void *cmd, int n, const nvn_handle_t *h) { log_call(1, cmd, n, h); real_call[1](cmd, n, h); }
+/* the colour targets bound in the last whole frame (remote rtlist): always kept, cheaply */
+#define RT_SEEN 48
+typedef struct { uintptr_t tex; uint32_t sets; } rt_seen_t;
+static rt_seen_t rt_now[RT_SEEN], rt_last[RT_SEEN];
+static volatile int n_rt_now, n_rt_last;
+
+static void note_rt(const nvn_texture_t *t)
+{
+  if (!t)
+    return;
+  int n = n_rt_now;
+  for (int i = 0; i < n && i < RT_SEEN; i++)
+    if (rt_now[i].tex == (uintptr_t)t) {
+      rt_now[i].sets++;
+      return;
+    }
+  int i = __atomic_fetch_add(&n_rt_now, 1, __ATOMIC_RELAXED);
+  if (i < RT_SEEN)
+    rt_now[i].tex = (uintptr_t)t, rt_now[i].sets = 1;
+}
+
+int frametrace_targets(uintptr_t *tex, uint32_t *sets, int max)
+{
+  int n = n_rt_last < RT_SEEN ? n_rt_last : RT_SEEN;
+  n = n < max ? n : max;
+  for (int i = 0; i < n; i++)
+    tex[i] = rt_last[i].tex, sets[i] = rt_last[i].sets;
+  return n;
+}
+
 static void hook_set_rt(void *cmd, int n, const nvn_texture_t *const *colors, const void *const *views,
                         const nvn_texture_t *depth, const void *depth_view)
 {
+  if (n > 0 && colors)
+    note_rt(colors[0]);
   if (state == 2) {
     int i = add();
     if (i >= 0) {
@@ -85,6 +126,8 @@ static void hook_set_rt(void *cmd, int n, const nvn_texture_t *const *colors, co
     }
   }
   real_set_rt(cmd, n, colors, views, depth, depth_view);
+  if (n > 0 && colors && colors[0])
+    nvn_after_set_rt(cmd, colors[0], n, depth);
 }
 
 /* a draw: counted on the latest render target event of the same command buffer */
@@ -112,6 +155,7 @@ static void *const draw_hooks[8] = { hook_draw0, hook_draw1, hook_draw2, hook_dr
 
 static nvn_handle_t hook_end(void *cmd)
 {
+  nvn_cmd_ended(cmd);
   nvn_handle_t h = real_end(cmd);
   if (state == 2) {
     int i = add();
@@ -140,7 +184,7 @@ static bool same(const char *a, const char *b)
   return *a == *b;
 }
 
-void *frametrace_wrap(const char *name, void *proc)
+void *frametrace_wrap(const char *name, void *proc, bool all)
 {
   if (!proc)
     return 0;
@@ -148,6 +192,9 @@ void *frametrace_wrap(const char *name, void *proc)
     real_set_rt = (set_rt_t)proc;
     return (void *)hook_set_rt;
   }
+  if (!all) /* the rest only for a trace (FRAMETRACE_HOOKS) */
+    return 0;
+  (void)hook_begin;
   for (int k = 0; k < 8; k++)
     if (same(name, draw_names[k])) {
       real_draw[k] = (draw_t)proc;
@@ -173,6 +220,13 @@ void frametrace_arm(void)
 
 void frametrace_present(getproc_t getproc, nvn_device_t *dev, const nvn_texture_t *presented)
 {
+  { /* the frame's targets, kept for rtlist */
+    int n = n_rt_now < RT_SEEN ? n_rt_now : RT_SEEN;
+    for (int i = 0; i < n; i++)
+      rt_last[i] = rt_now[i];
+    n_rt_last = n;
+    n_rt_now = 0;
+  }
   if (!tex_w && getproc && dev) {
     tex_w = (tex_int_t)getproc(dev, "nvnTextureGetWidth");
     tex_h = (tex_int_t)getproc(dev, "nvnTextureGetHeight");

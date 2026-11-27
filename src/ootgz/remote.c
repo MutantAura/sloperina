@@ -1030,6 +1030,51 @@ static void run_line(char *line, bool held)
       parse_int(b, &bpp);
     nvn_texdump((uintptr_t)texture, (int)bpp);
     result(texture != 0, "texdump %#llx", (unsigned long long)texture);
+  } else if (same(verb, "hudtest")) { /* hudtest <hex target> [<hex cmd> <nth bind>] | off */
+    char *what = take_word(&args);
+    nvn_hud_test = same(what, "on");
+    nvn_hud_test_target = 0;
+    if (!same(what, "off") && !same(what, "on")) {
+      nvn_hud_test_target = (uintptr_t)parse_hex(what);
+      char *cmd = take_word(&args);
+      int32_t k = 0;
+      nvn_hud_test_cmd = *cmd ? (uintptr_t)parse_hex(cmd) : 0;
+      parse_int(take_word(&args), &k);
+      nvn_hud_test_bind = (int)k;
+      nvn_hud_test = k > 0;
+    }
+    result(true, "hudtest %#lx %#lx %d", (unsigned long)nvn_hud_test_target, (unsigned long)nvn_hud_test_cmd,
+           nvn_hud_test_bind);
+  } else if (same(verb, "rtbinds")) {
+    uintptr_t cmds[16];
+    int binds[16];
+    int n = nvn_hud_binds(cmds, binds, 16);
+    for (int i = 0; i < n; i++)
+      result(true, "rtbinds: cmd %#lx: %d binds", (unsigned long)cmds[i], binds[i]);
+    result(true, "rtbinds: %d command buffers", n);
+    static char text[3072];
+    nvn_hud_bind_log(text, sizeof(text));
+    for (char *line = text; *line;) {
+      char *end = line;
+      while (*end && *end != '\n')
+        end++;
+      char keep = *end;
+      *end = 0;
+      result(true, "rtbinds: %s", line);
+      if (!keep)
+        break;
+      line = end + 1;
+    }
+  } else if (same(verb, "rtlist")) {
+    uintptr_t tex[48];
+    uint32_t sets[48];
+    int n = frametrace_targets(tex, sets, 48);
+    for (int i = 0; i < n; i++) {
+      int w = 0, h = 0, f = 0;
+      nvn_texture_info(tex[i], &w, &h, &f);
+      result(true, "rtlist: %#lx %dx%d format %#x, bound %u times", (unsigned long)tex[i], w, h, f, (unsigned)sets[i]);
+    }
+    result(true, "rtlist: %d targets", n);
   } else if (same(verb, "frametrace")) {
     frametrace_arm();
     result(true, "frametrace: the next frame goes to the log");

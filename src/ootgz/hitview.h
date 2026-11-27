@@ -32,7 +32,7 @@ bool hitview_active(void);
 #define HITVIEW_MAX_LINES 1100
 int hitview_lines(float ends[][2][3], uint8_t colours[], int max);
 /* game thread, after hitview_lines: the fills; how many */
-#define HITVIEW_MAX_FACES 600
+#define HITVIEW_MAX_FACES 2400
 int hitview_faces(aw_face_t faces[], int max);
 /* the menu's line: "4 attacks, 12 bodies near" */
 void hitview_text(char *buf, int len);

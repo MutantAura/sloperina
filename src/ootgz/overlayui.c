@@ -545,7 +545,15 @@ static bool draw_pause(float w, float h, float px, int icon)
   return true;
 }
 
-int overlayui_draw(int w, int h, int pause_icon)
+/* the world's lines and faces alone (the air walls, hitboxes...), into the game's picture under its HUD (nvn.c) */
+bool overlayui_draw_world(int w, int h)
+{
+  if (w <= 0 || h <= 0)
+    return false;
+  return draw_lines((float)w, (float)h, (float)h / REF_H, gpuui_quads_free());
+}
+
+int overlayui_draw(int w, int h, int pause_icon, bool lines)
 {
   if (w <= 0 || h <= 0)
     return 0;
@@ -556,7 +564,7 @@ int overlayui_draw(int w, int h, int pause_icon)
   enemyhp_bars(&n_bars);
   n_bars = n_bars < MAX_BARS_DRAWN ? n_bars : MAX_BARS_DRAWN;
   int for_lines = gpuui_quads_free() - (pause_icon ? PAUSE_QUADS : 0) - n_bars * BAR_QUADS;
-  return (draw_lines((float)w, (float)h, px, for_lines > 0 ? for_lines : 0) ? OVERLAY_LINES : 0) |
+  return (lines && draw_lines((float)w, (float)h, px, for_lines > 0 ? for_lines : 0) ? OVERLAY_LINES : 0) |
          (draw_bars((float)w, (float)h, px) ? OVERLAY_BARS : 0) |
          (draw_pause((float)w, (float)h, px, pause_icon) ? OVERLAY_PAUSE : 0);
 }

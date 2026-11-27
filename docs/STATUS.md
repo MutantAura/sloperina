@@ -87,15 +87,12 @@ The game patches are the same as 0.0.11's (patch v6).
   at first: lines and fills hidden by the scene depth, actors included, as gz's); an actor's own **hitboxes** switch in
   the actor browser's options (every actor now has options). Seen in game: hidden vs through walls, only Link's,
   fill. Not seen: the actor browser's switch.
-- **Under the HUD (asked for, not done):** everything the module draws goes on at present time, over the game's HUD.
-  The game's last command buffer of a frame (its own queue) calls 9 recorded blocks, then sets a 1920x1080 target
-  with no depth (NVN format 0x3F) twice and then the presented 2560x1440 one, with no draw calls of its own seen:
-  the HUD is likely drawn inside those blocks. Next: read that 1920x1080 target back (remote `texdump`) to see if
-  it's the HUD on its own (then the hitboxes can be masked by its alpha), else splice our drawing in before the
-  HUD's block. `frametrace` (remote) records a frame's render targets, draws, command buffer ends and submits to
-  dump/frametrace.txt, but its hooks (FRAMETRACE_HOOKS, off) crashed the game about a minute in, three times (an
-  abort in nn::fs::CloseFile from its "movie" module); without them it ran on. Its writes, and texdump's, are now
-  done on the game's thread.
+- **Under the HUD (done):** the world's overlays (air walls, hitboxes, guard sight, interaction ranges, void
+  views) are drawn into the game's HUD picture before its HUD, called from its own command buffer (FINDINGS 9.40).
+  Seen in game in Hyrule Castle's grounds, 4 minutes clean. Not checked: other maps and dungeons (the 4th bind in a
+  row may not hold everywhere: if not, the overlays would go over or under the wrong things), menus opening over
+  them, 1.0.0. Remote `hudtest`, `rtlist`, `rtbinds`, `texdump` for checking it.
+- **Fill** is solid shapes at about 30% opacity, back faces left out (as gz's).
 - Remote: `physdump` (raw capture of the Havok bodies for working out layouts offline).
 - **Not checked:** 1.0.0 (the body, owner and shape offsets are assumed the same; `vt_cct_body` is known there);
   boss attacks, Wolfos / Stalfos swings (a Wolfos spawn hung Lichii, below), NPCAttack (moving spikes), fire; enemy

@@ -2473,3 +2473,31 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   Baba), Lichii's GPU thread stopped ("Waited N s for the GPU thread to submit tick ..."), right after it logged
   "ASTC GPU decodes" and built a pipeline on the GPU thread; the module's game thread ran on until it stalled behind
   it. Other spawns of the same actors were fine.
+
+### 9.40 Drawing under the game's HUD (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- **Where the HUD goes:** the game draws its HUD into a picture of its own, 1920x1080 (NVN format 0x3F), with the
+  scene composited in first, and its last pass (its own command buffer and queue, just before the present) binds
+  that picture and then the swapchain texture and scales it up (draws not seen through the C entry points: in
+  blocks it calls). So whatever is drawn into the swapchain texture at present time is over the HUD. Read back
+  (remote `texdump`): two 1920x1080 targets had the hearts and the map in them; the full-size RGBA8 one is part of
+  the scene's lighting.
+- **Found by clearing a magenta rectangle** (remote `hudtest`) into a target right after the game's
+  nvnCommandBufferSetRenderTargets, in its own command buffer, at each bind in turn. Per presented frame the main
+  command buffer binds the picture about 10 times: the 2nd right after a 192x192 R8 target, the rest one after
+  another. Cleared at the 5th or 6th, the rectangle is under the hearts and items and isn't drawn over; at the 3rd,
+  4th or 8th it's over them. A clear after the last pass's bind of the swapchain texture is covered by the scaled
+  picture.
+- **What the module does** (nvn.c): the HUD's picture is learnt from the last pass (the target it binds just before
+  the swapchain texture); the world's lines and faces (air walls, hitboxes, guard sight...) are recorded at present
+  time into a command buffer of ours aimed at it (gpuui's slots 2 to 4, our command memory after the panels'), and
+  the game's command buffer calls it (nvnCommandBufferCallCommands) at the 4th bind of the picture in a row: the
+  newest handle, kept until a newer one is ready (frames are recorded ahead of the present, so dropping it once
+  called missed every other frame). A fence after each present guards the slot a frame called. 98% of frames get it;
+  without a call (title, menus, before the picture is known) they're drawn at present time as before. Frame advance's
+  held picture already has them when its frame did.
+- **The game's state after our block:** its HUD draws on correctly (its programs and pools set again; ours restore
+  the texture and sampler pools).
+- **Hooks:** wrapping the game's draw calls, EndRecording / SubmitCommands and CallCommands / CopyCommands for a full
+  frame trace crashed the game about a minute in, three times (an abort in nn::fs::CloseFile from its "movie"
+  module); wrapping only nvnCommandBufferSetRenderTargets ran four minutes clean. The trace is off unless built with
+  FRAMETRACE_HOOKS.

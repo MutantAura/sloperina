@@ -157,6 +157,13 @@ static bool names_equal(const char *a, const char *b)
 }
 
 static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index);
+static bool world_init(void);
+static void world_fence(nvn_queue_t *queue);
+static bool world_under_hud(void);
+static void world_record(int slot, bool *prime_depth_out);
+static bool presenting_held; /* draw_overlay from nvn_present_held */
+static bool clean_baked;     /* the kept picture has the world's lines in it */
+static bool clean_valid;
 static void keep_clean_copy(nvn_queue_t *queue, int index);
 
 /* The game's presents (its render thread) and ours while frame advance holds it (the game's thread, see
@@ -184,7 +191,10 @@ static void hook_present(nvn_queue_t *queue, nvn_window_t *window, int index)
   scenedepth_present(real_getproc, device, queue);
   frametrace_present(real_getproc, device,
                      index >= 0 && index < swapchain_texture_count ? swapchain_textures[index] : 0);
+  bool baked_now = world_under_hud();
   keep_clean_copy(queue, index); /* the game's picture before ours goes on it */
+  if (clean_valid)
+    clean_baked = baked_now; /* the world's lines in it already (held presents don't draw them again) */
   texdump_present(queue);
   draw_overlay(queue, window, index);
   gfx_release();
@@ -192,6 +202,7 @@ static void hook_present(nvn_queue_t *queue, nvn_window_t *window, int index)
   enemyhp_release();
   unlock_present();
   real_present(queue, window, index);
+  world_fence(queue); /* the frame just presented called the world's overlays (or not) */
 }
 
 static void hook_set_textures(void *builder, int count, nvn_texture_t *const *textures)
@@ -233,7 +244,7 @@ static void *wrap_proc(const char *name, void *proc)
   void *ours = scenedepth_wrap(name, proc);
   if (ours)
     return ours;
-  if (FRAMETRACE_HOOKS && (ours = frametrace_wrap(name, proc)))
+  if ((ours = frametrace_wrap(name, proc, FRAMETRACE_HOOKS)))
     return ours;
   if (names_equal(name, "nvnDeviceGetProcAddress")) {
     real_getproc = (getproc_t)proc;
@@ -282,6 +293,7 @@ const char *nvn_hook_game(uintptr_t main_base)
 /* --- overlay ---------------------------------------------------------------------------------- */
 
 #define SLOTS 2
+#define WORLD_SLOTS 3 /* the world under the HUD: a ring, the newest called until a newer one is ready */
 #define CMD_SIZE 0x40000  /* command memory per slot (see-through: a copy per sampled row) */
 #define CTRL_SIZE 0x4000  /* control memory per slot */
 #define PAGE_SIZE 0x1000
@@ -474,20 +486,22 @@ static bool overlay_init(void)
   alloc_scale = auto_scale(height);
   for (int p = 0; p < GFX_PANELS; p++)
     pixel_buffer_size[p] = round_page(panel_area(p, alloc_scale * SC_ONE) * bytes_per_pixel);
-  command_mem = aligned_alloc(PAGE_SIZE, CMD_SIZE * SLOTS);
-  control_mem = aligned_alloc(PAGE_SIZE, CTRL_SIZE * SLOTS);
+  command_mem = aligned_alloc(PAGE_SIZE, CMD_SIZE * (SLOTS + WORLD_SLOTS)); /* after ours: the world under the HUD */
+  control_mem = aligned_alloc(PAGE_SIZE, CTRL_SIZE * (SLOTS + WORLD_SLOTS));
   if (!command_mem || !control_mem) {
     overlay_fail("out of memory");
     return false;
   }
-  if (!make_pool(&command_pool, command_mem, CMD_SIZE * SLOTS, POOL_CPU_UNCACHED | POOL_GPU_CACHED)) {
+  if (!make_pool(&command_pool, command_mem, CMD_SIZE * (SLOTS + WORLD_SLOTS), POOL_CPU_UNCACHED | POOL_GPU_CACHED)) {
     overlay_fail("memory pool");
     return false;
   }
   if (!fn.cmd_init(&cmd_buffer, device)) {
     overlay_fail("command buffer");
     return false;
-  }
+  }  if (!world_init())
+    log_printf("the world's overlays under the HUD: not set up (drawn over it)");
+
   for (int s = 0; s < SLOTS; s++)
     if (!fn.sync_init(&slot_sync[s], device)) {
       overlay_fail("sync");
@@ -1918,6 +1932,13 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   if (gpu && gpuui_atlas_resetting() && !wait_gpu_idle())
     return;
   bool prime_depth = false;
+  /* the world's lines under the game's HUD: recorded for its next frame; drawn here only if the frame just made
+   * didn't call them in (on hold, as the last frame made did) */
+  static bool baked_last;
+  bool baked = presenting_held ? clean_baked : world_under_hud();
+  (void)baked_last;
+  if (gpu)
+    world_record(frame.slot, &prime_depth);
   if (gpu) {
     gpuui_begin(tex, frame.area, th, origin_lower_left, frame.slot);
     /* the scene's depth, made Link's alone, for hiding the air walls' lines behind him */
@@ -1929,16 +1950,20 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
     bool behind_link = !airwalls_xray && airwall_link_box(box, link.front, link.back, link.ground);
     if (behind_link)
       link.x0 = box[0], link.y0 = box[1], link.x1 = box[2], link.y1 = box[3];
-    if ((n_lines && behind_link) || airwall_needs_depth())
-      depth = scenedepth_lines(frame.area.w, frame.area.h, &depth_w, &depth_h, &prime_depth);
-    if (!gpuui_depth(depth, depth_w, depth_h, prime_depth, &link))
+    bool prime_here = false;
+    if (!baked && ((n_lines && behind_link) || airwall_needs_depth()))
+      depth = scenedepth_lines(frame.area.w, frame.area.h, &depth_w, &depth_h, &prime_here);
+    if (!gpuui_depth(depth, depth_w, depth_h, prime_here, &link))
       scenedepth_lines_give_up();
+    prime_depth |= prime_here;
   }
   /* the air walls and the enemies' health: on the GPU in the game's style (under the panels), else as
    * cleared rectangles below */
   if (gpu && screen) /* the panels are drawn after them, over them: their share of the frame's quads is kept */
     gpuui_reserve(PANEL_QUADS);
-  int overlays = gpu ? overlayui_draw(frame.area.w, frame.area.h, pause_icon) : 0;
+  int overlays = gpu ? overlayui_draw(frame.area.w, frame.area.h, pause_icon, !baked) : 0;
+  if (baked)
+    overlays |= OVERLAY_LINES; /* (not drawn as rectangles either) */
   if (gpu)
     gpuui_reserve(0);
   if (overlays)
@@ -2111,7 +2136,7 @@ static uint8_t *clean_mem;    /* clean_storage once its pool is made: the pictur
 static size_t clean_size;     /* the picture's bytes */
 static int clean_w, clean_h;
 static volatile bool clean_wanted; /* frame advance is paused: keep the game's picture */
-static bool clean_valid;           /* clean_mem holds one */
+/* clean_valid (declared above): clean_mem holds one */
 static _Alignas(16) uint8_t clean_control[CTRL_SIZE];
 volatile uint32_t nvn_held_presents;
 
@@ -2232,19 +2257,246 @@ static volatile uintptr_t texdump_want;
 static volatile int texdump_bpp = 8;
 static volatile int texdump_ready;
 static int32_t texdump_head[4];
+/* --- the world's overlays under the game's HUD -------------------------------------------------------------
+ * The game draws its HUD into a 1920x1080 picture of its own (its scene composited in, then the HUD over it) and
+ * its last pass scales that picture up into the swapchain texture, so anything drawn at present time goes over the
+ * HUD. So the world's lines and faces (the air walls, the hitboxes...) are recorded at present time into a
+ * command buffer of ours, aimed at that picture, and the game's own command buffer calls it at the point where its
+ * HUD starts: the 4th bind of the picture in a row on one command buffer (its scene composited by then: a clear
+ * there is under the HUD and not drawn over; found by clearing at each bind, 27th November 2026). The picture is
+ * learnt from the last pass: the target it binds just before the swapchain texture. With no call for a frame
+ * (the title, menus, a frame advance hold), they're drawn at present time as before. */
+#define WORLD_RUN 4        /* the bind, in a row of binds of the HUD's picture on one command buffer, the HUD starts at */
+static const nvn_texture_t *volatile hud_picture;
+static void (*call_commands)(nvn_obj_t *, int, const nvn_handle_t *);
+static nvn_obj_t world_cmd, world_sync[WORLD_SLOTS];
+static bool world_sync_used[WORLD_SLOTS], world_ready_ok;
+static nvn_handle_t world_handle[WORLD_SLOTS];
+static int world_next;
+static volatile int world_ready = -1;    /* the slot of a recorded handle not called yet, or -1 */
+static volatile int world_called = -1;   /* the slot called in the frame being made (fenced at its present) */
+static volatile uint32_t world_called_at; /* gfx_presents then */
+static volatile uint32_t world_calls;     /* how many (rtbinds) */
+static int lock_word;
+
+static void spin_lock(void)
+{
+  while (__atomic_exchange_n(&lock_word, 1, __ATOMIC_ACQUIRE))
+    ;
+}
+static void spin_unlock(void) { __atomic_store_n(&lock_word, 0, __ATOMIC_RELEASE); }
+
+/* per command buffer: the target it bound last, and how many binds of the HUD's picture in a row it's made */
+#define RUN_CMDS 32
+static struct { uintptr_t cmd; const nvn_texture_t *last; int run, k; } runs[RUN_CMDS];
+static int n_runs;
+static uint32_t runs_frame;
+
+/* debugging (remote hudtest / rtbinds): a magenta rectangle cleared into a target at its nth bind on a command buffer
+ * in a presented frame, to see what the game draws after it (the HUD over it, or the picture over it all) */
+volatile bool nvn_hud_test;
+volatile uintptr_t nvn_hud_test_target;
+volatile uintptr_t nvn_hud_test_cmd;
+volatile int nvn_hud_test_bind;
+void nvn_cmd_begun(void *cmd) { (void)cmd; }
+void nvn_cmd_ended(void *cmd) { (void)cmd; }
+int nvn_hud_binds(uintptr_t *cmds, int *binds, int max)
+{
+  int n = 0;
+  for (int i = 0; i < n_runs && n < max; i++)
+    cmds[n] = runs[i].cmd, binds[n++] = runs[i].run;
+  return n;
+}
+int nvn_hud_bind_log(char *lines, int len)
+{
+  return snprintf(lines, (size_t)len, "the HUD's picture %#lx; world called %u times, last at %u (now %u)\n",
+                  (unsigned long)(uintptr_t)hud_picture, (unsigned)world_calls, (unsigned)world_called_at,
+                  (unsigned)gfx_presents);
+}
+
+static bool is_swapchain(const nvn_texture_t *t)
+{
+  for (int i = 0; i < swapchain_texture_count; i++)
+    if (swapchain_textures[i] == t)
+      return true;
+  return false;
+}
+
+/* the game's nvnCommandBufferSetRenderTargets, just after it (frametrace.c's wrap): its own command buffer, on
+ * whichever of its threads records it */
+void nvn_after_set_rt(void *cmd, const nvn_texture_t *target, int n_colors, const nvn_texture_t *depth)
+{
+  (void)n_colors, (void)depth;
+  spin_lock();
+  if (runs_frame != gfx_presents) { /* the test's counts are per presented frame */
+    for (int i = 0; i < n_runs; i++)
+      runs[i].k = 0;
+    runs_frame = gfx_presents;
+  }
+  int i = 0;
+  while (i < n_runs && runs[i].cmd != (uintptr_t)cmd)
+    i++;
+  if (i == n_runs) {
+    if (n_runs == RUN_CMDS) {
+      spin_unlock();
+      return;
+    }
+    runs[n_runs++] = (typeof(runs[0])){ (uintptr_t)cmd, 0, 0, 0 };
+  }
+  const nvn_texture_t *before = runs[i].last;
+  runs[i].last = target;
+  if (is_swapchain(target) && before && !is_swapchain(before))
+    hud_picture = before; /* the last pass binds the HUD's picture, then the swapchain texture */
+  bool hud = target == hud_picture && target;
+  runs[i].run = hud ? (before == target ? runs[i].run + 1 : 1) : 0;
+  int k = (uintptr_t)target == nvn_hud_test_target ? ++runs[i].k : 0;
+  int slot = -1;
+  if (hud && runs[i].run == WORLD_RUN && call_commands)
+    slot = world_ready; /* kept: the next frame calls it too if no newer one is ready by then */
+  spin_unlock();
+  if (slot >= 0) {
+    call_commands((nvn_obj_t *)cmd, 1, &world_handle[slot]);
+    world_called = slot;
+    world_called_at = gfx_presents;
+    world_calls++;
+  }
+  if (nvn_hud_test && k && k == nvn_hud_test_bind && (!nvn_hud_test_cmd || nvn_hud_test_cmd == (uintptr_t)cmd) &&
+      fn.clear_color && fn.set_scissor) {
+    int w = fn.tex_width(target), h = fn.tex_height(target);
+    static const float magenta[4] = { 1, 0, 1, 1 };
+    fn.set_scissor((nvn_obj_t *)cmd, 0, 0, w / 2, h / 2); /* the top left quarter: the hearts and items */
+    fn.clear_color((nvn_obj_t *)cmd, 0, magenta, 0xF);
+    fn.set_scissor((nvn_obj_t *)cmd, 0, 0, w, h);
+  }
+}
+
+/* hook_present, after the game's present: the slot its frame called is done with once this fence is */
+static void world_fence(nvn_queue_t *queue)
+{
+  int slot = world_called;
+  if (slot < 0 || !world_ready_ok)
+    return;
+  world_called = -1;
+  fn.queue_fence(queue, &world_sync[slot], SYNC_ALL_GPU_COMMANDS_COMPLETE, 0);
+  world_sync_used[slot] = true;
+}
+
+/* whether the last frame the game made had the world's overlays called into it (so they're under its HUD) */
+static bool world_under_hud(void)
+{
+  return world_ready_ok && hud_picture && gfx_presents - world_called_at <= 1;
+}
+
+static bool world_init(void)
+{
+  call_commands = (void (*)(nvn_obj_t *, int, const nvn_handle_t *))real_getproc(device, "nvnCommandBufferCallCommands");
+  if (!call_commands || !fn.cmd_init(&world_cmd, device))
+    return false;
+  for (int s = 0; s < WORLD_SLOTS; s++)
+    if (!fn.sync_init(&world_sync[s], device))
+      return false;
+  world_ready_ok = true;
+  return true;
+}
+
+/* draw_overlay, on the GPU: the world's lines recorded for the game's next frame, into its HUD's picture */
+static void world_record(int frame_slot, bool *prime_depth_out)
+{
+  (void)frame_slot;
+  const nvn_texture_t *picture = hud_picture;
+  if (!world_ready_ok || !picture || presenting_held)
+    return;
+  int slot = (world_next + 1) % WORLD_SLOTS; /* never the newest (it may be being called now) */
+  if (slot == world_ready)
+    slot = (slot + 1) % WORLD_SLOTS;
+  if (world_sync_used[slot] && fn.sync_wait(&world_sync[slot], 0) >= SYNC_TIMEOUT_EXPIRED)
+    return; /* still in use: drawn at present time this frame */
+  world_sync_used[slot] = false;
+  int w = fn.tex_width(picture), h = fn.tex_height(picture);
+  if (w <= 0 || h <= 0 || w > 4096 || h > 4096)
+    return;
+  nvn_rect_t area = { 0, 0, w, h };
+  gpuui_begin((nvn_texture_t *)picture, area, h, origin_lower_left, SLOTS + slot);
+  /* (gpuui's slots: nvn.c's two, then these three) */
+  bool prime = false;
+  const nvn_texture_t *depth = 0;
+  int depth_w = 0, depth_h = 0;
+  gpu_occluder_t link = { 0 };
+  float box[4];
+  bool behind_link = !airwalls_xray && airwall_link_box(box, link.front, link.back, link.ground);
+  if (behind_link)
+    link.x0 = box[0], link.y0 = box[1], link.x1 = box[2], link.y1 = box[3];
+  int n_lines;
+  airwall_lines(&n_lines);
+  if ((n_lines && behind_link) || airwall_needs_depth())
+    depth = scenedepth_lines(w, h, &depth_w, &depth_h, &prime);
+  if (!gpuui_depth(depth, depth_w, depth_h, prime, &link))
+    scenedepth_lines_give_up();
+  bool drew = overlayui_draw_world(w, h);
+  if (nvn_hud_test && !nvn_hud_test_target) { /* debugging (hudtest on): a rectangle in the world pass */
+    gpuui_fill((float)w / 8, (float)h / 8, (float)w / 3, (float)h / 3, (gpu_colour_t){ 1, 0, 1, 0.6f });
+    drew = true;
+  }
+  static bool said;
+  if (drew && !said) {
+    said = true;
+    log_printf("the world's overlays: under the HUD, in its %dx%d picture", w, h);
+  }
+  if (!drew) {
+    world_ready = -1; /* nothing to draw: frames call nothing */
+    return;
+  }
+  fn.cmd_add_command(&world_cmd, &command_pool, (SLOTS + slot) * CMD_SIZE, CMD_SIZE);
+  fn.cmd_add_control(&world_cmd, control_mem + (SLOTS + slot) * CTRL_SIZE, CTRL_SIZE);
+  fn.cmd_begin(&world_cmd);
+  bool layered = gpuui_end(&world_cmd, game_texture_pool, game_sampler_pool);
+  world_handle[slot] = fn.cmd_end(&world_cmd);
+  if (layered && prime)
+    scenedepth_primed();
+  (void)prime_depth_out;
+  world_ready = slot;
+  world_next = slot;
+}
+
+void nvn_texture_info(uintptr_t texture, int *w, int *h, int *format)
+{
+  if (!texture || !fn.tex_width || !sys_mapped(texture, 0x100, SYS_PERM_R))
+    return;
+  const nvn_texture_t *t = (const nvn_texture_t *)texture;
+  *w = fn.tex_width(t), *h = fn.tex_height(t), *format = fn.tex_format(t);
+}
+
 void nvn_texdump(uintptr_t texture, int bpp)
 {
   texdump_bpp = bpp > 0 && bpp <= 16 ? bpp : 8;
   texdump_want = texture;
 }
 
+static int texdump_pending; /* 0, or the presents since its copy was submitted */
+static int texdump_w, texdump_h, texdump_format, texdump_rows;
+
 static void texdump_present(nvn_queue_t *queue)
 {
+  if (texdump_pending) { /* sent with the game's present: picked up once the GPU is done */
+    if (!clean_idle(0)) {
+      if (++texdump_pending > 120) {
+        log_printf("texdump: the copy didn't finish");
+        texdump_pending = 0;
+      }
+      return;
+    }
+    texdump_pending = 0;
+    fn.pool_invalidate(&clean_pool, 0, (size_t)texdump_w * texdump_rows * texdump_bpp);
+    texdump_head[0] = texdump_w, texdump_head[1] = texdump_h, texdump_head[2] = texdump_format;
+    texdump_head[3] = texdump_rows;
+    __atomic_store_n(&texdump_ready, 1, __ATOMIC_RELEASE); /* written on the game's thread (nvn_texdump_write) */
+    return;
+  }
   uintptr_t want = texdump_want;
-  if (!want)
+  if (!want || texdump_ready)
     return;
   texdump_want = 0;
-  if (!sys_mapped(want, 0x100, SYS_PERM_R) || !clean_ready() || !clean_idle(100000000ull)) {
+  if (!sys_mapped(want, 0x100, SYS_PERM_R) || !clean_ready() || !clean_idle(0)) {
     log_printf("texdump: %#lx: not now", (unsigned long)want);
     return;
   }
@@ -2266,13 +2518,8 @@ static void texdump_present(nvn_queue_t *queue)
   fn.queue_submit(queue, 1, &handle);
   fn.queue_fence(queue, &clean_sync, SYNC_ALL_GPU_COMMANDS_COMPLETE, 0);
   clean_sync_used = true;
-  if (!clean_idle(1000000000ull)) {
-    log_printf("texdump: the copy didn't finish");
-    return;
-  }
-  fn.pool_invalidate(&clean_pool, 0, (size_t)w * rows * texdump_bpp);
-  texdump_head[0] = w, texdump_head[1] = h, texdump_head[2] = format, texdump_head[3] = rows;
-  __atomic_store_n(&texdump_ready, 1, __ATOMIC_RELEASE); /* written on the game's thread (nvn_texdump_write) */
+  texdump_w = w, texdump_h = h, texdump_format = format, texdump_rows = rows;
+  texdump_pending = 1;
 }
 
 void nvn_texdump_write(void)
@@ -2319,7 +2566,9 @@ bool nvn_present_held(void)
     nvn_texture_t *tex = swapchain_textures[index];
     if (fn.tex_width(tex) == clean_w && fn.tex_height(tex) == clean_h)
       clean_copy(queue, tex, false);
+    presenting_held = true;
     draw_overlay(queue, window, index);
+    presenting_held = false;
     gfx_release();
     airwall_release();
     enemyhp_release();

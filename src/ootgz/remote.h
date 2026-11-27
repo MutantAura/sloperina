@@ -46,6 +46,11 @@
  *   frametrace                 debugging: the game's next frame of NVN commands (render targets, draws, submits) to
  *                              sloperinaGZ/dump/frametrace.txt; only in a build with FRAMETRACE_HOOKS (nvn.c)
  *   texdump <hex texture> [bpp] debugging: that texture's rows at the next present to sloperinaGZ/dump/texture.bin
+ *   rtlist                     debugging: the colour targets the game bound in its last frame, and how often
+ *   rtbinds                    debugging: the HUD's picture and how often the world's overlays went under the HUD
+ *   hudtest on | off | <hex target> [<hex cmd>] <n>
+ *                              debugging: a test rectangle in the world under the HUD (on), or a magenta clear at the
+ *                              nth bind of a target in a frame (FINDINGS 9.40)
  *   physdump [name]            debugging: the Havok worlds' bodies, their shapes and what they point to, and the
  *                              actors' heads and components, raw, to sd:/sloperinaGZ/dump/<name>.phd (FINDINGS 9.39;
  *                              records: u64 address, u32 size, u32 tag, the bytes)

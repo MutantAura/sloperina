@@ -467,6 +467,59 @@ static void square_to(const float d[3], float p[3], float q[3])
   cross(d, p, q);
 }
 
+/* a triangle of a filled shape, if its side faces the camera (each surface drawn once, as gz's: the same opacity
+ * all over); `inside`: a point inside the shape, to tell its outer side */
+static void face_out(const float a[3], const float b[3], const float c[3], const float inside[3], uint8_t colour)
+{
+  float u[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, v[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] }, n[3];
+  cross(u, v, n);
+  if (!(dot(n, n) > 1e-12f))
+    return;
+  float mid[3] = { (a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3 };
+  float out[3] = { mid[0] - inside[0], mid[1] - inside[1], mid[2] - inside[2] };
+  if (dot(n, out) < 0)
+    n[0] = -n[0], n[1] = -n[1], n[2] = -n[2];
+  float view[3] = { mid[0] - cam.pos[0], mid[1] - cam.pos[1], mid[2] - cam.pos[2] };
+  if (dot(n, view) < 0)
+    triangle(a, b, c, colour);
+}
+
+/* a capsule (a sphere when a is b) as a mesh: its two half spheres and the tube between, filled */
+#define MESH_SEGS 12
+#define MESH_LATS 4 /* rings in each half sphere, its pole apart */
+static void capsule_mesh(const float a[3], const float b[3], float r, uint8_t colour)
+{
+  float d[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+  if (!unit(d))
+    d[0] = 0, d[1] = 1, d[2] = 0;
+  float p[3], q[3];
+  square_to(d, p, q);
+  /* rings from a's pole to b's: a's half sphere (latitude -90 to 0 deg about a), then b's (0 to 90 about b) */
+  float ring[2 * MESH_LATS + 2][MESH_SEGS][3];
+  int n_rings = 0;
+  for (int half = 0; half < 2; half++)
+    for (int l = 0; l <= MESH_LATS; l++) {
+      float phi = half ? (PI / 2) * (float)l / MESH_LATS : -(PI / 2) * (float)(MESH_LATS - l) / MESH_LATS;
+      const float *c = half ? b : a;
+      float cr = cosf(phi) * r, sr = sinf(phi) * r;
+      for (int k = 0; k < MESH_SEGS; k++) {
+        float t = 2 * PI * (float)k / MESH_SEGS, ct = cosf(t), st = sinf(t);
+        for (int j = 0; j < 3; j++)
+          ring[n_rings][k][j] = c[j] + (p[j] * ct + q[j] * st) * cr + d[j] * sr;
+      }
+      n_rings++;
+    }
+  float inside[3] = { (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2 };
+  for (int i = 0; i + 1 < n_rings; i++)
+    for (int k = 0; k < MESH_SEGS; k++) {
+      int k1 = (k + 1) % MESH_SEGS;
+      /* the half sphere's own middle is the better "inside" for its faces (a long capsule's tube ends) */
+      const float *in = i < MESH_LATS ? a : i > MESH_LATS ? b : inside;
+      face_out(ring[i][k], ring[i][k1], ring[i + 1][k1], in, colour);
+      face_out(ring[i][k], ring[i + 1][k1], ring[i + 1][k], in, colour);
+    }
+}
+
 static void sphere(const float c[3], float r, uint8_t colour, bool fill)
 {
   float flat_u[3] = { 1, 0, 0 }, flat_v[3] = { 0, 0, 1 };
@@ -545,6 +598,8 @@ static void polytope(uintptr_t body, uintptr_t shape, uint32_t size, const float
       memcpy(grown, local[i], sizeof(grown));
     to_world(body, grown, world[i]);
   }
+  float middle[3];
+  to_world(body, centre, middle);
   uintptr_t face_at = 0, index_at = 0;
   uint32_t n_faces_here = 0, n_indices = 0;
   bool ok = rel_array(shape, size, SHAPE_FACES, 4, &face_at, &n_faces_here) &&
@@ -584,7 +639,7 @@ static void polytope(uintptr_t body, uintptr_t shape, uint32_t size, const float
       if (i0 < i1) /* each edge once (the face on its other side has it the other way round) */
         line(world[i0], world[i1], colour);
       if (fill && j >= 1 && j + 1 < count)
-        triangle(world[idx[0]], world[i0], world[i1], colour);
+        face_out(world[idx[0]], world[i0], world[i1], middle, colour);
     }
   }
 }
@@ -616,12 +671,18 @@ static void draw(const found_t *f)
   if (n == 1) {
     float c[3];
     to_world(f->body, local[0], c);
-    sphere(c, r, colour, fill);
+    if (fill)
+      capsule_mesh(c, c, r, colour);
+    else
+      sphere(c, r, colour, false);
   } else if (n == 2) {
     float a[3], b[3];
     to_world(f->body, local[0], a);
     to_world(f->body, local[1], b);
-    capsule(a, b, r, colour, fill);
+    if (fill)
+      capsule_mesh(a, b, r, colour);
+    else
+      capsule(a, b, r, colour, false);
   } else {
     polytope(f->body, shape, size, (const float (*)[3])local, (int)n, r, colour, fill);
   }

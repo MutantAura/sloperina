@@ -248,6 +248,9 @@ on; under it, each kind has a switch, **off**, **outline** or **fill**:
 - **invincibility** (fill at first): **purple**: where Link, or an enemy that can be fought, is hit, while it's
   invincible: Link for about half a second after he's hurt, an enemy while it can't be hurt. (In gz these vanish.)
 - **hurtboxes** (fill at first): **blue** (gz's AC): where Link and the actors can be hit now.
+- **collectables** (fill at first): **gold**: where Link takes a drop by touching it (rupees and tokens, hearts,
+  heart pieces and containers, magic jars, arrow bundles, Deku Nuts, Seeds and Sticks, bomb and bombchu drops,
+  scrub seeds, fairies) and the bugs, fish and butterflies he can catch.
 - **shield guard angle** (on at first): **green**, while Link guards with his shield (and as it takes a blocked
   hit): a bubble round him at the shield's height, with a cone cut out at his back, its edge ringed: an attack from
   any direction within 110° of his front (to the sides, above or below) is blocked, one from the cone behind him
@@ -261,7 +264,8 @@ on; under it, each kind has a switch, **off**, **outline** or **fill**:
 first): also where walls, scenery or the actors themselves are in front (otherwise hidden by whatever is nearer, as
 gz's are). Either way Link hides what's behind him, as he does the air walls: of his own shapes, only their near
 sides show over him. An actor's own hitboxes can be turned on from the actor browser (**debug > actors > browse currently
-loaded actors**, **minus**), each kind on its own: **attacks**, **bump boxes**, **invincibility** and **hurtboxes**
+loaded actors**, **minus**), each kind on its own: **attacks**, **bump boxes**, **invincibility**, **hurtboxes** and
+**collectables**
 (the browser's panel shows which are ticked). A kind ticked there is drawn for that actor whatever **show** says, in
 the style chosen here for it (filled if that's **off**).
 

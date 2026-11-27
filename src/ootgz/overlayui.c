@@ -98,6 +98,7 @@ static const gpu_colour_t line_colours[AW_NCOLORS] = {
   [AW_HIT_LINK] = { 0.96f, 0.96f, 0.96f, 1 },         /* white: Link's own body (gz's OC) */
   [AW_HIT_BUMP] = { 0.96f, 0.96f, 0.96f, 1 },         /* white: a body that bumps into Link (gz's OC) */
   [AW_HIT_HURT] = { 0.25f, 0.45f, 1.0f, 1 },          /* blue: where Link or an actor can be hit (gz's AC) */
+  [AW_HIT_PICKUP] = { 1.0f, 0.80f, 0.15f, 1 },        /* gold: what Link picks up or catches (hitview.c) */
   [AW_HIT_GUARD] = { 0.30f, 0.95f, 0.45f, 1 },        /* green: where Link's raised shield blocks from (hitview.c) */
 };
 

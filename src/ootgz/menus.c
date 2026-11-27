@@ -3201,15 +3201,18 @@ static void build_scene(void)
     hits->hint = "the kinds under it, near link and the camera (an actor's own: debug > actors, its options)";
     hits->log_label = "hitboxes:";
   }
-  static const char *const hit_parts[HV_PARTS] = { "attacks", "bump boxes", "invincibility", "hurtboxes" };
+  static const char *const hit_parts[HV_PARTS] = { "attacks", "bump boxes", "invincibility", "hurtboxes",
+                                                   "collectables" };
   static const char *const hit_hints[HV_PARTS] = {
     "red (gz's AT): an attack, only while it can hit",
     "white (gz's OC): the bodies link bumps into, and his own",
     "purple: where link or a foe is hit, while they're invincible",
     "blue (gz's AC): where link or an actor can be hit now",
+    "gold: where link picks up a rupee, heart or other drop, or catches a bug or fish",
   };
   static const char *const hit_labels[HV_PARTS] = { "hitboxes, attacks:", "hitboxes, bump boxes:",
-                                                     "hitboxes, invincibility:", "hitboxes, hurtboxes:" };
+                                                     "hitboxes, invincibility:", "hitboxes, hurtboxes:",
+                                                     "hitboxes, collectables:" };
   static const char *const hit_styles[HV_STYLES] = { "off", "outline", "fill" };
   for (int part = 0; part < HV_PARTS; part++) {
     menu_item_t *it = menu_add_option(&m_hitboxes, hit_parts[part], HV_STYLES, hit_styles, get_hitbox_style,

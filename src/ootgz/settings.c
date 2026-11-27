@@ -163,7 +163,8 @@ typedef struct {
   int32_t interact_ranges;
   int32_t interact_parts; /* bits: interactview_parts */
   int32_t hitboxes;
-  int32_t hitbox_styles; /* two bits a part: hitview_style */
+  int32_t hitbox_styles; /* two bits a part: hitview_style (the first four; collectables below) */
+  int32_t hitbox_collectables;
   int32_t hitboxes_link_only;
   int32_t hitboxes_xray;
   int32_t hitboxes_guard;
@@ -272,8 +273,9 @@ static snapshot_t take_snapshot(void)
     s.interact_parts |= interactview_parts[part] << part;
   s.hitboxes = hitview_shown;
   s.hitbox_styles = 0;
-  for (int part = 0; part < HV_PARTS; part++)
+  for (int part = 0; part < HV_PICKUP; part++)
     s.hitbox_styles |= (hitview_style[part] & 3) << (2 * part);
+  s.hitbox_collectables = hitview_style[HV_PICKUP];
   s.hitboxes_link_only = hitview_link_only;
   s.hitboxes_xray = hitview_xray;
   s.hitboxes_guard = hitview_guard;
@@ -391,7 +393,9 @@ static void apply_snapshot(const snapshot_t *s)
   for (int part = 0; part < IV_PARTS; part++)
     interactview_parts[part] = s->interact_parts >> part & 1;
   hitview_shown = s->hitboxes != 0;
-  for (int part = 0; part < HV_PARTS; part++) {
+  hitview_style[HV_PICKUP] = s->hitbox_collectables >= 0 && s->hitbox_collectables < HV_STYLES ?
+                             s->hitbox_collectables : HV_FILL;
+  for (int part = 0; part < HV_PICKUP; part++) {
     int style = s->hitbox_styles >> (2 * part) & 3;
     hitview_style[part] = style < HV_STYLES ? style : HV_FILL;
   }
@@ -512,6 +516,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("interaction_range_parts", interact_parts),
   INT_KEY("hitboxes", hitboxes),
   INT_KEY("hitbox_styles", hitbox_styles),
+  INT_KEY("hitbox_collectables", hitbox_collectables),
   INT_KEY("hitboxes_link_only", hitboxes_link_only),
   INT_KEY("hitboxes_through_walls", hitboxes_xray),
   INT_KEY("hitboxes_shield_guard", hitboxes_guard),

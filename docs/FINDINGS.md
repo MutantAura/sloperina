@@ -2606,3 +2606,16 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   box. Dark Link: `GuardableAngleMaxDeg` 100 as well, Link's `Player_ReflectShield` capsule and a shield actor of its
   own (`Weapon_Shield_DarkLinkShield`); not seen in game.
 - Remote `guardbits <actor>` (debugging): those bits, its facing (from its rotation at `+0x328`) and life.
+
+### 9.44 Collectables' pickup sensors (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- A drop (a spawned `Obj_Rupee_Green`, `Obj_Rupee_Red`, `Obj_Heart`, `Obj_MagicJar_Small`) has a body in the entity
+  world (SmallObject layer, a 0.1 m capsule or a 0.2 m sphere for the heart, its hit mask without Player: it lands
+  but Link doesn't bump it) and a sensor on the sensor **Object** layer (0), its own shape (32 points), hit mask
+  all, with a contact collection: what Link's body sensors touch when he takes it. Link's `ForArea` sensor (Player
+  layer, a 0.4 m capsule 0.4 to 1.5 m up) has the sub-layer mask HitToArea: areas only, not pickups.
+- Pots and other breakables have Object sensors too, so hitview.c tells collectables by name: `Obj_Rupee_`,
+  `Obj_RupeeToken`, `Obj_Heart`, `Obj_MagicJar`, `Obj_ArrowBundle`, `Obj_DekuNut/Seed/Stick`,
+  `Obj_ScrubBusinessSeed`, `Obj_Fairy`, `Obj_Bomb`, `Obj_Bombchu`, and the animals `Animal_Insect`,
+  `Animal_Kokiri_Insect`, `Animal_Fish`, `Animal_Butterfly`, `Insect_` (any of their sensors on the Object,
+  SmallObject or target layers). Bugs and fish weren't near to check.
+- Spawned drops in Hyrule Field sometimes fell through the ground (a heart and a magic jar ended 13 to 17 m below).

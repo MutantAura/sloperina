@@ -109,6 +109,9 @@ The game patches are the same as 0.0.11's (patch v6).
   below from the parameters. Measured with a Deku Baba on the Deku
   and Hylian shields, the Mirror Shield's front and back alike (no side bite landed); its beam reflection
   (ReflectShield) isn't drawn. Remote `equip shield <actor>` for trying them.
+- **Collectables** (asked for 27th November: rupees, drops, bugs, fish): a fifth kind, gold, their pickup sensors
+  (FINDINGS 9.44), its own style (settings key hitbox_collectables) and actor browser switch. Seen on a spawned red
+  rupee (and a heart and magic jar listed); bugs, fish, butterflies not seen.
 - **Enemies' guards** (asked for 27th November, a Stalfos's shield, and Dark Link's): green, 50° each way from their
   front while their animation's Guard hold event is on (FINDINGS 9.43); Link's now from the same event (not his
   action ids). Seen on a Stalfos in Hyrule Field. Dark Link not seen (Water Temple). Lichii hung once after a

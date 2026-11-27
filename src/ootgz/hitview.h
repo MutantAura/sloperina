@@ -14,7 +14,7 @@ extern bool hitview_shown; /* scene > environment > hitboxes > show: the parts t
 /* only what's switched on (and a sensor with a contact collection): HV_ATTACK attack sensors whose hit mask has Link in
  * it; HV_BUMP solid character bodies that collide with Link (his own with the characters); HV_INVINCIBLE an invincible
  * Link's or fightable actor's target sensors; HV_HURT the other target sensors */
-enum { HV_ATTACK, HV_BUMP, HV_INVINCIBLE, HV_HURT, HV_PARTS };
+enum { HV_ATTACK, HV_BUMP, HV_INVINCIBLE, HV_HURT, HV_PICKUP, HV_PARTS }; /* HV_PICKUP: collectables (gold) */
 /* each part's style: off, its outline, or filled */
 enum { HV_OFF, HV_OUTLINE, HV_FILL, HV_STYLES };
 extern int hitview_style[HV_PARTS];

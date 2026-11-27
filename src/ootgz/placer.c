@@ -569,7 +569,8 @@ static bool door_watched(uintptr_t actor)
   return actor && interactview_door_watched() == actor && watch_has(W_DOOR_CLOSE);
 }
 /* an actor's hitbox switches (hitview.h's parts, in order), as scene > environment > hitboxes names them */
-static const char *const hitbox_labels[HV_PARTS] = { "attacks", "bump boxes", "invincibility", "hurtboxes" };
+static const char *const hitbox_labels[HV_PARTS] = { "attacks", "bump boxes", "invincibility", "hurtboxes",
+                                                     "collectables" };
 
 
 static void panel(void)
@@ -881,6 +882,7 @@ static void open_guard_menu(uintptr_t actor)
     "the bodies it bumps into link with (white)",
     "where it's hit while it's invincible (purple)",
     "where it can be hit (blue)",
+    "where link picks it up or catches it (gold)",
   };
   for (int part = 0; part < HV_PARTS; part++) {
     item = menu_add_check(&m_guard, hitbox_labels[part], get_hitboxes, set_hitboxes, part);

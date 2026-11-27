@@ -44,7 +44,7 @@ static float root(float x) /* the sdk exports no sqrtf: the CPU's own instructio
 }
 
 bool hitview_shown;
-int hitview_style[HV_PARTS] = { HV_FILL, HV_FILL, HV_FILL, HV_FILL };
+int hitview_style[HV_PARTS] = { HV_FILL, HV_FILL, HV_FILL, HV_FILL, HV_FILL };
 bool hitview_link_only;
 bool hitview_guard = true;
 bool hitview_xray;
@@ -134,13 +134,14 @@ static void forget_gone(void)
 #define MAX_FACES 255 /* a shape with more is drawn as its box (the boomerang's attack has 32 points) */
 
 /* PhiveConfig's layers */
-enum { SENSOR_PLAYER = 2, SENSOR_ENEMY = 3, SENSOR_NPC = 4, SENSOR_ANIMAL = 5, SENSOR_TGT_HIT_ALL = 6,
+enum { SENSOR_OBJECT = 0, SENSOR_SMALL_OBJECT = 1, SENSOR_PLAYER = 2, SENSOR_ENEMY = 3, SENSOR_NPC = 4, SENSOR_ANIMAL = 5, SENSOR_TGT_HIT_ALL = 6,
        SENSOR_PLAYER_ATTACK = 7, SENSOR_ENEMY_ATTACK = 8, SENSOR_CHEMICAL_ELEMENT = 12, SENSOR_NPC_ATTACK = 9, SENSOR_ATTACK_ALL = 10 };
 enum { ENTITY_OBJECT = 0, ENTITY_SMALL_OBJECT = 1, ENTITY_PLAYER = 3, ENTITY_CHARACTER = 4 };
 
-enum { K_ATTACK, K_INVINCIBLE, K_BUMP_LINK, K_BUMP, K_HURT, N_KINDS }; /* drawing order */
-static const uint8_t kind_colour[N_KINDS] = { AW_HIT_ATTACK, AW_HIT_INVINCIBLE, AW_HIT_LINK, AW_HIT_BUMP, AW_HIT_HURT };
-static const uint8_t kind_part[N_KINDS] = { HV_ATTACK, HV_INVINCIBLE, HV_BUMP, HV_BUMP, HV_HURT };
+enum { K_ATTACK, K_INVINCIBLE, K_BUMP_LINK, K_BUMP, K_HURT, K_PICKUP, N_KINDS }; /* drawing order */
+static const uint8_t kind_colour[N_KINDS] = { AW_HIT_ATTACK, AW_HIT_INVINCIBLE, AW_HIT_LINK, AW_HIT_BUMP, AW_HIT_HURT,
+                                              AW_HIT_PICKUP };
+static const uint8_t kind_part[N_KINDS] = { HV_ATTACK, HV_INVINCIBLE, HV_BUMP, HV_BUMP, HV_HURT, HV_PICKUP };
 
 #define MAX_FOUND 384
 typedef struct {
@@ -346,6 +347,38 @@ static bool running(uintptr_t actor)
   return !actor || (sys_read32(actor + ACTOR_STATE, &state) && (state == 4 || state == 5));
 }
 
+/* Collectables (FINDINGS 9.44): what Link picks up by touching it (a rupee's, a heart's... sensor on the sensor
+ * Object or SmallObject layer, the drop's own shape, that his body's sensors touch), and what he catches in a bottle
+ * (bugs, fish, butterflies: their sensors). Told by name: pots and other breakables have Object sensors too. */
+static const char *const pickup_prefixes[] = {
+  "Obj_Rupee_", "Obj_RupeeToken", "Obj_Heart", "Obj_MagicJar", "Obj_ArrowBundle", "Obj_DekuNut", "Obj_DekuSeed",
+  "Obj_DekuStick", "Obj_ScrubBusinessSeed", "Obj_Fairy", "Animal_Insect", "Animal_Kokiri_Insect", "Animal_Fish",
+  "Animal_Butterfly", "Insect_",
+};
+static const char *const pickup_names[] = { "Obj_Bomb", "Obj_Bombchu" }; /* (not Obj_BombFlower...) */
+
+static bool starts(const char *s, const char *prefix)
+{
+  while (*prefix && *s == *prefix)
+    s++, prefix++;
+  return !*prefix;
+}
+
+static bool is_pickup(uintptr_t actor)
+{
+  uintptr_t name = actor ? rd(actor, 0x20) : 0;
+  if (!name || !sys_mapped(name, 32, SYS_PERM_R))
+    return false;
+  const char *s = (const char *)name;
+  for (size_t i = 0; i < sizeof(pickup_prefixes) / sizeof(pickup_prefixes[0]); i++)
+    if (starts(s, pickup_prefixes[i]))
+      return true;
+  for (size_t i = 0; i < sizeof(pickup_names) / sizeof(pickup_names[0]); i++)
+    if (starts(s, pickup_names[i]) && !s[__builtin_strlen(pickup_names[i])])
+      return true;
+  return false;
+}
+
 static bool part_on[HV_PARTS]; /* classify: the parts drawn for the body it's on */
 
 static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
@@ -369,7 +402,7 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
   uint8_t ticked = own_parts(actor) | (links ? own_parts(link) : 0);
   for (int part = 0; part < HV_PARTS; part++)
     part_on[part] = (shown && hitview_style[part] != HV_OFF) || (ticked >> part & 1);
-  if (!part_on[HV_ATTACK] && !part_on[HV_BUMP] && !part_on[HV_INVINCIBLE] && !part_on[HV_HURT])
+  if (!part_on[HV_ATTACK] && !part_on[HV_BUMP] && !part_on[HV_INVINCIBLE] && !part_on[HV_HURT] && !part_on[HV_PICKUP])
     return -1;
   /* switched off (the AI's OneShotSensorHitAtSensorOff and the like: phive's set-enabled, main+0x15B800): there, but
    * nothing touches it */
@@ -380,6 +413,10 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
   /* (not Link's own: a Deku Nut's flash and Din's Fire have none and do hit) */
   if (world == 1 && !rd(owner, OWNER_CONTACTS) && layer != SENSOR_PLAYER_ATTACK)
     return -1;
+  /* a collectable's sensors: where Link takes it (its target layers too: a bug's, a fish's) */
+  if (world == 1 && !links && (layer <= SENSOR_SMALL_OBJECT || (layer >= SENSOR_PLAYER && layer <= SENSOR_TGT_HIT_ALL)) &&
+      is_pickup(actor))
+    return part_on[HV_PICKUP] && running(actor) ? K_PICKUP : -1;
   if (world == 1) {
     /* Link's own (his sword, a thrown nut...: PlayerAttack, put in the world or switched on only while it's out), as
      * gz's AT list has them */
@@ -1079,7 +1116,7 @@ int hitview_list_all(const char *name, char *out, int len)
 
 int hitview_list(char *out, int len)
 {
-  static const char *const kinds[N_KINDS] = { "attack", "invincible", "link", "bump", "hurt" };
+  static const char *const kinds[N_KINDS] = { "attack", "invincible", "link", "bump", "hurt", "pickup" };
   int at = 0;
   for (int i = 0; i < n_found && at < len - 200; i++) {
     uintptr_t owner = rd(found[i].body, BODY_OWNER), lo = rd(owner, OWNER_LAYER), al = rd(owner, OWNER_ACTOR);

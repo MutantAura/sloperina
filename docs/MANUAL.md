@@ -895,9 +895,12 @@ game's pause screen closed):
   > browse currently loaded actors**, the explorer): the game goes on drawing with its world stopped (the game's
   own pause, as its pause screen's, made to leave its camera running), so you can fly the camera and step from actor
   to actor with every control as when the game runs, and nothing in the world moves meanwhile: Link, the actors,
-  a boomerang in flight stay exactly where they were. Leaving it (**B**, or unticking the free camera) holds the
-  game again where it was, with its own view back; the next tap plays the very next frame. The frame advance
-  buttons wait until you've left it. **One catch:** an actor that was off the screen when the game paused isn't
+  a boomerang in flight stay exactly where they were. With the free camera, frame advance's button works as ever:
+  a tap plays one frame (the world moves on by just that one, the camera staying where you put it), held they play
+  one after another; and with the game running, a tap pauses it with the camera kept. (In the actor browser it
+  waits, as its **L** and **R** are its own, and so does **run again**, whose **L3** is the camera's.) Leaving it
+  (**B**, or unticking the free camera) holds the game again where it was, with its own view back; the next tap
+  plays the very next frame. **One catch:** an actor that was off the screen when the game paused isn't
   drawn while it's paused (what's drawn is decided in each actor's own update, which is what's stopped); the browser
   still steps to it and shows its options, and it's back as soon as a frame plays.
 

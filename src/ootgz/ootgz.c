@@ -155,7 +155,8 @@ static fa_event_t fa_read_button(void)
   uint64_t ticks_per_ms = sys_tick_freq() / 1000;
   uint64_t now = sys_tick();
 
-  if (menu_current || fa_menu_was_open || placer_active || freecam_on) { /* the menu's, the placer's, the camera's */
+  /* the menu's, the placer's (its L and R are its own); the free camera's only with frame advance off */
+  if (menu_current || fa_menu_was_open || placer_active || (freecam_on && !frame_advance)) {
     fa_button_down = false;
     fa_blocked_after_menu = true;
     fa_menu_closed_at = now;
@@ -213,7 +214,7 @@ static void command_context(void)
   for (int c = 0; c < CMD_COUNT; c++)
     binds_set_enabled((command_t)c, command_info[c].group == CMD_GROUP_MENU ? open : !open && !placing);
   binds_set_enabled(CMD_MENU, true);
-  binds_set_enabled(CMD_ADVANCE, frame_advance && !open && !placing);
+  binds_set_enabled(CMD_ADVANCE, frame_advance && !open && !placer_active); /* (the free camera's too) */
   binds_set_enabled(CMD_RUN, frame_advance && !placing);
   binds_set_enabled(CMD_LEVITATE, levitate_enabled && !open && !placing);
   binds_set_enabled(CMD_FREECAM, !open); /* its own bind turns it off again */
@@ -294,7 +295,8 @@ static void fa_release_buffered_input(void)
  * camera and drawing go on, and the tools work as with the game running. Left, the game is held again where it was:
  * the world's frames are the same before and after. */
 static bool fa_tools_frozen;
-static bool fa_tools_ending; /* the tool was left: one more frame, so the picture held is the game's own view */
+static bool fa_tools_ending;  /* the tool was left: one more frame, so the picture held is the game's own view */
+static bool fa_tools_stepped; /* the frame advance button, with the free camera: this frame plays, the world going */
 
 static bool fa_tool_wanted(void) { return placer_active || freecam_on; }
 
@@ -303,8 +305,22 @@ static bool fa_tools_frame(void)
 {
   if (!fa_tools_frozen)
     return false;
+  if (fa_tools_stepped) { /* the frame let through has played: stopped again (at once: the next is) */
+    pausemgr_freeze(true);
+    fa_tools_stepped = false;
+  }
   if (fa_paused && (frame_advance || fa_by_remote) && fa_tool_wanted()) {
     fa_tools_ending = false;
+    /* With the free camera (not the placer, whose L and R are its own), frame advance's button works as while
+     * held: a tap lets one frame play, held they play one after another. The world goes for that one frame (the
+     * freeze lowered now and raised again at the next frame's hook, both at once: pausemgr.c). */
+    if (frame_advance && freecam_on && !placer_active) {
+      if (bind_length(binds[CMD_ADVANCE]) == 1)
+        input_hide_from_game |= cmd_mask(CMD_ADVANCE);
+      fa_event_t event = fa_read_button();
+      if ((event == FA_TAP || event == FA_REPEAT) && pausemgr_freeze(false))
+        fa_tools_stepped = true;
+    }
     return true;
   }
   if (fa_paused && !fa_tools_ending) {

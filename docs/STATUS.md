@@ -108,6 +108,8 @@ The game patches are the same as 0.0.11's (patch v6).
   pausemgr.c, FINDINGS 9.41), and is held again where it was when they're left. Seen in game on 1.1.1: the free
   camera flown and the browser stepped through actors; the actors within 30 m and a boomerang in flight identical
   before and after; one step after moved it one frame. Catch: actors off screen at the pause aren't drawn meanwhile.
+  With the free camera, frame advance's button steps frames (the freeze lowered for one frame) and pauses a running
+  game: checked by walking Link (L3, control Link): 0.13 m a tap, none between, a hold plays them on.
   1.0.0 not tried (its pause manager offset is 1.1.1's less 0x70460, checked by the table's shape before use).
 - **Link's items** drawn while they can hit: Deku Nuts, Din's Fire, the boomerang, slingshot seeds (seen); arrows not
   tried (adult only). Spent ones (put away, state 6) left out.

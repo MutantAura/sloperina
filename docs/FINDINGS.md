@@ -2437,6 +2437,16 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   Scrub's TgtBody: (0, 0.5, 0), (0, 0.2, 0), 0.6, as its ShapeParam says); more: boxes (vtable `main+0x48936E8`, 8
   points, 6 faces), cylinders as polytopes (`+0x4893780`, 32 points, 18 faces), hulls (`+0x4893AE8`, Link's
   controller prism). Every decoded face is planar. Meshes and compounds (scenery) have other layouts.
+- **Switched on, and collected:** a body can stay in the world switched off: phive's set-enabled (`main+0x15B800`,
+  what OneShotSensorHitAtSensorOff ends in through `main+0x8D56F0`) keeps it in bit 6 (0x40) of `[owner+0x70]`, set
+  for off (a request in flight sits in `[owner+0x60]`: `+0x84` the state, `+0x100` bit 2 pending). A Deku Baba's
+  AtkHead read off between bites (`0x...960`). A sensor's contact collection, its controller unit's
+  ContactCollectionName ("Atk", "Tgt"), is at `[owner+0x158]`; the castle grounds' wagon horse (Animal_Horse_Wagon,
+  its layout Hash's low half `0x4E501C67` is the owner's `[[+0x150]+0xC]`) has an AttackAll capsule 1 m round, switched
+  on, mask Default, and none: Link stood in it unhurt. One of Link's own AttackAll sensors has none either. So the
+  hit view, like gz's of the game's AT / AC / OC lists, draws only bodies switched on and sensors with a collection.
+  Where an attack's power is kept (ExecuteSensorHitSetupAttack, `main+0x8D28C0` → `main+0x8D29C0`: into slot
+  objects of the collection's, `+0x80` on, fields `+0x190` to `+0x1A4`, through `main+0x2EA53D0`) isn't read.
 - **What's an attack, a bump:** the files' sensors (tools: every RigidBodySensorParam) put an enemy's attack on
   EnemyAttack (226 of them with no EnableLayerHitMask), NPCAttack (moving spikes) or AttackAll (cuccos, Epona,
   falling rocks, crazy floor tiles); its mask has Player (bit 2) while it can hit Link. A character controller's

@@ -232,17 +232,17 @@ bright while it is. Without one, a darker diamond over what **ZL** would take fo
 Z-target to talk to), whether ZL is held or not, and **ZL: ...** on the line.
 
 **hitboxes**: the game's own physics shapes round Link and whatever is near him or the camera (within 25 m), read
-from the game every frame, drawn over everything (not hidden by walls or by the actor itself). **show** turns them
-on; the parts under it each have their own option:
-- **attacks** (on at first): **red**, filled: an attack that can hurt Link, while it's out: an enemy's bite or swing,
-  a projectile (a Deku Scrub's nut), fire. An attack is drawn only while it can hit Link (the game switches most
-  on for the moment of the swing), so a Deku Baba's head shows red as it lunges. Link's own attacks aren't drawn.
-- **bump boxes** (on at first): **grey**: the bodies Link bumps into and pushes against (each character's standing
-  shape, and such as a Wolfos's head); **white**: Link's own.
-- **invincibility** (on at first): **blue**, filled: where Link, or an enemy that can be fought, is hit (its target
-  shapes) while it's invincible: Link for about half a second after he's hurt, an enemy while it's guarding or
-  otherwise can't be hurt.
-- **hurtboxes** (off at first): **yellow**: the same target shapes while they aren't invincible.
+from the game every frame and drawn over everything, in gz's hit view colours. As in gz, only what can touch
+something now is drawn: a shape the game has switched off (an enemy's bite between bites) isn't, and nor is one the
+game collects no hits for (the castle grounds' wagon horse has one round it that never hurts Link). **show** turns
+them on; the parts under it each have their own option (all on at first):
+- **attacks**: **red**, filled (gz's AT): an attack that can hurt Link, only while it can: an enemy's bite or
+  swing, a projectile (a Deku Scrub's nut). Link's own attacks aren't drawn.
+- **bump boxes**: **white** (gz's OC): the bodies Link bumps into and pushes against (each character's standing
+  shape, and such as a Wolfos's head), and his own.
+- **invincibility**: **purple**, filled: where Link, or an enemy that can be fought, is hit, while it's invincible:
+  Link for about half a second after he's hurt, an enemy while it can't be hurt. (In gz these just vanish.)
+- **hurtboxes**: **blue** (gz's AC): where Link and the actors can be hit now.
 
 Spheres are drawn as their outline and a ring round their middle, capsules as their two end rings, sides and
 rounded ends, boxes and other shapes edge by edge. Under the list: how many of each there are near.

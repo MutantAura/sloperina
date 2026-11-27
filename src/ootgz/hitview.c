@@ -14,11 +14,13 @@
  * first index u16, index count u8) are at (+0x48 + [+0x48]) and their point indices (u8) at (+0x50 + [+0x50]). Bigger
  * shapes (the scenery's meshes and compounds) have other layouts and aren't drawn.
  *
- * Drawn: an attack (a sensor on EnemyAttack, NPCAttack or AttackAll) while its hit mask has Link's layer (Player) in
- * it, red; a character's solid body that collides with Link's (Character with Player in its mask: their character
- * controllers, and such as a Wolfos's head), grey, and Link's character controller white; the target sensors (Player, Enemy, NPC, Animal, TgtHitAll) of Link or of an actor
- * that can be fought, blue while its Life component holds an invincibility (actors.c), otherwise yellow if asked
- * for. Nearest first within each kind, attacks first. */
+ * Drawn as gz's hit view draws the game's AT, AC and OC lists, only what can touch something now: a body switched on
+ * (the owner's +0x70 bit 6 clear) and, for a sensor, with a contact collection (the owner's +0x158). Red: an attack
+ * (a sensor on EnemyAttack, NPCAttack or AttackAll) whose hit mask has Link's layer (Player) in it. Blue: a target
+ * sensor (Player, Enemy, NPC, Animal, TgtHitAll): where Link or an actor can be hit; purple instead while Link or an
+ * actor that can be fought is invincible (gz has nothing then). White: a solid body that collides with Link's
+ * (Character with Player in its mask: the characters' controllers, and such as a Wolfos's head), and Link's own
+ * character controller. Nearest first within each kind, attacks first. */
 #include "hitview.h"
 
 #include <stdio.h>
@@ -41,7 +43,7 @@ static float root(float x) /* the sdk exports no sqrtf: the CPU's own instructio
 }
 
 bool hitview_shown;
-bool hitview_parts[HV_PARTS] = { true, true, true, false };
+bool hitview_parts[HV_PARTS] = { true, true, true, true };
 
 #define RANGE 25.0f /* metres from Link or the camera: bodies further aren't drawn */
 #define PI 3.14159265f
@@ -61,6 +63,9 @@ bool hitview_parts[HV_PARTS] = { true, true, true, false };
 #define OWNER_ACTOR 0x108 /* [+0x108]+8 */
 #define OWNER_HIT_MASK 0x120
 #define OWNER_LAYER 0x150 /* [+0x150]+8, low five bits */
+#define OWNER_STATE 0x70  /* bit 6 set: switched off */
+#define STATE_OFF 0x40
+#define OWNER_CONTACTS 0x158 /* a sensor's contact collection (its controller unit's ContactCollectionName) */
 #define LAYER_MASK 0x1F
 #define LAYER_NUMBER 0xC  /* [+0x150]+0xC: a number of the actor's, the same on all its bodies (Link's 0x20) */
 /* hknpConvexShape */
@@ -81,7 +86,7 @@ enum { ENTITY_PLAYER = 3, ENTITY_CHARACTER = 4 };
 
 enum { K_ATTACK, K_INVINCIBLE, K_BUMP_LINK, K_BUMP, K_HURT, N_KINDS }; /* drawing order */
 static const uint8_t kind_colour[N_KINDS] = { AW_HIT_ATTACK, AW_HIT_INVINCIBLE, AW_HIT_LINK, AW_HIT_BUMP, AW_HIT_HURT };
-static const bool kind_filled[N_KINDS] = { true, true, false, false, false };
+static const bool kind_filled[N_KINDS] = { true, true, false, false, false }; /* attacks and invincibility */
 
 #define MAX_FOUND 384
 typedef struct {
@@ -163,6 +168,14 @@ static int classify(int world, uintptr_t owner, uintptr_t link)
   if (actor && actor == link)
     link_number = number;
   bool links = (actor && actor == link) || (link_number && number == link_number);
+  /* switched off (the AI's OneShotSensorHitAtSensorOff and the like: phive's set-enabled, main+0x15B800): there, but
+   * nothing touches it */
+  if (!sys_mapped(owner + OWNER_STATE, 8, SYS_PERM_R) || (*(const volatile uint64_t *)(owner + OWNER_STATE) & STATE_OFF))
+    return -1;
+  /* a sensor nothing is collected for (no contact collection: the wagon horse's AttackAll, one of Link's) can't hit
+   * or be hit: as gz draws only what the game's collision check has this frame */
+  if (world == 1 && !rd(owner, OWNER_CONTACTS))
+    return -1;
   if (world == 1) {
     if (layer == SENSOR_ENEMY_ATTACK || layer == SENSOR_NPC_ATTACK || layer == SENSOR_ATTACK_ALL)
       return hitview_parts[HV_ATTACK] && (mask & (1ull << SENSOR_PLAYER)) && !links ? K_ATTACK : -1;
@@ -172,11 +185,9 @@ static int classify(int world, uintptr_t owner, uintptr_t link)
       return -1;
     bool invincible = false, fightable = false;
     combat_of(links ? link : actor, link, &invincible, &fightable);
-    if (!fightable)
-      return -1;
-    if (invincible && hitview_parts[HV_INVINCIBLE])
-      return K_INVINCIBLE;
-    return hitview_parts[HV_HURT] && !invincible ? K_HURT : -1;
+    if (fightable && invincible) /* gz has none then (the game doesn't register it): purple instead */
+      return hitview_parts[HV_INVINCIBLE] ? K_INVINCIBLE : -1;
+    return hitview_parts[HV_HURT] ? K_HURT : -1;
   }
   if (!hitview_parts[HV_BUMP])
     return -1;

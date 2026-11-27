@@ -1,7 +1,7 @@
 /* Hitboxes (FINDINGS 9.39): the game's physics shapes round Link and the actors near him, read live from the Havok
- * worlds each frame and drawn with the air walls' lines and faces (airwall.c): the attacks that can hurt Link (red),
- * the bodies that bump into him (grey; his own white), and over an actor that can be fought, or Link, while it's
- * invincible, its target shapes in blue. */
+ * worlds each frame and drawn with the air walls' lines and faces (airwall.c), in gz's hit view's colours: the attacks
+ * that can hurt Link now (red, gz's AT), where Link and the actors can be hit (blue, gz's AC; purple while Link or a
+ * foe is invincible) and the bodies that bump into him and his own (white, gz's OC). */
 #ifndef HITVIEW_H
 #define HITVIEW_H
 
@@ -11,9 +11,9 @@
 #include "airwall.h"
 
 extern bool hitview_shown; /* scene > environment > hitboxes > show: the parts ticked under it */
-/* HV_ATTACK attack sensors whose hit mask has Link in it; HV_BUMP solid character bodies that collide with Link (his
- * own with the characters); HV_INVINCIBLE an invincible Link's or fightable actor's target sensors; HV_HURT every
- * target sensor of Link and the characters (where they can be hit) while not invincible */
+/* only what's switched on (and a sensor with a contact collection): HV_ATTACK attack sensors whose hit mask has Link in
+ * it; HV_BUMP solid character bodies that collide with Link (his own with the characters); HV_INVINCIBLE an invincible
+ * Link's or fightable actor's target sensors; HV_HURT the other target sensors */
 enum { HV_ATTACK, HV_BUMP, HV_INVINCIBLE, HV_HURT, HV_PARTS };
 extern bool hitview_parts[HV_PARTS];
 

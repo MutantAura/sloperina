@@ -3197,10 +3197,10 @@ static void build_scene(void)
   }
   static const char *const hit_parts[HV_PARTS] = { "attacks", "bump boxes", "invincibility", "hurtboxes" };
   static const char *const hit_hints[HV_PARTS] = {
-    "red: an attack that can hurt link, while it's out",
-    "grey: a body link bumps into; white: link's own",
-    "blue: where link or a foe is hit, while they're invincible",
-    "yellow: where link or a foe is hit",
+    "red (gz's AT): an attack, only while it can hurt link",
+    "white (gz's OC): the bodies link bumps into, and his own",
+    "purple: where link or a foe is hit, while they're invincible",
+    "blue (gz's AC): where link or an actor can be hit now",
   };
   static const char *const hit_labels[HV_PARTS] = { "hitboxes, attacks:", "hitboxes, bump boxes:",
                                                      "hitboxes, invincibility:", "hitboxes, hurtboxes:" };

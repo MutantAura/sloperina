@@ -67,9 +67,12 @@ The game patches are the same as 0.0.11's (patch v6).
 ## On branch feat/hitboxes (not merged, not released)
 
 - **scene > environment > hitboxes** (hitview.c, FINDINGS 9.39): the game's own physics shapes near Link or the
-  camera, read live from both Havok worlds each frame: **attacks** that can hurt Link (red, filled, while their hit
-  mask has Link's layer in it), **bump boxes** (grey; Link's character controller white), **invincibility** (blue,
-  filled: Link's or a fightable actor's target shapes while invincible), **hurtboxes** (yellow, off at first).
+  camera, read live from both Havok worlds each frame, in gz's hit view colours and, as gz, only what can touch
+  something now (switched on; a sensor with a contact collection): **attacks** (red, gz's AT, while their hit mask
+  has Link's layer in it), **bump boxes** (white, gz's OC), **hurtboxes** (blue, gz's AC), **invincibility** (purple,
+  filled: Link's or a fightable actor's hurtboxes while invincible; gz has none then). The user found a red box they
+  stood in unhurt (the wagon horse's, no contact collection): fixed by those two checks. Not yet seen in game after
+  the fix: an attack drawn only while it's switched on (a Deku Baba's bite).
   Checked on 1.1.1 with a Deku Baba (its bite red as it lunges, Link blue for about half a second after each bite),
   a Deku Scrub (its nut red) and the market's NPCs (grey). About 2 FPS on Lichii.
 - **Enemy health / actor browser:** no bar and no life line for actors that can't be killed (no Death component, or

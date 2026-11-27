@@ -94,10 +94,10 @@ static const gpu_colour_t line_colours[AW_NCOLORS] = {
   [AW_DOOR] = { 1.0f, 0.64f, 0.20f, 1 },              /* orange: where anyone holds a door open */
   [AW_DOOR_IN] = { 1.0f, 0.86f, 0.56f, 1 },           /* pale orange: ... and Link does now */
   [AW_HIT_ATTACK] = { 1.0f, 0.18f, 0.16f, 1 },        /* red: an attack that can hurt Link (hitview.c) */
-  [AW_HIT_INVINCIBLE] = { 0.25f, 0.52f, 1.0f, 1 },    /* blue: where Link or a foe is hit, while invincible */
-  [AW_HIT_LINK] = { 0.96f, 0.96f, 0.96f, 1 },         /* white: Link's own body */
-  [AW_HIT_BUMP] = { 0.62f, 0.62f, 0.62f, 1 },         /* grey: a body that bumps into Link */
-  [AW_HIT_HURT] = { 1.0f, 0.86f, 0.22f, 1 },          /* yellow: where Link or a foe is hit */
+  [AW_HIT_INVINCIBLE] = { 0.74f, 0.36f, 1.0f, 1 },    /* purple: where Link or a foe is hit, while invincible */
+  [AW_HIT_LINK] = { 0.96f, 0.96f, 0.96f, 1 },         /* white: Link's own body (gz's OC) */
+  [AW_HIT_BUMP] = { 0.96f, 0.96f, 0.96f, 1 },         /* white: a body that bumps into Link (gz's OC) */
+  [AW_HIT_HURT] = { 0.25f, 0.45f, 1.0f, 1 },          /* blue: where Link or an actor can be hit (gz's AC) */
 };
 
 /* budget: the quads the lines may take. Short of them, the glows go first, then the farthest lines. */

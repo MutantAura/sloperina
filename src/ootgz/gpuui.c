@@ -31,7 +31,7 @@ float cosf(float x);
 float sqrtf(float x);
 
 #define PAGE 0x1000
-#define SLOTS 5               /* nvn.c's two, and its three for the world under the HUD (2 + its slot) */
+#define SLOTS 2               /* nvn.c's (5 with WORLD_UNDER_HUD: its three for the world under the HUD) */
 #define MAX_QUADS 4096        /* a frame's quads (a glyph is one, its shadow baked into its image) */
 #define ELEMENT_SIZE 0x100    /* 46 words, at the storage-buffer alignment */
 #define ELEMENT_WORDS 46

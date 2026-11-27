@@ -33,6 +33,12 @@
 #include "overlayui.h"
 #include "nativeui.h"
 #include "frametrace.h"
+/* The world's overlays under the game's HUD (FINDINGS 9.40): off. Its splice point (the 4th bind of the HUD's
+ * picture in a row) doesn't hold frame to frame: some frames got the overlays twice and some not at all, which
+ * flashed. With it off nothing of it is set up and the game's render target calls aren't wrapped (build it on: gpuui.c's SLOTS to 5). */
+#ifndef WORLD_UNDER_HUD
+#define WORLD_UNDER_HUD 0
+#endif
 #ifndef FRAMETRACE_HOOKS
 #define FRAMETRACE_HOOKS 0 /* debugging only: wraps the game's draw calls (see frametrace.c) */
 #endif
@@ -163,6 +169,11 @@ static bool world_under_hud(void);
 static void world_record(int slot, bool *prime_depth_out);
 static bool presenting_held; /* draw_overlay from nvn_present_held */
 static bool clean_baked;     /* the kept picture has the world's lines in it */
+static volatile uint32_t world_calls;     /* how many (rtbinds) */
+/* debugging (rtbinds): the last 64 presents: calls made between it and the one before, the present path's drawing */
+static uint8_t hist_calls[64], hist_present[64], hist_slot[64];
+static uint32_t calls_at_last_present;
+static volatile int world_ready = -1; /* the slot of the newest recorded handle (called by each frame until a newer one), or -1 */
 static bool clean_valid;
 static void keep_clean_copy(nvn_queue_t *queue, int index);
 
@@ -244,7 +255,7 @@ static void *wrap_proc(const char *name, void *proc)
   void *ours = scenedepth_wrap(name, proc);
   if (ours)
     return ours;
-  if ((ours = frametrace_wrap(name, proc, FRAMETRACE_HOOKS)))
+  if ((FRAMETRACE_HOOKS || WORLD_UNDER_HUD) && (ours = frametrace_wrap(name, proc, FRAMETRACE_HOOKS)))
     return ours;
   if (names_equal(name, "nvnDeviceGetProcAddress")) {
     real_getproc = (getproc_t)proc;
@@ -293,7 +304,7 @@ const char *nvn_hook_game(uintptr_t main_base)
 /* --- overlay ---------------------------------------------------------------------------------- */
 
 #define SLOTS 2
-#define WORLD_SLOTS 3 /* the world under the HUD: a ring, the newest called until a newer one is ready */
+#define WORLD_SLOTS (WORLD_UNDER_HUD ? 3 : 0) /* a ring, the newest called until a newer one is ready */
 #define CMD_SIZE 0x40000  /* command memory per slot (see-through: a copy per sampled row) */
 #define CTRL_SIZE 0x4000  /* control memory per slot */
 #define PAGE_SIZE 0x1000
@@ -499,7 +510,7 @@ static bool overlay_init(void)
   if (!fn.cmd_init(&cmd_buffer, device)) {
     overlay_fail("command buffer");
     return false;
-  }  if (!world_init())
+  }  if (WORLD_UNDER_HUD && !world_init())
     log_printf("the world's overlays under the HUD: not set up (drawn over it)");
 
   for (int s = 0; s < SLOTS; s++)
@@ -1936,6 +1947,14 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
    * didn't call them in (on hold, as the last frame made did) */
   static bool baked_last;
   bool baked = presenting_held ? clean_baked : world_under_hud();
+  if (!presenting_held) {
+    uint32_t c = world_calls;
+    int h = gfx_presents % 64;
+    hist_calls[h] = (uint8_t)(c - calls_at_last_present);
+    hist_present[h] = !baked;
+    hist_slot[h] = (uint8_t)(world_ready + 1);
+    calls_at_last_present = c;
+  }
   (void)baked_last;
   if (gpu)
     world_record(frame.slot, &prime_depth);
@@ -2269,14 +2288,13 @@ static int32_t texdump_head[4];
 #define WORLD_RUN 4        /* the bind, in a row of binds of the HUD's picture on one command buffer, the HUD starts at */
 static const nvn_texture_t *volatile hud_picture;
 static void (*call_commands)(nvn_obj_t *, int, const nvn_handle_t *);
-static nvn_obj_t world_cmd, world_sync[WORLD_SLOTS];
-static bool world_sync_used[WORLD_SLOTS], world_ready_ok;
-static nvn_handle_t world_handle[WORLD_SLOTS];
+static nvn_obj_t world_cmd, world_sync[WORLD_SLOTS + 1];
+static bool world_sync_used[WORLD_SLOTS + 1], world_ready_ok;
+static nvn_handle_t world_handle[WORLD_SLOTS + 1];
 static int world_next;
-static volatile int world_ready = -1;    /* the slot of a recorded handle not called yet, or -1 */
 static volatile int world_called = -1;   /* the slot called in the frame being made (fenced at its present) */
 static volatile uint32_t world_called_at; /* gfx_presents then */
-static volatile uint32_t world_calls;     /* how many (rtbinds) */
+
 static int lock_word;
 
 static void spin_lock(void)
@@ -2291,6 +2309,7 @@ static void spin_unlock(void) { __atomic_store_n(&lock_word, 0, __ATOMIC_RELEASE
 static struct { uintptr_t cmd; const nvn_texture_t *last; int run, k; } runs[RUN_CMDS];
 static int n_runs;
 static uint32_t runs_frame;
+static uint32_t run_hist[16];
 
 /* debugging (remote hudtest / rtbinds): a magenta rectangle cleared into a target at its nth bind on a command buffer
  * in a presented frame, to see what the game draws after it (the HUD over it, or the picture over it all) */
@@ -2309,9 +2328,23 @@ int nvn_hud_binds(uintptr_t *cmds, int *binds, int max)
 }
 int nvn_hud_bind_log(char *lines, int len)
 {
-  return snprintf(lines, (size_t)len, "the HUD's picture %#lx; world called %u times, last at %u (now %u)\n",
-                  (unsigned long)(uintptr_t)hud_picture, (unsigned)world_calls, (unsigned)world_called_at,
-                  (unsigned)gfx_presents);
+  int at = snprintf(lines, (size_t)len, "the HUD's picture %#lx; world called %u times, last at %u (now %u)\n",
+                    (unsigned long)(uintptr_t)hud_picture, (unsigned)world_calls, (unsigned)world_called_at,
+                    (unsigned)gfx_presents);
+  char a[65], b[65], c[65];
+  for (int i = 0; i < 64; i++) {
+    int h = (gfx_presents + 1 + i) % 64;
+    a[i] = (char)('0' + (hist_calls[h] > 9 ? 9 : hist_calls[h]));
+    b[i] = hist_present[h] ? 'P' : '.';
+    c[i] = (char)('0' + hist_slot[h]);
+  }
+  a[64] = b[64] = c[64] = 0;
+  at += snprintf(lines + at, (size_t)(len - at), "calls   %s\npresent %s\nready   %s\n", a, b, c);
+  at += snprintf(lines + at, (size_t)(len - at), "runs");
+  for (int i = 1; i < 16; i++)
+    at += snprintf(lines + at, (size_t)(len - at), " %d:%u", i, (unsigned)run_hist[i]);
+  at += snprintf(lines + at, (size_t)(len - at), "\n");
+  return at;
 }
 
 static bool is_swapchain(const nvn_texture_t *t)
@@ -2348,6 +2381,8 @@ void nvn_after_set_rt(void *cmd, const nvn_texture_t *target, int n_colors, cons
   if (is_swapchain(target) && before && !is_swapchain(before))
     hud_picture = before; /* the last pass binds the HUD's picture, then the swapchain texture */
   bool hud = target == hud_picture && target;
+  if (runs[i].run && !(hud && before == target)) /* a run of the picture's binds ended: its length (rtbinds) */
+    run_hist[runs[i].run < 15 ? runs[i].run : 15]++;
   runs[i].run = hud ? (before == target ? runs[i].run + 1 : 1) : 0;
   int k = (uintptr_t)target == nvn_hud_test_target ? ++runs[i].k : 0;
   int slot = -1;
@@ -2381,10 +2416,14 @@ static void world_fence(nvn_queue_t *queue)
   world_sync_used[slot] = true;
 }
 
-/* whether the last frame the game made had the world's overlays called into it (so they're under its HUD) */
+/* whether the game is calling the world's overlays into its frames (so they're under its HUD, not drawn at present
+ * time too). Not "this frame": the game doesn't make one frame per present (a present with none made, then one with
+ * two), and judging each present drew them twice, over the HUD, after every gap (a flash). So: called within the
+ * last few presents; past that (a menu, the title) present time draws them. */
+#define WORLD_GAP 8
 static bool world_under_hud(void)
 {
-  return world_ready_ok && hud_picture && gfx_presents - world_called_at <= 1;
+  return world_ready_ok && hud_picture && world_calls && gfx_presents - world_called_at <= WORLD_GAP;
 }
 
 static bool world_init(void)
@@ -2403,12 +2442,14 @@ static bool world_init(void)
 static void world_record(int frame_slot, bool *prime_depth_out)
 {
   (void)frame_slot;
+  if (!WORLD_UNDER_HUD)
+    return;
   const nvn_texture_t *picture = hud_picture;
   if (!world_ready_ok || !picture || presenting_held)
     return;
-  int slot = (world_next + 1) % WORLD_SLOTS; /* never the newest (it may be being called now) */
+  int slot = (world_next + 1) % (WORLD_SLOTS ? WORLD_SLOTS : 1); /* never the newest (it may be being called now) */
   if (slot == world_ready)
-    slot = (slot + 1) % WORLD_SLOTS;
+    slot = (slot + 1) % (WORLD_SLOTS ? WORLD_SLOTS : 1);
   if (world_sync_used[slot] && fn.sync_wait(&world_sync[slot], 0) >= SYNC_TIMEOUT_EXPIRED)
     return; /* still in use: drawn at present time this frame */
   world_sync_used[slot] = false;

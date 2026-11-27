@@ -87,11 +87,10 @@ The game patches are the same as 0.0.11's (patch v6).
   at first: lines and fills hidden by the scene depth, actors included, as gz's); an actor's own **hitboxes** switch in
   the actor browser's options (every actor now has options). Seen in game: hidden vs through walls, only Link's,
   fill. Not seen: the actor browser's switch.
-- **Under the HUD (done):** the world's overlays (air walls, hitboxes, guard sight, interaction ranges, void
-  views) are drawn into the game's HUD picture before its HUD, called from its own command buffer (FINDINGS 9.40).
-  Seen in game in Hyrule Castle's grounds, 4 minutes clean. Not checked: other maps and dungeons (the 4th bind in a
-  row may not hold everywhere: if not, the overlays would go over or under the wrong things), menus opening over
-  them, 1.0.0. Remote `hudtest`, `rtlist`, `rtbinds`, `texdump` for checking it.
+- **Under the HUD: tried, then turned off** at the user's word, as it flashed (FINDINGS 9.40): the world's overlays
+  are drawn at present time again, over the HUD. The code stays behind WORLD_UNDER_HUD (nvn.c, off; gpuui.c's SLOTS
+  to 5 with it), and the game's render target calls aren't wrapped while it's off. What it would need: a dependable
+  marker for where the game's HUD starts in its 1920x1080 picture.
 - **Fill** is solid shapes at about 30% opacity, back faces left out (as gz's).
 - Remote: `physdump` (raw capture of the Havok bodies for working out layouts offline).
 - **Not checked:** 1.0.0 (the body, owner and shape offsets are assumed the same; `vt_cct_body` is known there);

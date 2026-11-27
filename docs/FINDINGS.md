@@ -2495,6 +2495,12 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   called missed every other frame). A fence after each present guards the slot a frame called. 98% of frames get it;
   without a call (title, menus, before the picture is known) they're drawn at present time as before. Frame advance's
   held picture already has them when its frame did.
+- **Why it's off (WORLD_UNDER_HUD 0):** the 4th bind in a row isn't a fixed point. Over a few hundred frames the runs
+  of the picture's binds on a command buffer were 1 to 15 long (2: 1940 times, 6: 429, 9: 159, 10: 144...), so some
+  frames called the overlays twice and some not at all (calls per present, 64 at a time: 60 to 65), and judging a
+  present by whether its frame called them drew them again at present time after every gap (the game makes no frame
+  for some presents, two for the next). The user saw it flash. A real marker for the HUD's start (the UI renderer's
+  own command buffer or calls) would be needed.
 - **The game's state after our block:** its HUD draws on correctly (its programs and pools set again; ours restore
   the texture and sampler pools).
 - **Hooks:** wrapping the game's draw calls, EndRecording / SubmitCommands and CallCommands / CopyCommands for a full

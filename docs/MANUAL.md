@@ -253,8 +253,7 @@ loaded actors**, **minus**, **hitboxes**): drawn whatever **show** says, in the 
 
 Spheres are drawn as their outline and a ring round their middle, capsules as their two end rings, sides and
 rounded ends, boxes and other shapes edge by edge; filled, as solid shapes at about 30% opacity (each surface once,
-as gz's), so what's inside shows. Like the air walls and the other world overlays, they go under the game's HUD
-(its hearts, items and map stay on top); in the title and menus they're drawn over everything. Under the list: how
+as gz's), so what's inside shows. Like the air walls and the other world overlays, they're drawn over the game's HUD. Under the list: how
 many of each there are near.
 
 #### 2.3.2 Save position

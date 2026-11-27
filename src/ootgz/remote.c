@@ -22,6 +22,7 @@
 #include "sdfs.h"
 #include "settings.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "sys.h"
 #include "title.h"
@@ -1066,6 +1067,22 @@ static void run_line(char *line, bool held)
         break;
       line = end + 1;
     }
+  } else if (same(verb, "hitlist")) {
+    static char text[6144];
+    hitview_list(text, sizeof(text));
+    int n = 0;
+    for (char *line = text; *line; n++) {
+      char *end = line;
+      while (*end && *end != '\n')
+        end++;
+      char keep = *end;
+      *end = 0;
+      result(true, "hitlist: %s", line);
+      if (!keep)
+        break;
+      line = end + 1;
+    }
+    result(true, "hitlist: %d", n);
   } else if (same(verb, "button")) { /* button <0..3> [<item>]: an item button's choice, or put an item on it */
     int32_t slot = -1;
     parse_int(take_word(&args), &slot);

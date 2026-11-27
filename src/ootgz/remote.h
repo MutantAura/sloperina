@@ -46,6 +46,8 @@
  *   frametrace                 debugging: the game's next frame of NVN commands (render targets, draws, submits) to
  *                              sloperinaGZ/dump/frametrace.txt; only in a build with FRAMETRACE_HOOKS (nvn.c)
  *   texdump <hex texture> [bpp] debugging: that texture's rows at the next present to sloperinaGZ/dump/texture.bin
+ *   hitlist                    debugging: the hitboxes drawn last frame: kind, actor, its state, layer, where
+ *   button <0..3> [<item>]     debugging: an item button's choice (murmur3), or put an item on it (2 is ZR)
  *   rtlist                     debugging: the colour targets the game bound in its last frame, and how often
  *   rtbinds                    debugging: the HUD's picture and how often the world's overlays went under the HUD
  *   hudtest on | off | <hex target> [<hex cmd>] <n>

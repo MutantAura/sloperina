@@ -2458,6 +2458,10 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   sensor's owner, contact collection or actor holds the element's type, so the module goes by the actor's name and
   a radius of 2 m or more. Other elements (water, torches' fire, light) are left out. The remote `button <0..3>
   [item]` (pouch.c) reads or sets an item button: 2 is ZR (`SlingShot`, `Hookshot`, `Bomb` by name).
+- **An actor put away keeps its bodies:** a bombchu that has gone off isn't deleted: its actor goes to state 6 (as an
+  enemy that hasn't appeared yet) and its character controller stays in the world, switched on, where it fell (seen
+  27th November 2026, 400 frames on). So bump boxes and hurtboxes count only for actors in state 4 or 5; attacks
+  aren't held to it (a blast's last frame; switched off ones aren't drawn anyway).
 - **What's an attack, a bump:** the files' sensors (tools: every RigidBodySensorParam) put an enemy's attack on
   EnemyAttack (226 of them with no EnableLayerHitMask), NPCAttack (moving spikes) or AttackAll (cuccos, Epona,
   falling rocks, crazy floor tiles); its mask has Player (bit 2) while it can hit Link. A character controller's

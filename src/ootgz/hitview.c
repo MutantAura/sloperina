@@ -324,6 +324,15 @@ static bool is_explosive(uintptr_t actor)
  * on the same bomb is a far smaller element */
 #define BLAST_MIN_RADIUS 2.0f
 
+/* an actor that's out: its state 4 or 5 (not yet appeared, or put away, is 6: a bombchu that's gone off is kept as
+ * one, its body still in the world where it fell; 7 on, dying or gone). No actor (scenery): yes */
+#define ACTOR_STATE 0x2C
+static bool running(uintptr_t actor)
+{
+  uint32_t state = 0;
+  return !actor || (sys_read32(actor + ACTOR_STATE, &state) && (state == 4 || state == 5));
+}
+
 static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
 {
   uintptr_t layer_obj = rd(owner, OWNER_LAYER);
@@ -369,7 +378,7 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
     /* anyone else's, while it can hurt Link */
     if (layer == SENSOR_ENEMY_ATTACK || layer == SENSOR_NPC_ATTACK || layer == SENSOR_ATTACK_ALL)
       return hitview_style[HV_ATTACK] != HV_OFF && (mask & (1ull << SENSOR_PLAYER)) && !links ? K_ATTACK : -1;
-    if (layer < SENSOR_PLAYER || layer > SENSOR_TGT_HIT_ALL || (!actor && !links))
+    if (layer < SENSOR_PLAYER || layer > SENSOR_TGT_HIT_ALL || (!actor && !links) || !running(actor))
       return -1;
     if (hitview_style[HV_INVINCIBLE] == HV_OFF && hitview_style[HV_HURT] == HV_OFF)
       return -1;
@@ -379,7 +388,7 @@ static int classify(int world, uintptr_t owner, uintptr_t link, uintptr_t shape)
       return hitview_style[HV_INVINCIBLE] != HV_OFF ? K_INVINCIBLE : -1;
     return hitview_style[HV_HURT] != HV_OFF ? K_HURT : -1;
   }
-  if (hitview_style[HV_BUMP] == HV_OFF)
+  if (hitview_style[HV_BUMP] == HV_OFF || !running(actor))
     return -1;
   /* a character controller (the body a character stands and walks with, and pushes others with) */
   bool controller = Z64HD_VT_CCT_BODY && sys_ptr(owner) == MAIN(Z64HD_VT_CCT_BODY);
@@ -876,6 +885,27 @@ int hitview_faces(aw_face_t out[], int max)
   int n = n_faces < max ? n_faces : max;
   memcpy(out, faces, sizeof(faces[0]) * (size_t)n);
   return n;
+}
+
+/* debugging (remote hitlist): the shapes found last frame, one a line */
+int hitview_list(char *out, int len)
+{
+  static const char *const kinds[N_KINDS] = { "attack", "invincible", "link", "bump", "hurt" };
+  int at = 0;
+  for (int i = 0; i < n_found && at < len - 200; i++) {
+    uintptr_t owner = rd(found[i].body, BODY_OWNER), lo = rd(owner, OWNER_LAYER), al = rd(owner, OWNER_ACTOR);
+    uintptr_t ac = al ? rd(al, 8) : 0, nm = ac ? rd(ac, 0x20) : 0;
+    uint32_t state = 0, flags = 0;
+    if (ac)
+      sys_read32(ac + 0x2C, &state);
+    sys_read32(found[i].body + 0x50, &flags);
+    const volatile float *p = (const volatile float *)(found[i].body + BODY_POS);
+    at += snprintf(out + at, (size_t)(len - at), "%s %s state %u layer %#llx flags %#x owner %#lx %.1f m at %.2f %.2f %.2f\n",
+                   kinds[found[i].kind], nm && sys_mapped(nm, 8, SYS_PERM_R) ? (const char *)nm : "-", (unsigned)state,
+                   (unsigned long long)(lo ? rd(lo, 8) : 0), (unsigned)flags, (unsigned long)owner,
+                   (double)found[i].distance, (double)p[0], (double)p[1], (double)p[2]);
+  }
+  return at;
 }
 
 void hitview_text(char *buf, int len)

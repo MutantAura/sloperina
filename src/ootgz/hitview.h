@@ -36,5 +36,7 @@ int hitview_lines(float ends[][2][3], uint8_t colours[], int max);
 int hitview_faces(aw_face_t faces[], int max);
 /* the menu's line: "4 attacks, 12 bodies near" */
 void hitview_text(char *buf, int len);
+/* debugging (remote hitlist): the shapes found last frame, a line each */
+int hitview_list(char *out, int len);
 
 #endif

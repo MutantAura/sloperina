@@ -21,8 +21,8 @@ enum { AW_BLOCKS, AW_INSIDE, AW_OTHER, AW_PUSHES, AW_SLOT_A, AW_SLOT_B, AW_LOAD,
        AW_VOID_BOUNDS, AW_HOOK, AW_HOOK_IDLE, AW_HOOK_AIM, AW_PLACER, AW_PLACER_AIR, AW_PLACER_TARGET, AW_GUARD_SEARCH,
        AW_GUARD_ALERTED, AW_GUARD_CAUGHT, AW_GUARD_OFF, AW_GUARD_SEARCH_FAR, AW_GUARD_ALERTED_FAR, AW_GUARD_CAUGHT_FAR,
        AW_GUARD_OFF_FAR, AW_GUARD_PATH, AW_TALK, AW_TALK_IN, AW_TALK_LOCK, AW_ACT, AW_ACT_IN, AW_ACT_LOCK,
-       AW_DOOR, AW_DOOR_IN, AW_NCOLORS };
-/* hooks: hsstore.c's; placer: placer.c's; guard: guardview.c's; talk / act: interactview.c's */
+       AW_DOOR, AW_DOOR_IN, AW_HIT_ATTACK, AW_HIT_INVINCIBLE, AW_HIT_LINK, AW_HIT_BUMP, AW_HIT_HURT, AW_NCOLORS };
+/* hooks: hsstore.c's; placer: placer.c's; guard: guardview.c's; talk / act: interactview.c's; hit: hitview.c's */
 typedef struct { uint16_t x0, y0, x1, y1; uint8_t color; } aw_dot_t;
 
 /* the same outlines as lines, for the GPU (the game's style): ends 0..1 across the visible picture, the

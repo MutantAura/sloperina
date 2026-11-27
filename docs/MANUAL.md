@@ -161,7 +161,7 @@ and you'll come out at the chosen place. Under **return**: the **current** map a
 | *save and load* | |
 | **save position** | See [2.3.2](#232-save-position). |
 | *enemies* | |
-| **display enemy health** | A bar with **life/max** over each living enemy within 30 m of Link (red under a quarter); it goes when the enemy reaches 0. Enemies that haven't appeared yet (Wolfos still in the ground, Stalfos before they drop) have none, and none are drawn while the game is paused. In the game's style a bar fades out while its enemy is hidden behind walls or other scenery. |
+| **display enemy health** | A bar with **life/max** over each living enemy within 30 m of Link (red under a quarter); it goes when the enemy reaches 0. Enemies that can't be killed (Deku Scrubs, Bongo Bongo's hands: the game makes them invincible from the start, and gives them its default life of 100) have none. Enemies that haven't appeared yet (Wolfos still in the ground, Stalfos before they drop) have none, and none are drawn while the game is paused. In the game's style a bar fades out while its enemy is hidden behind walls or other scenery. |
 | **display through walls** | Also show the bars of enemies hidden behind the scenery (the game's style). Indented under **display enemy health**. |
 | **reload map** | Reloads the current map (at the age set in **link**). Last, above **return**. |
 
@@ -230,6 +230,22 @@ treat them as a guide. **The game's own answer**: a pale diamond on a stem over 
 now, read from Link's attention (not worked out), and its name on the menu's line (**A: ...**); its areas are drawn
 bright while it is. Without one, a darker diamond over what **ZL** would take for an action (a shopkeeper you have to
 Z-target to talk to), whether ZL is held or not, and **ZL: ...** on the line.
+
+**hitboxes**: the game's own physics shapes round Link and whatever is near him or the camera (within 25 m), read
+from the game every frame, drawn over everything (not hidden by walls or by the actor itself). **show** turns them
+on; the parts under it each have their own option:
+- **attacks** (on at first): **red**, filled: an attack that can hurt Link, while it's out: an enemy's bite or swing,
+  a projectile (a Deku Scrub's nut), fire. An attack is drawn only while it can hit Link (the game switches most
+  on for the moment of the swing), so a Deku Baba's head shows red as it lunges. Link's own attacks aren't drawn.
+- **bump boxes** (on at first): **grey**: the bodies Link bumps into and pushes against (each character's standing
+  shape, and such as a Wolfos's head); **white**: Link's own.
+- **invincibility** (on at first): **blue**, filled: where Link, or an enemy that can be fought, is hit (its target
+  shapes) while it's invincible: Link for about half a second after he's hurt, an enemy while it's guarding or
+  otherwise can't be hurt.
+- **hurtboxes** (off at first): **yellow**: the same target shapes while they aren't invincible.
+
+Spheres are drawn as their outline and a ring round their middle, capsules as their two end rings, sides and
+rounded ends, boxes and other shapes edge by edge. Under the list: how many of each there are near.
 
 #### 2.3.2 Save position
 
@@ -545,7 +561,7 @@ Caveats:
   anyway).
 - **spawn where**: **placed with the sticks** (to start with) or **in front of Link**. Placed, the menu closes and the free camera looks down on a yellow beam standing on a ring, with an arrow for the way the actor will face, as furniture is placed in The Sims on a console. The spot starts 3 m in front of Link, or where the free camera is looking if it's already on.
 
-  While placing or browsing, a panel at the top left names what's under the beam (with its life under the name, if it has any) and what d-left and d-right go through, and the controls are shown in a band across the bottom of the screen with the game's own button glyphs, fading in and out with it (in gz's menu style they're in the panel instead):
+  While placing or browsing, a panel at the top left names what's under the beam (with its life under the name if it can be killed, and **invincible** while it can't be hurt; nothing for an NPC, sign or Deku Scrub, which the game makes invincible from the start with its default life of 100) and what d-left and d-right go through, and the controls are shown in a band across the bottom of the screen with the game's own button glyphs, fading in and out with it (in gz's menu style they're in the panel instead):
   - the **left stick** moves the spot over the ground, as the camera faces; it keeps to the ground (up steps and slopes, off ledges) and turns orange where there's no ground under it, keeping its height
   - **d-up** and **d-down** move it up and down: it turns orange, keeps that height as the left stick moves it, and a line goes down from it to the ground under it
   - **L3** (pressing the left stick): back to Link, the spot on the ground where he stands and the camera with it

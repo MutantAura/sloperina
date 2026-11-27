@@ -17,6 +17,7 @@ typedef struct {
   float pos[3];        /* where it stands (its feet), world space */
   float height;        /* how far above pos to draw the bar */
   int32_t life, max_life;
+  bool invincible;     /* its Life component holds an invincibility now */
 } enemy_t;
 
 /* actors.c: the enemies in the scene, up to max */
@@ -50,8 +51,14 @@ typedef struct {
   bool running;
   bool has_life;        /* life and max_life read from its Life component */
   int32_t life, max_life;
+  bool killable;        /* has_life, a Death component, and not made invincible (an NPC's default 100 life) */
+  bool invincible;      /* its Life component holds an invincibility now */
 } actor_read_t;
 bool actor_read(uintptr_t actor, actor_read_t *out);
+/* actors.c: its Life component holds an invincibility now (any reason); game thread */
+bool actor_invincible(uintptr_t actor);
+/* actors.c: the same, and whether it can be killed (actor_read_t's killable); game thread */
+void actor_combat(uintptr_t actor, bool *invincible, bool *killable);
 
 /* actors.c: kill an actor found earlier, the game's way (FINDINGS 9.27): a death request, reason FallIntoAbyss (the
  * void's), to its Death component; with none, an NPC or a thing (Npc_, Obj_, Item_) is deleted as the AI's delete

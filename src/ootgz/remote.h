@@ -43,6 +43,9 @@
  *   attention                  debugging: Link's attention object and its do-action slot's address (FINDINGS 9.37)
  *   findref <hex>              debugging: where Link's components (two pointers deep) hold that value, or, for an
  *                              actor's address, its components, attention sender or id (+0x18)
+ *   physdump [name]            debugging: the Havok worlds' bodies, their shapes and what they point to, and the
+ *                              actors' heads and components, raw, to sd:/sloperinaGZ/dump/<name>.phd (FINDINGS 9.39;
+ *                              records: u64 address, u32 size, u32 tag, the bytes)
  * A menu path is the names from the top menu down (or, starting "~/", from the menu on screen), "/" between them, any case ("cheats/infinite magic",
  * "scene/end cutscene"); "name#2" is the second item of that name, "@7" the menu's item number 7 (list shows
  * the numbers), for lines with no name.

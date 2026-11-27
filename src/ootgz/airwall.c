@@ -15,6 +15,7 @@
 
 #include "data.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "gamedata.h"
 #include "hsstore.h"
@@ -446,7 +447,8 @@ static int n_dots[PUBLISH_BUFFERS];
 static aw_line_t lines[PUBLISH_BUFFERS][MAX_LINES];
 static int n_lines[PUBLISH_BUFFERS];
 #define AREA_MAX_FACES 160 /* the void areas' sides, after voidmap.c's faces */
-static aw_face_t faces[PUBLISH_BUFFERS][VOIDMAP_MAX_FACES + AREA_MAX_FACES + GUARDVIEW_MAX_FACES + INTERACTVIEW_MAX_FACES];
+static aw_face_t faces[PUBLISH_BUFFERS][VOIDMAP_MAX_FACES + AREA_MAX_FACES + GUARDVIEW_MAX_FACES + INTERACTVIEW_MAX_FACES +
+                                         HITVIEW_MAX_FACES];
 static int n_faces[PUBLISH_BUFFERS];
 static view_cam_t cams[PUBLISH_BUFFERS]; /* the camera a frame's lines and faces go with */
 static float void_ends[VOIDMAP_MAX_LINES][2][3]; /* voidmap_lines' for this frame, before they're projected */
@@ -813,7 +815,7 @@ void airwall_frame(bool gpu)
   link_boxes[f].ok = false;
   bool walls = (airwalls_shown || void_areas_shown()) && current_map;
   bool draw = walls || savepos_shown || voidmap_shown || hsstore_shown || placer_active || guardview_active() ||
-              interactview_active();
+              interactview_active() || hitview_active();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
     /* the actor placer's beam and ring (placer.c) first: a few lines nothing else's budget cuts */
@@ -855,12 +857,19 @@ void airwall_frame(bool gpu)
     int n_talk = interactview_lines(talk_ends, talk_colours, INTERACTVIEW_MAX_LINES);
     for (int i = 0; i < n_talk; i++)
       add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, talk_ends[i][0], talk_ends[i][1], talk_colours[i], true);
+    /* the hitboxes (hitview.c): over everything */
+    static float hit_ends[HITVIEW_MAX_LINES][2][3];
+    static uint8_t hit_colours[HITVIEW_MAX_LINES];
+    int n_hit = hitview_lines(hit_ends, hit_colours, HITVIEW_MAX_LINES);
+    for (int i = 0; i < n_hit; i++)
+      add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, hit_ends[i][0], hit_ends[i][1], hit_colours[i], false);
     if (gpu) {
       n_faces[f] = voidmap_faces(faces[f], VOIDMAP_MAX_FACES);
       n_faces[f] += guardview_faces(faces[f] + n_faces[f], GUARDVIEW_MAX_FACES);
       n_faces[f] += interactview_faces(faces[f] + n_faces[f], INTERACTVIEW_MAX_FACES);
+      n_faces[f] += hitview_faces(faces[f] + n_faces[f], HITVIEW_MAX_FACES);
     }
-    int max_faces = VOIDMAP_MAX_FACES + AREA_MAX_FACES + GUARDVIEW_MAX_FACES + INTERACTVIEW_MAX_FACES;
+    int max_faces = VOIDMAP_MAX_FACES + AREA_MAX_FACES + GUARDVIEW_MAX_FACES + INTERACTVIEW_MAX_FACES + HITVIEW_MAX_FACES;
     cams[f] = cam;
     /* nearest wall first, so the budget goes to what's close */
     n_near = walls ? sort_near_walls(&cam) : 0;

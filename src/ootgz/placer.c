@@ -595,8 +595,9 @@ static void panel(void)
     at = 0;
   } else if (at && actor_read(at, &a)) {
     snprintf(under, sizeof(under), "%s", a.name);
-    if (a.has_life)
-      snprintf(stats, sizeof(stats), TF("life %d/%d"), (int)a.life, (int)a.max_life);
+    if (a.killable) /* none for one that can't be killed: its life is the default 100 */
+      snprintf(stats, sizeof(stats), a.invincible ? TF("life %d/%d, invincible") : TF("life %d/%d"), (int)a.life,
+               (int)a.max_life);
   } else {
     snprintf(under, sizeof(under), "%s", grounded ? T("nothing under the beam") : T("no ground under the beam"));
   }

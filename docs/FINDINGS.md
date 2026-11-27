@@ -2411,3 +2411,55 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
 - So: a half disc of 2 m on the door's -X side (where it swings to), drawn as **door close** (interactview.c). Not
   checked in game: walking out of it and timing the close.
 
+
+### 9.39 Hitboxes, bump boxes and invincibility (1.1.1; drawn in game, 27th November 2026; 1.0.0 not checked)
+- **The two Havok worlds** (Havok 2025.2, hknp): cct.c's path (`[[[[phive_mgr]+0xC0]+0xC8 + 8 w]+0xE0]`) gives
+  world 0, the solid bodies ("entities"), and world 1, the sensors. Bodies are 0xC0 bytes, 42 to a block, the blocks'
+  pointers at `[world+0x48]`, the capacity at `+0x130` (6144 and 10240 in Hyrule Castle's grounds, about 500 and
+  600 in use).
+- **A body:** its transform at `+0x00` (three columns of four floats: world = c0 x + c1 y + c2 z + the position at
+  `+0x30`); flags `+0x50`; id `+0x58`; `+0x5C` a collision filter word that isn't phive's layer; its bounding box from
+  `+0x60` (max x y z, then min z x y; FLT_MAX while it isn't in the world); its shape `+0x78`; motion id `+0x80`;
+  phive's own object for it (the "owner", cct.c's controller body for Link) `+0xB8`.
+- **The owner:** `[[owner+0x108]+8]` its actor (none for some: one of Link's AttackAll sensors, a fire); `+0x120` its
+  layer hit mask (bit n: layer n of PhiveConfig's LayerEntityCollection, or LayerSensorCollection for a sensor; the
+  file's EnableLayerHitMask, e.g. HitToPlayer `0x80004` on a Deku Baba's AtkHead, 0x7FFFFFF Default where the file
+  gives none); `[[owner+0x150]+8]` its own layer, the low five bits an index in the same collection (the top bits
+  are flags: 0x84 for an enemy's Character bodies), `[[owner+0x150]+0xC]` a number the same on all of an actor's
+  bodies (Link's 0x20), even where the actor isn't at +0x108. Checked over every body in a capture: Link's character
+  controller Player (3), his sword PlayerAttack (7), NPCs' and enemies' bodies Character (4), their targets Enemy /
+  NPC, a Deku Baba's head and a Deku Scrub's nut EnemyAttack (8), chemistry ChemicalObject / ChemicalElement, areas
+  GeneralArea. The owner's class: 1.1.1 `main+0x4C34658` (CharacterMatterRigidBody, cct.c's `vt_cct_body`: every
+  character's controller), `+0x4C378C0` (other entities, ragdoll parts), `+0x4C37D20` (sensors).
+- **A shape** (hknpConvexShape and kin): its size `+0x08`; (offset, count) pairs, each offset from the pair itself:
+  points `+0x38` (12 bytes each), planes `+0x40`, faces `+0x48` (4 bytes: first index u16, count u8, an angle u8),
+  face point indices `+0x50` (u8); its convex radius `+0x68`. One point: a sphere round it; two: a capsule (a Deku
+  Scrub's TgtBody: (0, 0.5, 0), (0, 0.2, 0), 0.6, as its ShapeParam says); more: boxes (vtable `main+0x48936E8`, 8
+  points, 6 faces), cylinders as polytopes (`+0x4893780`, 32 points, 18 faces), hulls (`+0x4893AE8`, Link's
+  controller prism). Every decoded face is planar. Meshes and compounds (scenery) have other layouts.
+- **What's an attack, a bump:** the files' sensors (tools: every RigidBodySensorParam) put an enemy's attack on
+  EnemyAttack (226 of them with no EnableLayerHitMask), NPCAttack (moving spikes) or AttackAll (cuccos, Epona,
+  falling rocks, crazy floor tiles); its mask has Player (bit 2) while it can hit Link. A character controller's
+  mask (`0x3FBEFF`) hits Player; ragdoll parts have 0 or ground-only masks (`0x298365`).
+- **Invincibility:** the Life component `L = [[actor+0x270]+0x2B8]` has two queues of reasons (u32 name hashes,
+  rings: array `+0`, capacity `+8`, first `+0xC`, count `+0x10`) at `L+0x1C28` and `L+0x1C60`: either count over 0 is
+  invincible (QueryIsInvincibleAny, `main+0x2A32460`: `[L+0x1C70] > 0 || [L+0x1C38] > 0`). They're LifeParam's
+  InitInvincibilityType (an enum: None, `0x1A1CFA7E` into the first ring, `0xBA2AC343` into the second, the "no
+  damage reaction" one, QueryLifeIsInvincibleNoDamageReaction), pushed by the component's setup (`main+0x8D9310`)
+  with the reason `0xE89F6A7C`; AI nodes add and remove others. `L+0x1CA0` sums it up (0, 1, 2) with life
+  (`+0x1CA8`) and max (`+0x1CAC`). The pair of reads appears 9 times in each build (the same offsets on 1.0.0), and
+  1.0.0 pushes the same reason (`main+0x50E214`). A third queue, timed reservations (0x14 bytes each), is at `L+0x60` (count `+0x70`,
+  ExecuteLifeReserveInvincibility, `main+0x2E47B40`): not read.
+- **Link's invincibility after a hit** isn't in those: `[L+0x230]` holds timers (set through `main+0x2F7E270`, as
+  Farore's Wind's and a revival fairy's are), four slots of 16 bytes from `+0x50`, the first float the time left:
+  30 when a Deku Baba bit him, down to 0 in about 16 frames (the second float is last frame's, and keeps its last
+  value). Sampled every 2 frames through two bites (his life 80 to 78, refilled by infinite health); the rings
+  stayed empty.
+- **The game's default life:** an actor whose LifeParam names no LifeParameters has `Default`'s MaxLife 100. Of the
+  697 actors with a Life component, 425 have InitInvincibilityType `0x1A1CFA7E` (all NPCs, Deku Scrubs, Bongo Bongo's
+  hands, signs, switches, trees); those are the "100/100" ones. Enemy health and the actor browser leave out an actor
+  with no Death component, or whose start-up invincibility is still there.
+- **A Lichii hang** (twice today, once on 25th November): about 2 s after an enemy was spawned (a Wolfos, then a Deku
+  Baba), Lichii's GPU thread stopped ("Waited N s for the GPU thread to submit tick ..."), right after it logged
+  "ASTC GPU decodes" and built a pipeline on the GPU thread; the module's game thread ran on until it stalled behind
+  it. Other spawns of the same actors were fine.

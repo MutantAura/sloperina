@@ -1,6 +1,6 @@
 # Status
 
-Where the work stands, for picking it up again. Last updated 26th November 2026, after the 0.0.14 release.
+Where the work stands, for picking it up again. Last updated 27th November 2026: 0.0.14 released, hitboxes on feat/hitboxes.
 
 ## Released
 
@@ -63,6 +63,26 @@ Where the work stands, for picking it up again. Last updated 26th November 2026,
 - CONTRIBUTORS from GitHub's contributors list.
 
 The game patches are the same as 0.0.11's (patch v6).
+
+## On branch feat/hitboxes (not merged, not released)
+
+- **scene > environment > hitboxes** (hitview.c, FINDINGS 9.39): the game's own physics shapes near Link or the
+  camera, read live from both Havok worlds each frame: **attacks** that can hurt Link (red, filled, while their hit
+  mask has Link's layer in it), **bump boxes** (grey; Link's character controller white), **invincibility** (blue,
+  filled: Link's or a fightable actor's target shapes while invincible), **hurtboxes** (yellow, off at first).
+  Checked on 1.1.1 with a Deku Baba (its bite red as it lunges, Link blue for about half a second after each bite),
+  a Deku Scrub (its nut red) and the market's NPCs (grey). About 2 FPS on Lichii.
+- **Enemy health / actor browser:** no bar and no life line for actors that can't be killed (no Death component, or
+  still invincible from the start: NPCs, Deku Scrubs, Bongo Bongo's hands, signs, whose life is the game's default
+  100). The browser's life line says **invincible** while it is.
+- Remote: `physdump` (raw capture of the Havok bodies for working out layouts offline).
+- **Not checked:** 1.0.0 (the body, owner and shape offsets are assumed the same; `vt_cct_body` is known there);
+  boss attacks, Wolfos / Stalfos swings (a Wolfos spawn hung Lichii, below), NPCAttack (moving spikes), fire; enemy
+  invincibility other than the Deku Baba's (guarding Stalfos, Iron Knuckle); the timed reservations at `L+0x60`;
+  gz's (non-GPU) drawing style.
+- **Lichii hangs on some enemy spawns** (twice on 27th November: a Wolfos, a Deku Baba): its GPU thread stops about
+  2 s after "ASTC GPU decodes" for the new actor's textures; the same as the hang seen on 25th November. Looks like
+  Lichii's GPU-side ASTC path, not the module (the game thread ran on).
 
 ## Open pull requests
 

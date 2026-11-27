@@ -1403,6 +1403,11 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_ACT_LOCK] = { 0.52f, 0.36f, 0.70f, 1.0f },         /* dark lilac: ... while Z-targeting */
   [AW_DOOR] = { 1.0f, 0.62f, 0.18f, 1.0f },              /* orange: where anyone holds a door open */
   [AW_DOOR_IN] = { 1.0f, 0.86f, 0.55f, 1.0f },           /* pale orange: ... and Link does now */
+  [AW_HIT_ATTACK] = { 1.0f, 0.16f, 0.14f, 1.0f },        /* red: an attack that can hurt Link (hitview.c) */
+  [AW_HIT_INVINCIBLE] = { 0.24f, 0.50f, 1.0f, 1.0f },    /* blue: where Link or a foe is hit, while invincible */
+  [AW_HIT_LINK] = { 0.95f, 0.95f, 0.95f, 1.0f },         /* white: Link's own body */
+  [AW_HIT_BUMP] = { 0.60f, 0.60f, 0.60f, 1.0f },         /* grey: a body that bumps into Link */
+  [AW_HIT_HURT] = { 1.0f, 0.85f, 0.20f, 1.0f },          /* yellow: where Link or a foe is hit */
 };
 
 /* enemy health (enemyhp.c) */

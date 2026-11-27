@@ -36,6 +36,7 @@
 #include "settings.h"
 #include "voidmap.h"
 #include "guardview.h"
+#include "hitview.h"
 #include "interactview.h"
 #include "warp.h"
 #include "watches.h"
@@ -474,6 +475,7 @@ static void frame(void)
   voidmap_frame();
   guardview_frame(); /* the guards' sight: before airwall_frame draws it */
   interactview_frame(); /* where Link can talk to or act on actors: the same */
+  hitview_frame();      /* the hitboxes: the same */
   airwall_frame(overlays_on_gpu);
   enemyhp_frame(overlays_on_gpu);
   menus_research_frame();

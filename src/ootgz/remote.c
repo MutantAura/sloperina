@@ -14,6 +14,7 @@
 #include "menu.h"
 #include "levitate.h"
 #include "menus.h"
+#include "physdump.h"
 #include "position.h"
 #include "sdfs.h"
 #include "settings.h"
@@ -1019,6 +1020,12 @@ static void run_line(char *line, bool held)
     run_place(args);
   } else if (same(verb, "actor")) {
     run_actor(args);
+  } else if (same(verb, "physdump")) {
+    char *name = take_word(&args);
+    int records = 0;
+    int64_t bytes = 0;
+    bool ok = physdump_write(*name ? name : "phys", &records, &bytes);
+    result(ok, "physdump: %d records, %lld bytes", records, (long long)bytes);
   } else if (same(verb, "peek")) {
     run_peek(args);
   } else if (same(verb, "doortimer")) {

@@ -47,7 +47,8 @@ bool overlayui_on_gpu(void)
  * this many lines, the nearest walls' first (airwall.c sorts them), and the nearest of them a glow */
 #define FACE_ALPHA 0.16f  /* the void columns' and fence's sides */
 #define GROUND_FACE_ALPHA 0.24f /* translucent green/red ground shift shading */
-#define GUARD_FACE_ALPHA 0.24f  /* a guard's sight on the ground (guardview.c) */
+#define GUARD_FACE_ALPHA 0.24f
+#define HIT_FACE_ALPHA 0.30f    /* an attack's or an invincible body's fill (hitview.c) */  /* a guard's sight on the ground (guardview.c) */
 #define GUARD_FAR_ALPHA 0.10f   /* ... its alert sight's further band */
 #define MAX_LINES_DRAWN 1400
 #define MAX_GLOWS 500
@@ -92,6 +93,11 @@ static const gpu_colour_t line_colours[AW_NCOLORS] = {
   [AW_ACT_LOCK] = { 0.54f, 0.38f, 0.72f, 1 },         /* dark lilac: ... while Z-targeting */
   [AW_DOOR] = { 1.0f, 0.64f, 0.20f, 1 },              /* orange: where anyone holds a door open */
   [AW_DOOR_IN] = { 1.0f, 0.86f, 0.56f, 1 },           /* pale orange: ... and Link does now */
+  [AW_HIT_ATTACK] = { 1.0f, 0.18f, 0.16f, 1 },        /* red: an attack that can hurt Link (hitview.c) */
+  [AW_HIT_INVINCIBLE] = { 0.25f, 0.52f, 1.0f, 1 },    /* blue: where Link or a foe is hit, while invincible */
+  [AW_HIT_LINK] = { 0.96f, 0.96f, 0.96f, 1 },         /* white: Link's own body */
+  [AW_HIT_BUMP] = { 0.62f, 0.62f, 0.62f, 1 },         /* grey: a body that bumps into Link */
+  [AW_HIT_HURT] = { 1.0f, 0.86f, 0.22f, 1 },          /* yellow: where Link or a foe is hit */
 };
 
 /* budget: the quads the lines may take. Short of them, the glows go first, then the farthest lines. */
@@ -116,7 +122,9 @@ static bool draw_lines(float w, float h, float px, int budget)
     gpu_colour_t c = line_colours[ci];
     bool guard = (ci >= AW_GUARD_SEARCH && ci <= AW_GUARD_OFF) || (ci >= AW_TALK && ci <= AW_DOOR_IN),
          far = ci >= AW_GUARD_SEARCH_FAR && ci <= AW_GUARD_OFF_FAR;
+    bool hit = ci >= AW_HIT_ATTACK && ci <= AW_HIT_HURT;
     c.a = (far     ? GUARD_FAR_ALPHA
+           : hit   ? HIT_FACE_ALPHA
            : guard ? GUARD_FACE_ALPHA
            : (ci == AW_VOID_SHIFT_OK || ci == AW_VOID_SHIFT_FAIL) ? GROUND_FACE_ALPHA
                                                                  : FACE_ALPHA) *
@@ -148,7 +156,7 @@ static bool draw_lines(float w, float h, float px, int budget)
       c.a = (pass ? a : a * GLOW_ALPHA) * fade;
       if (l->scene) /* hidden where anything of the scene is nearer */
         gpuui_line_scene(l->x0 * w, l->y0 * h, l->d0, l->x1 * w, l->y1 * h, l->d1, (pass ? LINE_W : GLOW_W) * px, c);
-      else if (airwalls_xray)
+      else if (airwalls_xray || (l->color >= AW_HIT_ATTACK && l->color <= AW_HIT_HURT)) /* hitboxes: over all */
         gpuui_line(l->x0 * w, l->y0 * h, l->x1 * w, l->y1 * h, (pass ? LINE_W : GLOW_W) * px, c);
       else /* hidden where Link is nearer (with nvn.c's depth for the frame) */
         gpuui_line_depth(l->x0 * w, l->y0 * h, l->d0, l->x1 * w, l->y1 * h, l->d1, (pass ? LINE_W : GLOW_W) * px, c);

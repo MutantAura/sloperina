@@ -13,7 +13,8 @@
  *   get <menu path>            its value and its line as the menu shows it
  *   list [<menu path>]         a menu's items: number, kind, name, value
  *   open [<menu path>]         the menu on screen at that menu (or at that item of its menu), for a look at it
- *   wait <frames>              the next line runs that many frames later
+ *   wait <frames>              the next line runs that many frames later (ended, with an error, if the game is
+ *                              held meanwhile: no frames pass then)
  *   repeat <n> ... end         the lines between, that many times (up to four inside one another); with wait
  *                              and input, a sequence of any length
  *   pause                      hold the game, as frame advance does (it needn't be on)
@@ -47,6 +48,8 @@
  *                              sloperinaGZ/dump/frametrace.txt; only in a build with FRAMETRACE_HOOKS (nvn.c)
  *   texdump <hex texture> [bpp] debugging: that texture's rows at the next present to sloperinaGZ/dump/texture.bin
  *   hitlist                    debugging: the hitboxes drawn last frame: kind, actor, its state, layer, where
+ *   pausetype [<name> <+n|-n>] debugging: the game's pause types and their counts, or add to one (FINDINGS 9.1);
+ *                              pausetype <name> masks <hex> <hex> <hex>: what it stops, set (FINDINGS 9.41)
  *   button <0..3> [<item>]     debugging: an item button's choice (murmur3), or put an item on it (2 is ZR)
  *   rtlist                     debugging: the colour targets the game bound in its last frame, and how often
  *   rtbinds                    debugging: the HUD's picture and how often the world's overlays went under the HUD

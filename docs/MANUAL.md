@@ -891,6 +891,15 @@ game's pause screen closed):
   menu, the watches, the input display and the log stay live over it. The menu can be opened and used while
   paused; its button works the menu then. (If the game's picture is larger than 2560x1440, the last frame stays
   on screen as it was and a menu opened while paused can't be seen; run again then closes it.)
+- **The free camera and the actor browser work while paused** (**debug > free camera** or its bind, **debug > actors
+  > browse currently loaded actors**, the explorer): the game goes on drawing with its world stopped (the game's
+  own pause, as its pause screen's, made to leave its camera running), so you can fly the camera and step from actor
+  to actor with every control as when the game runs, and nothing in the world moves meanwhile: Link, the actors,
+  a boomerang in flight stay exactly where they were. Leaving it (**B**, or unticking the free camera) holds the
+  game again where it was, with its own view back; the next tap plays the very next frame. The frame advance
+  buttons wait until you've left it. **One catch:** an actor that was off the screen when the game paused isn't
+  drawn while it's paused (what's drawn is decided in each actor's own update, which is what's stopped); the browser
+  still steps to it and shows its options, and it's back as soon as a frame plays.
 
 ## 5 Settings file
 

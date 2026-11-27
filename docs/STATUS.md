@@ -103,6 +103,12 @@ The game patches are the same as 0.0.11's (patch v6).
 - **The boomerang's attack** didn't show until a second, bigger sensor came on 13 frames into the flight: its first
   (PlayerAttack, on 2 frames after it leaves his hand) is a 32-point shape with more faces than the 40 allowed, and
   the box drawn instead was lines only, which fill leaves out. Now up to 255 faces, and the box is filled. Seen.
+- **Frame advance's camera tools** (asked for 27th November): the free camera, the actor browser and the explorer work
+  while frame advance holds the game: it draws with its world stopped (`DebugPause` raised with one bit more,
+  pausemgr.c, FINDINGS 9.41), and is held again where it was when they're left. Seen in game on 1.1.1: the free
+  camera flown and the browser stepped through actors; the actors within 30 m and a boomerang in flight identical
+  before and after; one step after moved it one frame. Catch: actors off screen at the pause aren't drawn meanwhile.
+  1.0.0 not tried (its pause manager offset is 1.1.1's less 0x70460, checked by the table's shape before use).
 - **Link's items** drawn while they can hit: Deku Nuts, Din's Fire, the boomerang, slingshot seeds (seen); arrows not
   tried (adult only). Spent ones (put away, state 6) left out.
 - **Bomb blasts** drawn as attacks (FINDINGS 9.39): seen with a bomb going off in Link's hands. Not seen: a thrown

@@ -2534,3 +2534,31 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   frame trace crashed the game about a minute in, three times (an abort in nn::fs::CloseFile from its "movie"
   module); wrapping only nvnCommandBufferSetRenderTargets ran four minutes clean. The trace is off unless built with
   FRAMETRACE_HOOKS.
+
+### 9.41 The world stopped while the game draws: the pause manager's masks (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- **What the game's systems read** is the pause manager's `+0x30` (§9.1): three words, the OR of the masks
+  (`+0x0C`, `+0x10`, `+0x14`) of the types whose count is above 0, worked out once a frame after the module's frame
+  hook. So a count raised by the module took effect a frame late (raised while frame advance held the game, the next
+  frame still played); working the three words out at once as well (pausemgr.c) makes it the very next frame, both
+  ways. Checked with a boomerang in flight: held, raised, 30 frames drawn, lowered, held: the same position, and one
+  step moved it one frame's worth.
+- **Masks** (1.1.1): `GamePause` `7f3a9f14 2c9022af 0001269f`, `DebugPause` `7c2f4ab0 a698251f 0001e28d`,
+  `ClickPause` `782f4820 a698252f 0001e28f`. Tried by giving `DebugPause` other masks (remote `pausetype <type> masks`)
+  and raising it, the free camera flown, the actors within 30 m compared before and after:
+  - `DebugPause`'s own: everything stopped (Navi too), but so is the game's camera: its view isn't built at all (the
+    render camera's matrix function, §9.30, isn't called), so the free camera's doesn't show.
+  - `GamePause`'s: everything stopped and the view goes on, but Link isn't drawn. The third word's `0x10` is what
+    hides him (and, alone, what stops him).
+  - `DebugPause`'s with the third word's `0x2` (or `0x400`) as well: everything stopped, Link drawn, lighting as
+    ever. The game still doesn't build its view, but the free camera builds it itself where the game's call would
+    (the camera's own `+0x08`, as its matrix function's out), so its view shows. Used for frame advance's camera
+    tools (ootgz.c, `pausemgr_freeze`).
+  - The shared bits alone (`DebugPause` and `GamePause`'s AND) don't stop Link's pose; `GamePause`'s without its two
+    `0x10`s leave the actors running. With the second word's `DebugPause`-only bits added to that, everything
+    stopped but the lighting went white (its exposure).
+- **What isn't drawn while stopped:** an actor off the screen when the world stopped (Malon and the Gossip Stone at
+  Hyrule Castle, seen from the free camera) isn't drawn until it runs again, with every mask that stops it; one on the
+  screen stays drawn. Its visibility is evidently worked out in its own update.
+- **The game's camera** doesn't run while stopped, so its view isn't built again when the free camera goes off:
+  freecam.c keeps the game's eye, look-at and up (as its camera last set them) and puts them back and builds the view
+  itself.

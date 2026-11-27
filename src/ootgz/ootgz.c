@@ -55,6 +55,7 @@
 #include "remake.h"
 #include "actorsmenu.h"
 #include "freecam.h"
+#include "pausemgr.h"
 #include "placer.h"
 #include "remote.h"
 #include "eventskip.h"
@@ -287,6 +288,35 @@ static void fa_release_buffered_input(void)
   input_force_active = buffered_buttons || buffered_stick_moved[0] || buffered_stick_moved[1];
 }
 
+/* The camera tools while frame advance holds the game (the free camera, the explorer, browsing actors: placer.c,
+ * freecam.c): they need frames drawn, which a held game doesn't make. So the game is let run with its world stopped
+ * by the pause manager (pausemgr_freeze, FINDINGS 9.41): nothing moves (the actors, Link, the timers) while its
+ * camera and drawing go on, and the tools work as with the game running. Left, the game is held again where it was:
+ * the world's frames are the same before and after. */
+static bool fa_tools_frozen;
+static bool fa_tools_ending; /* the tool was left: one more frame, so the picture held is the game's own view */
+
+static bool fa_tool_wanted(void) { return placer_active || freecam_on; }
+
+/* fa_frame, first: true while this frame goes through stopped for a tool */
+static bool fa_tools_frame(void)
+{
+  if (!fa_tools_frozen)
+    return false;
+  if (fa_paused && (frame_advance || fa_by_remote) && fa_tool_wanted()) {
+    fa_tools_ending = false;
+    return true;
+  }
+  if (fa_paused && !fa_tools_ending) {
+    fa_tools_ending = true;
+    return true;
+  }
+  pausemgr_freeze(false);
+  fa_tools_frozen = fa_tools_ending = false;
+  log_printf("frame advance: the camera tool is done: held again");
+  return false;
+}
+
 /* Holds the game's thread here while paused, running the menu and overlays, until a frame is let
  * through or the game is set running again. */
 static void fa_hold_game(void)
@@ -339,6 +369,15 @@ static void fa_hold_game(void)
     }
     menu_controls();
     actorsmenu_frame();
+    /* a camera tool (from the menu, or the free camera's bind): the game goes on with its world stopped */
+    if (!menu_current && cmd_pressed(CMD_FREECAM))
+      freecam_set(true);
+    if (fa_tool_wanted() && pausemgr_freeze(true)) {
+      fa_tools_frozen = true;
+      fa_tools_ending = false;
+      log_printf("frame advance: a camera tool: the world stopped, the game drawing it");
+      break;
+    }
     /* return to title screen: chosen in the menu, by its bind or by a script, the game is let go to leave play */
     if (cmd_pressed(CMD_TITLE)) {
       const char *problem = title_start();
@@ -387,6 +426,8 @@ static void fa_hold_game(void)
 
 static void fa_frame(void)
 {
+  if (fa_tools_frame())
+    return;
   if (remote_take_pause() && !fa_paused) { /* a script's pause: as a tap of the button, below */
     fa_paused = true;
     fa_by_remote = true;

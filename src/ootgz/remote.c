@@ -10,6 +10,7 @@
 #include "enemyhp.h"
 #include "gamedata.h"
 #include "input.h"
+#include "pausemgr.h"
 #include "link.h"
 #include "menu.h"
 #include "levitate.h"
@@ -1083,6 +1084,41 @@ static void run_line(char *line, bool held)
       line = end + 1;
     }
     result(true, "hitlist: %d", n);
+  } else if (same(verb, "pausetype")) { /* pausetype [<name or hex id> <+n or -n>]: the game's pause types */
+    char *name = take_word(&args), *by = take_word(&args);
+    int32_t delta = 0;
+    if (*name && same(by, "masks")) { /* pausetype <name> masks <hex> <hex> <hex>: what it stops (debugging) */
+      uint32_t m[3], was[3];
+      for (int k = 0; k < 3; k++)
+        m[k] = pausemgr_id(take_word(&args));
+      if (!pausemgr_set_masks(pausemgr_id(name), m, was)) {
+        result(false, "pausetype: no such type");
+        return;
+      }
+      result(true, "pausetype %s masks %08x %08x %08x (were %08x %08x %08x)", name, (unsigned)m[0], (unsigned)m[1],
+             (unsigned)m[2], (unsigned)was[0], (unsigned)was[1], (unsigned)was[2]);
+    } else if (*name) {
+      uint32_t id = pausemgr_id(name);
+      if (!*by || !parse_int(by[0] == '+' ? by + 1 : by, &delta) || !pausemgr_add(id, delta)) {
+        result(false, "pausetype: a type's name or hex id, then +n or -n (and the manager found)");
+        return;
+      }
+      result(true, "pausetype %s %#x: count %d", name, (unsigned)id, pausemgr_count(id));
+    } else {
+      static char text[2048];
+      pausemgr_list(text, sizeof(text));
+      for (char *line = text; *line;) {
+        char *end = line;
+        while (*end && *end != '\n')
+          end++;
+        char keep = *end;
+        *end = 0;
+        result(true, "pausetype: %s", line);
+        if (!keep)
+          break;
+        line = end + 1;
+      }
+    }
   } else if (same(verb, "button")) { /* button <0..3> [<item>]: an item button's choice, or put an item on it */
     int32_t slot = -1;
     parse_int(take_word(&args), &slot);
@@ -1329,8 +1365,14 @@ static void poll(void)
 /* Whether the line last run is still waiting; says so (its result) when the wait is over. */
 static bool waiting(bool held)
 {
-  if (wait_left > 0)
-    return true;
+  if (wait_left > 0) {
+    if (!held || stepping)
+      return true;
+    /* the game was held while it waited (frame advance, or leaving a camera tool under it): no frames pass now,
+     * so it ends here rather than never */
+    result(false, "wait: the game was held with %d frames to go (step lets them through)", (int)wait_left);
+    wait_left = 0;
+  }
   if (spawning.active && spawn_waiting())
     return true;
   if (pause_waiting) {

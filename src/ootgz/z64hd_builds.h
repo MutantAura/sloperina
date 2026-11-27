@@ -211,6 +211,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .guard_los_angle = 0x2CA5DA0,
     .bone_find = 0x7C6DA0,
     .door_close_node_vtable = 0x4A96CF8,
+    .pause_mgr_ptr = 0x4E279D8, /* 1.1.1's less 0x70460, as the camera's: checked by pausemgr.c's table check */
     .link_paths = {
       { 0x4DC7210, 0x480 }, { 0x4E243F8, 0x2E0 }, { 0x4E23158, 0xEF8 },
       { 0x4E24400, 0x328 }, { 0x4E23F08, 0xD70 }, /* the last checked in game: Link's object */
@@ -362,6 +363,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .guard_los_angle = 0x2CF9B60,
     .bone_find = 0x1B3620,
     .door_close_node_vtable = 0x4AFBCC8,
+    .pause_mgr_ptr = 0x4E97E38,
     .link_paths = {
       { 0x4E371D0, 0x480 }, { 0x4E94858, 0x2E0 }, { 0x4E935B8, 0xEF8 },
       { 0x4E94860, 0x328 }, { 0x4E94368, 0xD70 },

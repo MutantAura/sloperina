@@ -4,7 +4,7 @@ Where the work stands, for picking it up again. Last updated 27th November 2026:
 
 ## Released
 
-**0.0.15** (master `Release 0.0.15`; `release/sloperinaGZ-0.0.15.zip`, not yet tagged or published). Since 0.0.14:
+**0.0.15** (tag `v0.0.15`, GitHub release with `sloperinaGZ-0.0.15.zip`). Since 0.0.14:
 
 - **scene > environment > hitboxes**: attack hitboxes, bump boxes, hurtboxes, invincibility and collectables, each
   off / outline / fill, drawn as the air walls are; the shield guard angle in 3D for Link and enemies (details below).

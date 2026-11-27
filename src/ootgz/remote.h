@@ -83,7 +83,4 @@ bool remote_take_pause(void);
 bool remote_take_step(void);
 bool remote_take_run(void);
 
-/* Link's main action id (his action table's main slot, as status gives it), or -1 */
-int remote_link_action(void);
-
 #endif

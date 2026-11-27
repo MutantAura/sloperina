@@ -30,7 +30,6 @@
 #include "enemyhp.h"
 #include "lang.h"
 #include "link.h"
-#include "remote.h"
 #include "sys.h"
 #include "view.h"
 #include "z64hd.h"
@@ -876,38 +875,57 @@ static int by_kind_then_distance(const found_t *a, const found_t *b)
   return a->distance < b->distance ? -1 : a->distance > b->distance;
 }
 
-/* Where Link's raised shield blocks from (FINDINGS 9.42): while he guards (his guard action, or its reaction to a
- * blocked hit), every direction within GUARD_DEG of his front, round him at the shield's height: a bubble with a
- * cone cut out at his back. The game checks the angle between the attack and the shield's guard direction (a 3D
- * vector) against DamageParameters' GuardableAngleMaxDeg 120 (60 each way), and the shield turns up to 50 towards
- * the attacker every way (MoveShieldLimitAngleLeft/Right/Up/Down): 110 from his front, above and below as to the
- * sides. Measured level with him (a Deku Baba's bites): blocked to 110, through from 115; above and below not
- * measured. Its radius is only for seeing it: the check has none. */
-#define GUARD_DEG 110.0f
+/* Where a raised shield blocks from (FINDINGS 9.42, 9.43), while its holder guards: whether it does is its
+ * animation's Guard hold event (what QueryASGetHoldEventGuard reads, main+0x2984F80): [[actor+0x270]+0x40] the AS
+ * component, +0x18, +0x18 its slots (count +0x18, array +0x20, 0x48 bytes each), each slot's [+0x58] hold events,
+ * bit 0x10 of their +0x40 Guard. On for Link while he guards (any guard: standing, crouching, its reaction), and
+ * for a Stalfos while its shield is up (not otherwise: it took hits then).
+ * The guarded directions: within GuardableAngleMaxDeg / 2 of the guard's direction (DamageParameters: Link's 120,
+ * every enemy's 100). Link's shield turns up to 50 towards the attacker every way (MoveShieldLimitAngle), so his
+ * reach 110 from his front (measured level: blocked to 110, through from 115); an enemy turns its whole body to
+ * face what it guards against (a Stalfos was square to Link again within ten frames), 50 from its front. Drawn as
+ * a bubble at the shield's height with the unguarded cone cut out behind and its rim ringed; its radius is only
+ * for seeing it (the check has none). Above and below aren't measured. */
+#define GUARD_LINK_DEG 110.0f
+#define GUARD_ENEMY_DEG 50.0f
 #define GUARD_RADIUS 1.3f
 #define GUARD_HEIGHT_ADULT 0.95f
 #define GUARD_HEIGHT_CHILD 0.6f
-#define GUARD_RINGS 5    /* bands from his front to the rim */
-#define GUARD_AROUND 16  /* segments round */
-#define ACTION_GUARD 65           /* Link's main actions (status act=): guarding */
-#define ACTION_GUARD_REACTION 142 /* ...and a hit blocked */
+#define GUARD_HEIGHT_ENEMY 1.0f
+#define GUARD_RINGS 5   /* bands from the front to the rim */
+#define GUARD_AROUND 16 /* segments round */
+#define GUARD_HOLD 0x10
+#define AS_SLOT_SIZE 0x48
+#define AS_MAX_SLOTS 16
 
-static void guard_dome(const vec3f_t *link_pos)
+static bool guard_held(uintptr_t actor)
 {
-  int action = remote_link_action();
-  double dfx, dfz;
-  if ((action != ACTION_GUARD && action != ACTION_GUARD_REACTION) || !link_facing(&dfx, &dfz))
-    return;
-  /* his front f, and two directions across it (u level, v up), round the shield's height c */
-  float f[3] = { (float)dfx, 0, (float)dfz }, u[3] = { (float)dfz, 0, -(float)dfx }, v[3] = { 0, 1, 0 };
-  float c[3] = { link_pos->x, link_pos->y + (age_current() == 0 ? GUARD_HEIGHT_CHILD : GUARD_HEIGHT_ADULT),
-                 link_pos->z };
+  uintptr_t comps = rd(actor, 0x270), as = comps ? rd(comps, 0x40) : 0, a1 = as ? rd(as, 0x18) : 0;
+  uintptr_t ctl = a1 ? rd(a1, 0x18) : 0;
+  if (!ctl || !sys_mapped(ctl + 0x18, 0x10, SYS_PERM_R))
+    return false;
+  uint32_t n = *(const volatile uint32_t *)(ctl + 0x18);
+  uintptr_t slots = rd(ctl, 0x20);
+  if (!slots || n > AS_MAX_SLOTS || !sys_mapped(slots, n * AS_SLOT_SIZE, SYS_PERM_R))
+    return false;
+  for (uint32_t k = 0; k < n; k++) {
+    uintptr_t e = *(const volatile uintptr_t *)(slots + k * AS_SLOT_SIZE), h = heap_ptr(e) ? rd(e, 0x58) : 0;
+    if (h && sys_mapped(h + 0x40, 4, SYS_PERM_R) && (*(const volatile uint32_t *)(h + 0x40) & GUARD_HOLD))
+      return true;
+  }
+  return false;
+}
+
+/* the guarded directions round c: within deg of the level direction (fx, fz) */
+static void guard_shape(const float c[3], float fx, float fz, float deg)
+{
+  float f[3] = { fx, 0, fz }, u[3] = { fz, 0, -fx }, v[3] = { 0, 1, 0 };
   float inside[3] = { c[0] + f[0] * GUARD_RADIUS * 0.4f, c[1], c[2] + f[2] * GUARD_RADIUS * 0.4f };
   float dc[3] = { cam.pos[0] - inside[0], cam.pos[1] - inside[1], cam.pos[2] - inside[2] };
   camera_inside = dot(dc, dc) < GUARD_RADIUS * GUARD_RADIUS * 0.5f; /* (roughly: drawn from inside then) */
   float pts[GUARD_RINGS + 1][GUARD_AROUND][3];
   for (int r = 0; r <= GUARD_RINGS; r++) {
-    float t = GUARD_DEG * PI / 180.0f * (float)r / GUARD_RINGS, ct = cosf(t), st = sinf(t);
+    float t = deg * PI / 180.0f * (float)r / GUARD_RINGS, ct = cosf(t), st = sinf(t);
     for (int k = 0; k < GUARD_AROUND; k++) {
       float p = 2 * PI * (float)k / GUARD_AROUND, cp = cosf(p), sp = sinf(p);
       for (int i = 0; i < 3; i++)
@@ -922,10 +940,37 @@ static void guard_dome(const vec3f_t *link_pos)
       if (r > 0)
         face_out(pts[r][k], pts[r + 1][k1], pts[r][k1], inside, AW_HIT_GUARD);
     }
-    face_out(c, pts[GUARD_RINGS][k], pts[GUARD_RINGS][k1], inside, AW_HIT_GUARD); /* the cone cut out behind */
+    face_out(c, pts[GUARD_RINGS][k], pts[GUARD_RINGS][k1], inside, AW_HIT_GUARD); /* the cone cut out (or the rest) */
     line(pts[GUARD_RINGS][k], pts[GUARD_RINGS][k1], AW_HIT_GUARD);                /* its rim */
   }
   camera_inside = false;
+}
+
+#define GUARD_MAX_ACTORS 64
+static void guards(const vec3f_t *link_pos, uintptr_t link)
+{
+  double dfx, dfz;
+  if (link && guard_held(link) && link_facing(&dfx, &dfz)) {
+    float c[3] = { link_pos->x, link_pos->y + (age_current() == 0 ? GUARD_HEIGHT_CHILD : GUARD_HEIGHT_ADULT),
+                   link_pos->z };
+    guard_shape(c, (float)dfx, (float)dfz, GUARD_LINK_DEG);
+  }
+  if (hitview_link_only)
+    return;
+  static actor_near_t near[GUARD_MAX_ACTORS];
+  int n = actors_near(RANGE, near, GUARD_MAX_ACTORS);
+  for (int i = 0; i < n; i++) {
+    uintptr_t a = near[i].actor;
+    if (a == link || (near[i].state != 4 && near[i].state != 5) || !guard_held(a) ||
+        !sys_mapped(a + 0x328, 36, SYS_PERM_R))
+      continue;
+    const volatile float *rot = (const volatile float *)(a + 0x328); /* by rows: its front is the third column */
+    float fx = rot[2], fz = rot[8], len = root(fx * fx + fz * fz);
+    if (!(len > 1e-3f))
+      continue;
+    float c[3] = { near[i].pos[0], near[i].pos[1] + GUARD_HEIGHT_ENEMY, near[i].pos[2] };
+    guard_shape(c, fx / len, fz / len, GUARD_ENEMY_DEG);
+  }
 }
 
 void hitview_frame(void)
@@ -955,7 +1000,7 @@ void hitview_frame(void)
   for (int i = 0; i < n_found && n_lines < HITVIEW_MAX_LINES; i++)
     draw(&found[i]);
   if (hitview_shown && hitview_guard)
-    guard_dome(&link_pos);
+    guards(&link_pos, link_actor());
   if (WATCH_SWORD && link_attacks && !link_attacks_before)
     log_printf("hitboxes: Link's attack out (%d shapes)", link_attacks);
   report();

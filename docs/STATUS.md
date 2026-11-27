@@ -109,6 +109,10 @@ The game patches are the same as 0.0.11's (patch v6).
   below from the parameters. Measured with a Deku Baba on the Deku
   and Hylian shields, the Mirror Shield's front and back alike (no side bite landed); its beam reflection
   (ReflectShield) isn't drawn. Remote `equip shield <actor>` for trying them.
+- **Enemies' guards** (asked for 27th November, a Stalfos's shield, and Dark Link's): green, 50° each way from their
+  front while their animation's Guard hold event is on (FINDINGS 9.43); Link's now from the same event (not his
+  action ids). Seen on a Stalfos in Hyrule Field. Dark Link not seen (Water Temple). Lichii hung once after a
+  Stalfos spawn (the user's).
 - **The actor browser's hitbox switches** are four now (asked for 27th November): attacks, bump boxes, invincibility,
   hurtboxes, each on its own for that actor (a ticked kind is drawn whatever show and its style say). Seen: an NPC's
   bump box alone, then with its hurtbox, then its hurtbox alone, with show off.

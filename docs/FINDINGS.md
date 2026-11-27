@@ -2589,3 +2589,20 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   angle at `+0x188` of its block, the toggle flag at `+0x1A5`; no function reading both was found).
 - Drawn by hitview.c (**shield guard angle**) while Link's action is 65 or 142: that sphere (1.3 m, only for
   seeing it) at the shield's height, its back cone and rim.
+
+### 9.43 When an actor is guarding, and enemies' guards (1.1.1; checked in game, 27th November 2026; 1.0.0 not checked)
+- **The Guard hold event.** `QueryASGetHoldEventGuard` (`main+0x2984F80`, Dark Link's AI uses it) reads the actor's
+  animation: `[[actor+0x270]+0x40]` the AS component, `+0x18`, `+0x18` its slots (count `+0x18`, array `+0x20`,
+  0x48 bytes each), each slot's `[+0x58]` hold events, bit `0x10` of their `+0x40` the Guard event. Seen on for
+  Link while he guards (slot 1) and off otherwise; on for a Stalfos in 112 of 210 frames while Link swung at it,
+  which took no damage then (it took hits when it wasn't).
+- **Not the BSA's request.** `ExecuteBSASetIsRequestedGuard` sets bit `0x20` of `[[[actor+0x270]+0x188]+0x24]` (the
+  BSA component, `main+0x974EB0`); a Stalfos guarding never had it.
+- **Enemies' angle:** every enemy pack that has DamageParameters (145) has `GuardableAngleMaxDeg` 100 (the
+  default), Link 120; enemies have no MoveShield parameters. A Stalfos guarding with Link placed beside or behind it
+  was square to him again (within 2°) before his sword was out, ten frames on, so side blocks couldn't be measured;
+  drawn as 50° each way from its front. The Stalfos's own `GuardMaxAngle` 105 and `QuickGuardProbability` 0.5
+  (StalfosParam) are its AI's. Its `AntiOverlapShield` (a Character body on its Root bone, HitOnlyPlayer) is a bump
+  box. Dark Link: `GuardableAngleMaxDeg` 100 as well, Link's `Player_ReflectShield` capsule and a shield actor of its
+  own (`Weapon_Shield_DarkLinkShield`); not seen in game.
+- Remote `guardbits <actor>` (debugging): those bits, its facing (from its rotation at `+0x328`) and life.

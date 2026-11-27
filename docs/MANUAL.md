@@ -251,7 +251,9 @@ on; under it, each kind has a switch, **off**, **outline** or **fill**:
 - **shield guard angle** (on at first): **green**, while Link guards with his shield (and as it takes a blocked
   hit): a bubble round him at the shield's height, with a cone cut out at his back, its edge ringed: an attack from
   any direction within 110° of his front (to the sides, above or below) is blocked, one from the cone behind him
-  gets through. Straight above and below him are covered. The same for the Deku, Hylian and Mirror shields (it's Link's,
+  gets through. Straight above and below him are covered. Enemies get one too while their shield is up (a Stalfos,
+  Dark Link, anything that guards): narrower, 50° each way from their front, as they turn their whole body to
+  face what they block. The same for the Deku, Hylian and Mirror shields (it's Link's,
   not the shield's; which attacks each shield can block at all, the Deku Shield's fire, isn't drawn). The fan's
   size is only for seeing it: the game checks the angle, not a distance.
 

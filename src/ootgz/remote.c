@@ -633,13 +633,6 @@ static void link_state(link_state_t *s)
   s->weapon = read_s32(read_ptr(actions, OFFSET(action_weapon_slot)), OFFSET(action_id));
 }
 
-int remote_link_action(void)
-{
-  link_state_t s;
-  link_state(&s);
-  return s.action;
-}
-
 /* "vy=6.125 hs=5.000", or "vy=- hs=-" where Link's velocity isn't known */
 static void motion_text(const link_state_t *s, char *buf, size_t cap)
 {
@@ -1095,6 +1088,35 @@ static void run_line(char *line, bool held)
       line = end + 1;
     }
     result(true, "hitlist: %d", n);
+  } else if (same(verb, "guardbits")) { /* guardbits <actor name>: debugging, an actor's BSA flags (FINDINGS 9.43) */
+    uintptr_t found[8];
+    int n = actors_named(take_word(&args), found, 8);
+    for (int i = 0; i < n; i++) {
+      uintptr_t comps = sys_ptr(found[i] + 0x270), bsa = comps ? sys_ptr(comps + 0x188) : 0;
+      uint32_t flags = 0;
+      if (bsa && sys_mapped(bsa + 0x24, 4, SYS_PERM_R))
+        flags = *(const volatile uint32_t *)(bsa + 0x24);
+      const volatile float *rot = (const volatile float *)(found[i] + 0x328);
+      double yaw = atan2f(rot[2], rot[8]) * 57.29578f;
+      /* the animation's hold events (QueryASGetHoldEventGuard, main+0x2984F80): each slot's, bit 0x10 Guard */
+      uintptr_t as = comps ? sys_ptr(comps + 0x40) : 0, a1 = as ? sys_ptr(as + 0x18) : 0, ctl = a1 ? sys_ptr(a1 + 0x18) : 0;
+      uint32_t n_slots = 0, holds = 0;
+      if (ctl && sys_mapped(ctl + 0x18, 0x10, SYS_PERM_R))
+        n_slots = *(const volatile uint32_t *)(ctl + 0x18);
+      uintptr_t slots = ctl ? sys_ptr(ctl + 0x20) : 0;
+      for (uint32_t k = 0; slots && k < n_slots && k < 8; k++) {
+        uintptr_t e = sys_ptr(slots + k * 0x48), h = e ? sys_ptr(e + 0x58) : 0;
+        if (h && sys_mapped(h + 0x40, 4, SYS_PERM_R))
+          holds |= (*(const volatile uint32_t *)(h + 0x40) & 0x10 ? 1u : 0u) << k;
+      }
+      actor_read_t ar;
+      bool got = actor_read(found[i], &ar);
+      int life = got && ar.has_life ? (int)ar.life : -1;
+      result(true, "guardbits %#lx: bsa %#lx flags %#x guard %d, as slots %u guard holds %#x, facing %.1f, life %d at %.2f %.2f",
+             (unsigned long)found[i], (unsigned long)bsa, (unsigned)flags, (int)(flags >> 5 & 1), (unsigned)n_slots,
+             (unsigned)holds, yaw < 0 ? yaw + 360 : yaw, life, got ? (double)ar.pos[0] : 0.0, got ? (double)ar.pos[2] : 0.0);
+    }
+    result(true, "guardbits: %d", n);
   } else if (same(verb, "equip")) { /* equip shield <actor>: debugging */
     char *what = take_word(&args), *item = take_word(&args);
     static char kept[64];

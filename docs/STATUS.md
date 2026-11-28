@@ -1,6 +1,22 @@
 # Status
 
-Where the work stands, for picking it up again. Last updated 27th November 2026: 0.0.15 built (hitboxes, chests, #58), checked on 1.1.1 and 1.0.0.
+Where the work stands, for picking it up again. Last updated 27th November 2026: 0.0.15 released; since then, the
+drown timer watch and respawn points (not released, not committed yet).
+
+## Since 0.0.15 (not released)
+
+- **Drowning animals** (drownview.c, FINDINGS 9.47): cuccos, dogs, horses and Epona drown in deep water and come back.
+  In the actor browser they have **drown timer watches** (four watches: **drown state** in words, and in frames
+  **drown timer** until it starts to fade out, **fade timer**, **respawn in** until it's put back; a cucco's grab
+  range hidden while its drowning switches lifting off) and **respawn point** (pink ring and beam where it comes back:
+  a cucco's WarpPos, its last safe landing; a dog's home; a horse's last landing). Remote `drown`, `aidump`. Checked
+  in game on 1.1.1 (27th November): a cucco thrown into Zora's River (in the water, looking for land, one jump out),
+  one spawned in the river (back in 40 to 0, put back at WarpPos's x and z), Epona spawned in Lake Hylia (back in 358
+  to 0, put back on her landing). Epona's three watches checked against frame advance's frames (drown 168 to 0 over
+  153 frames, respawn within 5%, the fade 17 to 0 over 14 frames, no flicker between steps). A cucco's four watches
+  checked in Zora's River (in the water 25 to 0, looking for land, jump 1 of 3, jumped out), and its lift radius not
+  drawn while it drowned in Lake Hylia (drawn while carried). **Not checked:** a dog, **finding a safe spot** (a horse
+  whose landing isn't safe), 1.0.0.
 
 ## Released
 

@@ -13,6 +13,7 @@
 #include "safety.h"
 #include "sys.h"
 #include "timeofday.h"
+#include "drownview.h"
 #include "z64hd.h"
 
 float atan2f(float y, float x); /* from sdk */
@@ -24,7 +25,8 @@ float hypotf(float x, float y);
 const char *const watch_labels[W_COUNT] = {
   "x", "y", "z", "facing", "move angle", "speed", "y speed", "camera angle", "camera pitch",
   "camera dist", "input", "stick", "lag", "timer", "frame", "map", "air wall", "jump height",
-  "safety", "safety flags", "time of day", "door close timer",
+  "safety", "safety flags", "time of day", "door closes", "drown timer",
+  "fade timer", "respawn in", "drown state", /* (the label column is 12 wide) */
 };
 const char *const watches_corner_names[GFX_NPLACES] = { "top-left", "top-right", "bottom-left", "bottom-right",
                                                        "top-centre", "bottom-centre", "custom" };
@@ -479,7 +481,8 @@ static const dkind_t kind_of[W_COUNT] = {
   [W_CAMERA_DIST] = DK_FLOAT, [W_INPUT] = DK_TEXT, [W_STICK] = DK_STICK, [W_LAG] = DK_COUNT,
   [W_TIMER] = DK_TIMER, [W_FRAME] = DK_COUNT, [W_MAP] = DK_TEXT, [W_AIRWALL] = DK_TEXT,
   [W_JS_HEIGHT] = DK_F32, [W_SAFETY] = DK_TEXT, [W_SAFETY_FLAGS] = DK_FLAGS, [W_TIME_OF_DAY] = DK_CLOCK,
-  [W_DOOR_CLOSE] = DK_TEXT,
+  [W_DOOR_CLOSE] = DK_TEXT, [W_DROWN] = DK_TEXT, [W_FADE_OUT] = DK_TEXT,
+  [W_RESPAWN] = DK_TEXT, [W_DROWN_STATE] = DK_TEXT,
 };
 
 /* Each kind's types, in the order of its names below. A float: decimal (f32), whole number (s32) or the
@@ -686,6 +689,18 @@ void watch_text(watch_t watch, char *buf, int len)
       break;
     case W_DOOR_CLOSE:
       interactview_door_text(buf, len);
+      break;
+    case W_DROWN:
+      drownview_text(DW_DROWN, buf, len);
+      break;
+    case W_FADE_OUT:
+      drownview_text(DW_FADE, buf, len);
+      break;
+    case W_RESPAWN:
+      drownview_text(DW_RESPAWN, buf, len);
+      break;
+    case W_DROWN_STATE:
+      drownview_text(DW_STATE, buf, len);
       break;
     case W_JS_HEIGHT: {
       float height;

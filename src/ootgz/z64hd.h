@@ -247,6 +247,10 @@ struct z64hd_build {
   /* a swinging door's close check (FINDINGS 9.38): the vtable of its AINB node, SelectorDoorCanClose (calc at slot 39:
    * main+0x5E58A0 / 1.0.0 main+0x593380); made while the door's event runs */
   uint32_t door_close_node_vtable;
+  /* the AINB counter nodes (FINDINGS 9.47), drowning's timers: SelectorGenericFrameCounter (frames gone by at +0x20, its
+   * length through the pointer at +0x50) and ExecuteGenericCounter (frames left at +0x20, its length at +0x2C) */
+  uint32_t frame_counter_node_vtable;
+  uint32_t generic_counter_node_vtable;
   /* [main+this]: the pause manager (FINDINGS 9.1: its pause types and their request counts; pausemgr.c) */
   uint32_t pause_mgr_ptr;
   struct z64hd_link_path link_paths[5];

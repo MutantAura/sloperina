@@ -204,6 +204,12 @@ int actors_named(const char *name, uintptr_t *out, int max) { return (void)name,
 int guardview_rails_of(uintptr_t actor) { return (void)actor, 0; }
 void interactview_door_watch(uintptr_t door) { (void)door; }
 void interactview_door_text(char *buf, int len) { snprintf(buf, len, "closed"); }
+void drownview_watch(uintptr_t actor) { (void)actor; }
+void drownview_text(int which, char *buf, int len) { (void)which; snprintf(buf, len, "-"); }
+int drownview_respawn(uintptr_t actor, float out[3]) { (void)actor; (void)out; return 0; }
+void drownview_dump(uintptr_t actor) { (void)actor; }
+void drownview_toggle(uintptr_t actor) { (void)actor; }
+int drownview_kind(uintptr_t actor) { (void)actor; return 0; }
 int interactview_door_is_open(uintptr_t door) { return (void)door, -1; }
 float interactview_door_angle(uintptr_t door) { return (void)door, -1; }
 void menu_goto(menu_t *m) { menu_current = m; }

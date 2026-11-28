@@ -14,6 +14,7 @@
 #include "airwall.h"
 
 #include "data.h"
+#include "drownview.h"
 #include "guardview.h"
 #include "hitview.h"
 #include "interactview.h"
@@ -822,7 +823,7 @@ void airwall_frame(bool gpu)
   link_boxes[f].ok = false;
   bool walls = (airwalls_shown || void_areas_shown()) && current_map;
   bool draw = walls || savepos_shown || voidmap_shown || hsstore_shown || placer_active || guardview_active() ||
-              interactview_active() || hitview_active();
+              interactview_active() || hitview_active() || drownview_active();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
     /* the actor placer's beam and ring (placer.c) first: a few lines nothing else's budget cuts */
@@ -839,6 +840,13 @@ void airwall_frame(bool gpu)
     for (int i = 0; i < n_marks; i++)
       add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, mark_ends[i][0], mark_ends[i][1], mark_colours[i],
                     false);
+    /* where drowned cuccos, dogs and horses come back (drownview.c): a few lines, seen through the scenery */
+    static float respawn_ends[DROWNVIEW_MAX_LINES][2][3];
+    static uint8_t respawn_colours[DROWNVIEW_MAX_LINES];
+    int n_respawn = drownview_lines(respawn_ends, respawn_colours, DROWNVIEW_MAX_LINES);
+    for (int i = 0; i < n_respawn; i++)
+      add_edge_dots(dots[f], &n, gpu ? lines[f] : 0, &nl, &cam, respawn_ends[i][0], respawn_ends[i][1],
+                    respawn_colours[i], false);
     /* the hookshot's hook and aim (hsstore.c) */
     static float hook_ends[HSSTORE_MAX_LINES][2][3];
     static uint8_t hook_colours[HSSTORE_MAX_LINES];

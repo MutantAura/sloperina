@@ -2670,3 +2670,62 @@ Player packs) runs `ExecutePlayerReactionPreAbyss` and the event `DmF_SY_FallDow
   8-point box, hit mask none), `CloseBody` (GroundObject, 16 points, mask with Player, bit 6 set yet solid), the
   lid's (Object, a compound) and `AirWall` (GroundObject, hits SmallObject only). Link dropped on it stands 0.65 m
   up; with CloseBody's ForceNoHit on, 0.57 m; with all four on, still 0.57 m. Something else holds him there.
+
+### 9.47 Animals that drown and come back: their timers and where they come back (1.1.1; checked in game, 27th November 2026; 1.0.0's vtables found by their names, not run)
+- **Who:** every actor pack was searched for a drowning module. Cuccos (all `Animal_Cucco*`) run
+  `Kokko.action.interruptdrown.module` (AI.Global), dogs (`Animal_Dog_*`) `Animal_Dog.action.InterruptDrown.module`,
+  horses (`Animal_Horse`, `Animal_Horse_For_Ingo`, `Animal_Epona_Child`, `Animal_Epona_Adult`)
+  `Animal_Horse.action.interruptdrown.module`, which runs `HorseReturnToSafePositionWithEvent.module`. Their
+  InterruptSeqParam has `IsDrownWhenInWater`, `DrownWaterDepth` 0.3 m for a cucco, 1.6 m for a dog or horse. Enemies
+  with `IsDrownWhenInWater` drown and die: they don't come back.
+- **Where the module runs:** the BSA action controller, `[[[comps+0x188]+0x1B0]+0x80]` (vtable `main+0x4B479E8`,
+  `+0x1F0` the actor) for a cucco and Epona, not the AIComponent (`comps+0x48` is 0 for a cucco). It lists its
+  definitions (count `+0x168`, array `+0x170`; the file at a definition's `+0x10`, its name the file's first string:
+  `[file+0x24]` is the string pool, the name at its offset 0). Its units (count `+0x18`, array `+0x20`, 0x18 each)
+  go with them one for one: a unit's `+0x10` is its definition. A module's nodes are made just after its unit
+  (`[node+8]` the unit, the node's index in its file a u16 at `+0x1C`), as with the doors (9.38).
+- **The counters:** `SelectorGenericFrameCounter` (vtable `0x4AFD250` [1.0.0 `0x4A98280`], calc slot 39
+  `main+0x9A76D0`) adds the frame step to `+0x20` and finishes at the f32 its `+0x50` points to (low bits flags);
+  `ExecuteGenericCounter` (vtable `0x499F200` [`0x493A8D8`], update slot 30 `main+0x5EEAA0`) counts `+0x20` down
+  through `main+0x5ED3D0` (the doors' countdown) from its length at `+0x2C`. They count the game's own time: a horse's
+  goes down about 2.2 a frame (frame advance, Lake Hylia), a cucco's about 1 (its AI runs every other frame). They
+  keep their last values once done.
+- **A cucco** in water deeper than 0.3 m: node 35 (30) in the water, 125 (up to 120) turning to the land it means
+  to jump for, then up to `DrownJumpCountMax` (3) jumps (node 77 up to 600 each till it lands, 119 its 10 in the
+  air); landed on the ground, it's out. Still in the water, node 14 (60) as it sinks and fades out, then it's put
+  back and fades in (18, 10) and lands (31, 60). Seen in Zora's River: in the water 30, looking for land, one jump to
+  the bank; and spawned in the river, sinking 60, put back, again and again.
+- **Where a cucco comes back:** its blackboard Vec3f `WarpPos` (the actor blackboard `[[comps+0]+0x10]`: Vec3f count
+  `+0x200`, names `+0x208`, values `+0x218`, 12 bytes each). `Kokko.utility.root` keeps it equal to `LandingPos`, the
+  last place it landed on safely (it follows Link while he carries it). The drown module puts it on the navmesh
+  within 2 m of WarpPos (raised 1 m) and drops it from above; with no WarpPos, at its home (`OneShotWarpToHomeMatrix`,
+  or 10 m over it to fall). Seen: it came back at WarpPos's x and z exactly, dropping from 7 m up.
+- **The home position** (`QueryActorGetHomePosition`, `main+0x29A6030` [`0x2953BE0`]): `actor+0x2EC`, unless
+  `actor+0x519` bit 1, then `[[[comps+0x50]+0x20]+0x180]+0x10`. A dog comes back there, 60 frames (node 3) after it
+  starts drowning.
+- **A horse:** `HorseReturnToSafePositionWithEvent`: node 17 (`WaitFrameBeforeFadeOut`: AnimFrameForFadeOut 340 -
+  FadeOutFrame 30 = 310) struggling, 18 (30) fading out, 19 (30) unseen, then it's put on its last landing if
+  `QueryHorseCheckIfSafePosition` says it's safe, else `ExecuteHorseFindSafePos` looks within 200 m; then 14 (30)
+  fading in. Its last landing (`QueryRidableGetLastLandingMtx`, `main+0x2AD1870`): the ridable `[comps+0x3A0]`,
+  `[ridable+0x78]` whose slot 4 (`main+0x302E340`: `add x0, x0, #0xc; ret`) gives a 3 by 4 matrix at `+0xC`
+  (translation `+0x18`, `+0x28`, `+0x38`); NaN in its first word while it has none. The same offsets in 1.0.0
+  (`0x994AA0`, `0x2E41F10`). Seen: Epona spawned in Lake Hylia counted 358 down to 0, vanished and came back on her
+  landing (the lake bed, 125.6 m), floated up and drowned again.
+- **The fade out** (`OneShotStartModelAlphaFadeOut`, vtable `0x4A3ECF8` [`0x49DA280`], calc `main+0x294F290`
+  [`0x28FCF40`]): on the model component `[comps+0x260]` (getter `main+0xC71C20` [`0xA7F650`]) it sets the step,
+  `1 / FadeFrame`, at `+0x11C` and bits `0xC0` of `+0x128`. Read every frame through Epona's: the step went from
+  0.167 to 0.033 (1/30, FadeOutFrame) as her count 17 ended, and back 14 frames later, as count 18 (30 counts) ended
+  and she was hidden: the fade goes in the same counts as the counters (`+0x118` stayed 1.000: not the alpha). A
+  cucco's FadeFrame is 6 (node 11), the start of its 60 of sinking. A dog's module has no fade.
+- **What can't be done while it drowns:** `OneShotAttentionSenderChangeClientValid` (`main+0x88B4B0`, vtable
+  `0x49F1968`) on the attention sender `[comps+0x160]`: a byte per DoActionType at `+0x3C` (a bit per who switched
+  it off; 0 on), and the sender's clients of that type (count `+0x90`, array `+0x98`, 0x90 each, the type at `+0x34`)
+  get bit 0 of their `+0x20` cleared. DoActionType: None, Talk, Awake, Lift (3), OpenDoor (4), OpenShutter,
+  OpenTreasureBox, PickUp, Take, Sleep, Check, Buy, Ride (12), PullOut, Crawl, Grab, BringAlong, UseBeansHole, Catch,
+  PutIn, OpenForEvent, Rematch, Touch, GrabSword, OpenChainLock, BlueFireTarget, FatalBlow, BlueFishTarget,
+  DiggingHoleTour (28; main's names at `0x3EEDC90`). The cucco's drown module switches Lift off on entering and on
+  again leaving; seen: `+0x3F` 1 all through a cucco's drowning in Lake Hylia (Talk and Check off too: it has
+  neither). interactview.c leaves out a client whose action is off.
+- So (drownview.c): the actor browser's **drown timer watches** read these counters (the one changing is the step it's
+  at; what's left divided by how much it changes a frame): **drown timer** until the fade starts, **fade timer**,
+  **respawn in** until it's put back. **respawn point** draws WarpPos, home or the last landing.

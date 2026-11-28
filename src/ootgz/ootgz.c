@@ -35,6 +35,7 @@
 #include "levitate.h"
 #include "settings.h"
 #include "voidmap.h"
+#include "drownview.h"
 #include "guardview.h"
 #include "hitview.h"
 #include "interactview.h"
@@ -540,6 +541,7 @@ static void frame(void)
   guardview_frame(); /* the guards' sight: before airwall_frame draws it */
   interactview_frame(); /* where Link can talk to or act on actors: the same */
   hitview_frame();      /* the hitboxes: the same */
+  drownview_frame();    /* drowning animals' watch and respawn points: the same */
   airwall_frame(overlays_on_gpu);
   enemyhp_frame(overlays_on_gpu);
   menus_research_frame();

@@ -7,6 +7,7 @@
 
 #include "actornames.h"
 #include "binds.h"
+#include "drownview.h"
 #include "enemyhp.h"
 #include "gamedata.h"
 #include "input.h"
@@ -950,6 +951,45 @@ static void run_door_timer(char *args)
          interactview_door_is_open(found[0]), (double)interactview_door_angle(found[0]));
 }
 
+static uint64_t parse_hex(const char *s);
+
+/* "drown <name | 0xactor> [show]": the drown timer watch put on the first of that name, or that actor (as its actor
+ * option does, without adding the watch), what it reads now and where it comes back; show: its respawn point drawn
+ * too (or not: it flips) */
+static void run_drown(char *args)
+{
+  char *name = take_word(&args);
+  bool show = same(take_word(&args), "show");
+  uintptr_t found[8];
+  int n = 0;
+  if (name[0] == '0' && name[1] == 'x') {
+    actor_read_t a;
+    found[0] = (uintptr_t)parse_hex(name);
+    n = actor_read(found[0], &a) ? 1 : 0;
+  } else if (*name)
+    n = actors_named(name, found, 8);
+  if (!n) {
+    result(false, "drown: none named %s", name);
+    return;
+  }
+  static const char *const kinds[] = { "doesn't drown", "cucco", "dog", "horse" };
+  static const char *const ats[] = { "nowhere", "home", "WarpPos", "last landing", "the nearest safe spot" };
+  int kind = drownview_kind(found[0]);
+  drownview_watch(kind ? found[0] : 0);
+  if (show && kind)
+    drownview_toggle(found[0]);
+  char state[40], drown[40], fade[40], back[40];
+  drownview_text(DW_STATE, state, sizeof(state));
+  drownview_text(DW_DROWN, drown, sizeof(drown));
+  drownview_text(DW_FADE, fade, sizeof(fade));
+  drownview_text(DW_RESPAWN, back, sizeof(back));
+  float p[3] = { 0, 0, 0 };
+  int at = drownview_respawn(found[0], p);
+  result(kind != 0, "drown: %s %#lx (%s): %s, drown %s, fade %s, respawn %s; back at %s %.2f %.2f %.2f", name,
+         (unsigned long)found[0], kinds[kind >= 0 && kind < 4 ? kind : 0], state, drown, fade, back,
+         ats[at >= 0 && at < 5 ? at : 0], (double)p[0], (double)p[1], (double)p[2]);
+}
+
 static void run_actors(const char *args)
 {
   int32_t radius = 6;
@@ -1214,6 +1254,15 @@ static void run_line(char *line, bool held)
     run_peek(args);
   } else if (same(verb, "doortimer")) {
     run_door_timer(args);
+  } else if (same(verb, "aidump")) {
+    uintptr_t found[8];
+    char *name = take_word(&args);
+    int n = *name ? actors_named(name, found, 8) : 0;
+    for (int i = 0; i < n; i++)
+      drownview_dump(found[i]);
+    result(n > 0, "aidump: %d of %s to the log", n, name);
+  } else if (same(verb, "drown")) {
+    run_drown(args);
   } else if (same(verb, "attention")) {
     run_attention();
   } else if (same(verb, "findref")) {

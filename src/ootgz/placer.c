@@ -41,6 +41,7 @@
 #include "data.h"
 #include "gamedata.h"
 #include "gfx.h"
+#include "drownview.h"
 #include "guardview.h"
 #include "hitview.h"
 #include "interactview.h"
@@ -568,6 +569,12 @@ static bool door_watched(uintptr_t actor)
 {
   return actor && interactview_door_watched() == actor && watch_has(W_DOOR_CLOSE);
 }
+/* a drowning animal's timers in the watches (drown timer watches: W_DROWN, W_FADE_OUT, W_RESPAWN): on for this one */
+static bool drown_watched(uintptr_t actor)
+{
+  return actor && drownview_watched() == actor &&
+         (watch_has(W_DROWN_STATE) || watch_has(W_DROWN) || watch_has(W_FADE_OUT) || watch_has(W_RESPAWN));
+}
 /* an actor's hitbox switches (hitview.h's parts, in order), as scene > environment > hitboxes names them */
 static const char *const hitbox_labels[HV_PARTS] = { "attack hitboxes", "bump boxes", "invincibility", "hurtboxes",
                                                      "collectables" };
@@ -579,7 +586,7 @@ static bool has_options(uintptr_t actor)
   if (!actor)
     return false;
   if (guardview_is_guard(actor) || guardview_has_path(actor) || interactview_has(actor) || interactview_is_door(actor) ||
-      hitview_parts_of(actor))
+      hitview_parts_of(actor) || drownview_has(actor) || drownview_own(actor))
     return true;
   for (int part = 0; part < HV_PARTS; part++)
     if (hitview_own(actor, part))
@@ -697,8 +704,8 @@ static void panel(void)
   gfx_row(2, GFX_ROW_LINE);
   /* its own switches (its options, minus), one under another with their checkboxes as the menu draws them */
   char check[64];
-  const char *labels[2 + IV_PARTS + 1 + HV_PARTS];
-  bool on[2 + IV_PARTS + 1 + HV_PARTS];
+  const char *labels[2 + IV_PARTS + 1 + 2 + HV_PARTS];
+  bool on[2 + IV_PARTS + 1 + 2 + HV_PARTS];
   int n_checks = 0;
   if (mode == MODE_LOOK && at) {
     if (guardview_is_guard(at)) {
@@ -713,6 +720,10 @@ static void panel(void)
           labels[n_checks] = interactview_part_label(at, part), on[n_checks++] = interactview_own(at, part);
     if (interactview_is_door(at)) {
       labels[n_checks] = T("close timer watch"), on[n_checks++] = door_watched(at);
+    }
+    if (drownview_has(at) || drownview_own(at)) { /* a cucco, dog or horse: it drowns in deep water and comes back */
+      labels[n_checks] = T("drown timer watches"), on[n_checks++] = drown_watched(at);
+      labels[n_checks] = T("respawn point"), on[n_checks++] = drownview_own(at);
     }
     uint8_t has = hitview_parts_of(at); /* only the kinds it has (and one still ticked, to untick it) */
     for (int part = 0; part < HV_PARTS; part++) /* its hitboxes, each kind on its own */
@@ -815,6 +826,36 @@ static void set_door_watch(menu_item_t *it, bool on)
   log_printf("placer: door close watch off");
 }
 
+static bool get_drown_watch(menu_item_t *it) { return drown_watched(menu_guard); }
+
+static void set_drown_watch(menu_item_t *it, bool on)
+{
+  if (on) {
+    drownview_watch(menu_guard);
+    watch_add(W_DROWN_STATE); /* already there: they move to this one */
+    watch_add(W_DROWN);
+    watch_add(W_FADE_OUT);
+    watch_add(W_RESPAWN);
+    watches_shown = true; /* so they're seen */
+    log_printf("placer: drown timer watches on");
+    return;
+  }
+  for (int i = 0; i < watch_count; i++)
+    if (watch_list[i].id == W_DROWN_STATE || watch_list[i].id == W_DROWN || watch_list[i].id == W_FADE_OUT ||
+        watch_list[i].id == W_RESPAWN)
+      watch_remove(i--);
+  drownview_watch(0);
+  log_printf("placer: drown timer watches off");
+}
+
+static bool get_respawn(menu_item_t *it) { return drownview_own(menu_guard); }
+
+static void set_respawn(menu_item_t *it, bool on)
+{
+  if (drownview_own(menu_guard) != on)
+    drownview_toggle(menu_guard);
+}
+
 /* "open door" while it's shut, "close door" while it's open (its panel's pose): opens it by itself, as for an NPC, or
  * shuts it at once whoever is in the way (interactview.c); the menu can stay open, the door's AI runs. Its label
  * follows the door (door_action_label, kept up by placer_frame). */
@@ -856,7 +897,7 @@ static void set_hitboxes(menu_item_t *it, bool on)
     hitview_toggle(menu_guard, (int)it->data);
 }
 
-void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 4 + HV_PARTS); }
+void placer_menu_build(void) { menu_init(&m_guard, menu_title, 2 + IV_PARTS + 4 + 2 + HV_PARTS); }
 
 /* this actor's own switches, each for it alone (whatever scene > environment says): its items made again for it */
 static void open_guard_menu(uintptr_t actor)
@@ -907,13 +948,26 @@ static void open_guard_menu(uintptr_t actor)
   if (interactview_is_door(actor)) {
     item = menu_add_check(&m_guard, "close timer watch", get_door_watch, set_door_watch, 0);
     if (item) {
-      item->hint = "door close timer in the watches: frames until it shuts (135 while held open)";
+      item->hint = "door closes in the watches: frames until it shuts (135 while held open)";
       item->log_label = ""; /* logged above */
     }
     door_action = menu_add_action(&m_guard, door_action_label(actor), act_door, 0);
     if (door_action) {
       door_action->hint = "L: it opens by itself, or it shuts at once, even with link holding it open";
       door_action->log_label = "";
+    }
+  }
+  if (drownview_has(actor) || drownview_own(actor)) {
+    item = menu_add_check(&m_guard, "drown timer watches", get_drown_watch, set_drown_watch, 0);
+    if (item) {
+      item->hint = "in the watches: what it's doing in deep water, and in frames until it fades out, its fade, until it's back";
+      item->log_label = ""; /* logged above */
+    }
+    item = menu_add_check(&m_guard, "respawn point", get_respawn, set_respawn, 0);
+    if (item) {
+      item->hint = drownview_kind(actor) == DV_HORSE ? "where it comes back after drowning (pink): where it last landed"
+                                                     : "where it comes back after drowning (pink)";
+      item->log_label = ""; /* drownview.c logs it */
     }
   }
   static const char *const hitbox_hints[HV_PARTS] = {

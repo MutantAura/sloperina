@@ -67,12 +67,39 @@ typedef struct {
   region_t regions[MAX_CLIENTS]; /* where it's taken up */
   region_t held[MAX_CLIENTS];    /* where it holds once taken up: walking away, it breaks past here */
   bool in_range[MAX_CLIENTS];   /* the files' estimate (kept for the target break line's hold, not shown) */
+  bool off[MAX_CLIENTS];        /* its action switched off now (a drowning cucco can't be lifted): not drawn */
   bool target;                  /* the game's own answer: A acts on it now (its sender reserved by Link) */
   bool candidate;               /* and what ZL would take for an action (a Z-targeted Talk) */
   bool holds_door; /* a door, and Link is in the half it's held open by (it won't close behind him) */
 } shown_t;
 
 static shown_t shown[MAX_ACTORS];
+
+/* Whether the actor's AI has switched an action off (OneShotAttentionSenderChangeClientValid, main+0x88B4B0): its
+ * attention sender [comps+0x160] keeps a byte per DoActionType at +0x3C, a bit per who switched it off (0 on). A
+ * cucco's drowning switches Lift off till it's out (FINDINGS 9.47). DoActionType's names, in order: */
+#define SENDER_OFF 0x3C
+static int compare(const char *a, const char *b);
+static const char *const do_actions[] = {
+  "None", "Talk", "Awake", "Lift", "OpenDoor", "OpenShutter", "OpenTreasureBox", "PickUp", "Take", "Sleep", "Check",
+  "Buy", "Ride", "PullOut", "Crawl", "Grab", "BringAlong", "UseBeansHole", "Catch", "PutIn", "OpenForEvent",
+  "Rematch", "Touch", "GrabSword", "OpenChainLock", "BlueFireTarget", "FatalBlow", "BlueFishTarget",
+  "DiggingHoleTour", /* not menu text */
+};
+#define N_DO_ACTIONS (int)(sizeof(do_actions) / sizeof(do_actions[0]))
+
+static bool action_off(uintptr_t actor, const char *action)
+{
+  int type = -1;
+  for (int i = 0; action && i < N_DO_ACTIONS && type < 0; i++)
+    if (!compare(action, do_actions[i]))
+      type = i;
+  uintptr_t comps = type > 0 ? sys_ptr(actor + 0x270) : 0;
+  uintptr_t sender = comps && !(comps & 7) && sys_mapped(comps, 0x168, SYS_PERM_R) ? sys_ptr(comps + 0x160) : 0;
+  if (!sender || (sender & 7) || !sys_mapped(sender + SENDER_OFF, N_DO_ACTIONS, SYS_PERM_R))
+    return false;
+  return *(const uint8_t *)(sender + SENDER_OFF + type) != 0;
+}
 static int n_shown, scan_wait;
 static uintptr_t found[MAX_ACTORS];
 static int n_found;
@@ -1081,6 +1108,8 @@ void interactview_frame(void)
       s->holds_door = dx * dx + dy * dy + dz * dz < row->door_radius * row->door_radius &&
                       dx * s->side[0] + dz * s->side[1] < 0;
     }
+    for (int c = 0; c < s->n_clients; c++)
+      s->off[c] = action_off(found[i], data_interact_clients[row->first + c].action);
     for (int c = 0; c < s->n_clients; c++) /* in range: taken up, then held as he walks away until past its margin */
       s->in_range[c] = link_in_client(s, &data_interact_clients[row->first + c], &link, fx, fz,
                                       before && before->in_range[c]);
@@ -1231,6 +1260,8 @@ int interactview_lines(float ends[][2][3], uint8_t colours[], int max)
     if (s->row->door_radius > 0 && interactview_shows(s->actor, IV_DOOR))
       door_lines(s);
     for (int c = 0; c < s->n_clients; c++) {
+      if (s->off[c]) /* switched off by its AI: it can't be done now */
+        continue;
       const region_t *r = &s->regions[c];
       uint8_t colour = colour_of(s, c);
       /* its target break line: with the part it's of, or every one when the target break line is on alone */
@@ -1295,8 +1326,8 @@ int interactview_faces(aw_face_t faces[], int max)
       }
     }
     for (int c = 0; c < s->n_clients; c++) {
-      if (data_interact_clients[s->row->first + c].lock_on || !interactview_shows(s->actor, IV_RADIUS)) /* outline */
-        continue;
+      if (s->off[c] || data_interact_clients[s->row->first + c].lock_on || !interactview_shows(s->actor, IV_RADIUS))
+        continue; /* (lock-on ones: their outline only) */
       const region_t *r = &s->regions[c];
       uint8_t colour = colour_of(s, c);
       for (int k = 0; k < RAYS; k++) {

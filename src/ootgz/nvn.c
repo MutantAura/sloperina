@@ -1444,6 +1444,7 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_HIT_LINK] = { 0.95f, 0.95f, 0.95f, 1.0f },         /* white: Link's own body (gz's OC) */
   [AW_HIT_BUMP] = { 0.95f, 0.95f, 0.95f, 1.0f },         /* white: a body that bumps into Link (gz's OC) */
   [AW_HIT_HURT] = { 0.24f, 0.44f, 1.0f, 1.0f },          /* blue: where Link or an actor can be hit (gz's AC) */
+  [AW_RESPAWN] = { 1.0f, 0.40f, 0.80f, 1.0f },           /* pink: where a drowned cucco, dog or horse comes back */
 };
 
 /* enemy health (enemyhp.c) */

@@ -32,7 +32,8 @@
 
 _Static_assert(sizeof(uintptr_t) == 8 && sizeof(float) == 4, "requires a 64-bit host with f32");
 _Static_assert(W_X == 0 && W_AIRWALL == 16 && W_JS_HEIGHT == 17, "keep saved watch IDs stable");
-_Static_assert(W_SAFETY == 18 && W_SAFETY_FLAGS == 19 && W_TIME_OF_DAY == 20 && W_DOOR_CLOSE == 21 && W_COUNT == 22,
+_Static_assert(W_SAFETY == 18 && W_SAFETY_FLAGS == 19 && W_TIME_OF_DAY == 20 && W_DOOR_CLOSE == 21 && W_DROWN == 22 && W_FADE_OUT == 23 &&
+                   W_RESPAWN == 24 && W_DROWN_STATE == 25 && W_COUNT == 26,
                "keep saved watch IDs stable");
 
 uintptr_t z64hd_main;
@@ -138,6 +139,7 @@ void input_sticks(int32_t *a, int32_t *b, int32_t *c, int32_t *d) { *a = *b = *c
 const char *gd_get_str(int field) { (void)field; return "test"; }
 void airwall_link_text(char *buf, int len) { snprintf(buf, len, "outside"); }
 void interactview_door_text(char *buf, int len) { snprintf(buf, len, "closed"); }
+void drownview_text(int which, char *buf, int len) { (void)which; snprintf(buf, len, "-"); }
 bool guardview_shown, guardview_paths; /* settings.c saves scene > environment's guards and actors options */
 bool interactview_shown, interactview_parts[IV_PARTS];
 bool hitview_shown, hitview_link_only, hitview_xray, hitview_guard; /* and its hitboxes options */

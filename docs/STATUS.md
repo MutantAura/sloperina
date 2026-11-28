@@ -1,14 +1,16 @@
 # Status
 
-Where the work stands, for picking it up again. Last updated 28th November 2026: 0.0.16 built (drowning animals,
-#59), not released.
+Where the work stands, for picking it up again. Last updated 28th November 2026: 0.0.16 released (drowning animals,
+#59).
 
-## 0.0.16 (built, not released)
+## Released
+
+**0.0.16** (tag `v0.0.16`, GitHub release with `sloperinaGZ-0.0.16.zip`). Since 0.0.15:
 
 - Merged pull request **#59** (MutantAura): memfiles kept in a 4 MiB pool in the module's .bss (falling back to the
   game's heap past it), the saved snapshot shrunk to what was written, unreadable GameData reported apart from out of
-  memory.
-
+  memory. **Not checked in game** before the release (Windows interop from WSL was down, so Lichii couldn't be
+  restarted on the merged build): a memfile save and load with the pool; the host tests (tests/memfile.c) pass.
 - **Drowning animals** (drownview.c, FINDINGS 9.47): cuccos, dogs, horses and Epona drown in deep water and come back.
   In the actor browser they have **drown timer watches** (four watches: **drown state** in words, and in frames
   **drown timer** until it starts to fade out, **fade timer**, **respawn in** until it's put back; a cucco's grab
@@ -21,8 +23,6 @@ Where the work stands, for picking it up again. Last updated 28th November 2026:
   checked in Zora's River (in the water 25 to 0, looking for land, jump 1 of 3, jumped out), and its lift radius not
   drawn while it drowned in Lake Hylia (drawn while carried). **Not checked:** a dog, **finding a safe spot** (a horse
   whose landing isn't safe), 1.0.0.
-
-## Released
 
 **0.0.15** (tag `v0.0.15`, GitHub release with `sloperinaGZ-0.0.15.zip`). Since 0.0.14:
 

@@ -1,9 +1,13 @@
 # Status
 
-Where the work stands, for picking it up again. Last updated 27th November 2026: 0.0.15 released; since then, the
-drown timer watch and respawn points (not released, not committed yet).
+Where the work stands, for picking it up again. Last updated 28th November 2026: 0.0.16 built (drowning animals,
+#59), not released.
 
-## Since 0.0.15 (not released)
+## 0.0.16 (built, not released)
+
+- Merged pull request **#59** (MutantAura): memfiles kept in a 4 MiB pool in the module's .bss (falling back to the
+  game's heap past it), the saved snapshot shrunk to what was written, unreadable GameData reported apart from out of
+  memory.
 
 - **Drowning animals** (drownview.c, FINDINGS 9.47): cuccos, dogs, horses and Epona drown in deep water and come back.
   In the actor browser they have **drown timer watches** (four watches: **drown state** in words, and in frames

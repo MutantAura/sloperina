@@ -773,7 +773,7 @@ static void init_env(uint32_t cam_state_off)
   for (int i = 0; i < MEMFILE_SLOTS; i++)
     free_memfile(&memfiles[i]);
   free_memfile(&staging);
-  free(inflight_save_buf);
+  free16(inflight_save_buf);
   inflight_save_buf = 0;
   phase = L_IDLE;
   slot = active_slot = phase_frames = quiet_frames = camera_frames = 0;
@@ -2381,6 +2381,66 @@ static void test_phase3_rng_mgrs_cutscene(void)
   puts("PASS: phase 3: GlobalRandom RNG, TimerMgr/MinigameMgr resync, load-during-cutscene auto-cancel");
 }
 
+/* --- Test 14: BSS pool, in-place save_buf shrinking, fallback promotion, coalescing & errors --- */
+
+static void test_bss_pool_and_error_reporting(void)
+{
+  init_env(0x5B8);
+  test_build.version = "1.0.0";
+  sd_clear();
+  const size_t full_free = MEMFILE_POOL_SIZE - sizeof(pool_hdr_t);
+  assert(pool_free_bytes() == full_free);
+
+  /* Large GD_DESC_BUF_SIZE (2 MiB) allocates in memfile_pool and shrinks IN PLACE to written (256 B) */
+  uint32_t big_cap = 2u << 20;
+  memcpy(gd_desc0_mem + GD_DESC_BUF_SIZE, &big_cap, 4);
+  assert(memfile_save(0) && phase == L_SAVING_WAIT);
+  uint8_t *staged_ptr = staging.save_buf;
+  assert(in_pool(staged_ptr) && staging.save_cap == big_cap);
+  complete_mock_save(GD_SAVE_MAGIC, 256, "SHRUNK_V1");
+  memfile_frame();
+  assert(phase == L_IDLE && memfiles[0].used);
+  assert(memfiles[0].save_buf == staged_ptr); /* shrunk in place, no copy */
+  assert(memfiles[0].save_size == 256 && memfiles[0].save_cap == 256);
+  assert(strcmp((const char *)(memfiles[0].save_buf + 8), "SHRUNK_V1") == 0);
+  /* Shrunk storage should use only a few KiB, not 2 MiB */
+  assert(full_free - pool_free_bytes() < 4096u);
+
+  /* Non-OOM capture_session failure reports game data not readable, NOT out of memory */
+  uint32_t saved_bool_cnt = type_bool.count;
+  type_bool.count = 0;
+  assert(!memfile_save(1));
+  assert(strcmp(last_notice, "can't save a memfile: game data not readable") == 0);
+  type_bool.count = saved_bool_cnt;
+
+  /* Tight-pool fallback + promotion: pin almost the whole 4 MiB pool so a 2 MiB staging buffer
+   * falls back to main's heap, then finish_save promotes the shrunk 1 MiB snapshot into the BSS pool
+   * by reclaiming the overwritten slot 0 */
+  free_memfile(&memfiles[0]);
+  assert(pool_free_bytes() == full_free);
+  assert(memfile_save(0));
+  complete_mock_save(GD_SAVE_MAGIC, 1u << 20, "BIG_V1");
+  memfile_frame();
+  assert(phase == L_IDLE && in_pool(memfiles[0].save_buf) && memfiles[0].save_size == (1u << 20));
+  void *pin = pool_alloc(MEMFILE_POOL_SIZE - (1u << 20) - (512u << 10));
+  assert(pin != 0 && in_pool(pin));
+  assert(pool_free_bytes() < (1u << 20));
+  assert(memfile_save(0) && phase == L_SAVING_WAIT);
+  assert(!in_pool(staging.save_buf)); /* 2 MiB staging fell back cleanly to CRT heap */
+  complete_mock_save(GD_SAVE_MAGIC, 1u << 20, "BIG_V2");
+  memfile_frame();
+  assert(phase == L_IDLE && memfiles[0].used && memfiles[0].save_size == (1u << 20));
+  assert(in_pool(memfiles[0].save_buf)); /* promoted back into BSS pool after reclaiming old slot 0 */
+  assert(strcmp((const char *)(memfiles[0].save_buf + 8), "BIG_V2") == 0);
+
+  /* Freeing everything coalesces completely back to a single free block */
+  free16(pin);
+  for (int i = 0; i < MEMFILE_SLOTS; i++)
+    free_memfile(&memfiles[i]);
+  assert(pool_free_bytes() == full_free);
+  puts("PASS: BSS pool, in-place save_buf shrinking, fallback promotion, coalescing, and non-OOM errors");
+}
+
 int main(void)
 {
   test_async_save_and_staging();
@@ -2396,5 +2456,6 @@ int main(void)
   test_scene_actors();
   test_phase2_bb_vel_savepos();
   test_phase3_rng_mgrs_cutscene();
+  test_bss_pool_and_error_reporting();
   return 0;
 }
